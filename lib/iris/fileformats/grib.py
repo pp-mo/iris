@@ -320,7 +320,7 @@ class GribWrapper(object):
             # fixed forecastTime in hours
             self.extra_keys['_periodStartDateTime'] = \
                 (self.extra_keys['_referenceDateTime'] + 
-                 datetime.timedelta(0, 0, 0, 0, 0, int(forecastTime)))
+                 datetime.timedelta(hours=int(forecastTime)))
             self.extra_keys['_periodEndDateTime'] = \
                 datetime.datetime(endYear, endMonth, endDay, endHour, endMinute)
         else:
@@ -493,7 +493,7 @@ class GribWrapper(object):
 
         # add start-offset to reference for valid time
         interval_secs = self._time_unit_as_seconds()
-        verification_datetime = reference_date_time + datetime.timedelta(0, time_diff*interval_secs)
+        verification_datetime = reference_date_time + datetime.timedelta(seconds=time_diff*interval_secs)
         return verification_datetime
     
     def phenomenon_points(self, time_unit):
