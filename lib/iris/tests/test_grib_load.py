@@ -314,22 +314,20 @@ class TestGribLoad(tests.GraphicsTest):
             (1, 1, hour_secs, 'hours'),
             (1, 2, 24.0*hour_secs, 'days'),
             (1, 10, 3.0*hour_secs, '3 hours'),
-# ..these ones are possible but not yet supported ...
-#            (1, 11, 6.0*hour_secs, '6 hours'),
-#            (1, 12, 12.0*hour_secs, '12 hours'),
-#            (1, 13, 0.25*hour_secs, '15 minutes'),
-#            (1, 14, 0.5*hour_secs, '30 minutes'),
-#            (1, 254, 1.0, 'seconds'),
+            (1, 11, 6.0*hour_secs, '6 hours'),
+            (1, 12, 12.0*hour_secs, '12 hours'),
+            (1, 13, 0.25*hour_secs, '15 minutes'),
+            (1, 14, 0.5*hour_secs, '30 minutes'),
+            (1, 254, 1.0, 'seconds'),
 
 # edition 2
             (2, 0, 60.0, 'minutes'),
             (2, 1, hour_secs, 'hours'),
             (2, 2, 24.0*hour_secs, 'days'),
             (2, 13, 1.0, 'seconds'),
-# ..these ones are possible but not yet supported ...
-#            (2, 10, 3.0*hour_secs, '3 hours'),
-#            (2, 11, 6.0*hour_secs, '6 hours'),
-#            (2, 12, 12.0*hour_secs, '12 hours'),
+            (2, 10, 3.0*hour_secs, '3 hours'),
+            (2, 11, 6.0*hour_secs, '6 hours'),
+            (2, 12, 12.0*hour_secs, '12 hours'),
         )
 
         # check unit-handling for each supported unit-code and grib-edition
