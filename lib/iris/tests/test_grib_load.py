@@ -313,8 +313,8 @@ class TestGribLoad(tests.GraphicsTest):
             (1, 0, 60.0, 'minutes'),
             (1, 1, hour_secs, 'hours'),
             (1, 2, 24.0*hour_secs, 'days'),
+            (1, 10, 3.0*hour_secs, '3 hours'),
 # ..these ones are possible but not yet supported ...
-#            (1, 10, 3.0*hour_secs, '3 hours'),
 #            (1, 11, 6.0*hour_secs, '6 hours'),
 #            (1, 12, 12.0*hour_secs, '12 hours'),
 #            (1, 13, 0.25*hour_secs, '15 minutes'),
