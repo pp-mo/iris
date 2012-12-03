@@ -34,70 +34,44 @@ import iris.plot as iplt
 import iris.util
 import iris.tests.stock
 
+import mock
 
-class FakeGribapi(object):
-    """ Object to replace the gribapi interface with a few callable functions.
+import gribapi
 
-        Works with a values dictionary replacing a 'real' grib message.
-        Implement only a few methods, just enough to allow GribWrapper creation.
-    """
+# Construct a mock object to mimic the gribapi for GribWrapper testing.
+_mock_gribapi = mock.Mock(spec=gribapi)
+_mock_gribapi.GribInternalError = Exception
 
-    class GribInternalError(Exception):
-        """ Exception class to denote key-access fail.
+def _mock_gribapi_fetch(message, key):
+    if key in message.keys():
+        return message[key]
+    else:
+        raise _mock_gribapi.GribInternalError
 
-            Required attribute of the 'gribapi module'.
-        """
-        pass  
-      
-    @staticmethod
-    def _fake_grib_get_value_from_name(grib_message, keyname):
-        """ Fake fetching a key from a grib message.
-        
-            Works with a values dictionary replacing a 'real' grib message.
-            Implement key-fetch as dictionary access.
-            If absent, raise diagnostic exception.
-        """
-        if keyname in grib_message:
-            return grib_message[keyname]
-        raise FakeGribapi.GribInternalError(keyname)
-
-    # fakeup various get_XXX methods 
-    # -- by converting to dictionary access on the (fake) message object
-    grib_get_long = _fake_grib_get_value_from_name
-    grib_get_string = _fake_grib_get_value_from_name
-    grib_get_double = _fake_grib_get_value_from_name
-    grib_get_double_array = _fake_grib_get_value_from_name
-
-    @staticmethod
-    def grib_is_missing(grib_message, keyname):
-        """ Fake enquiring key existence.
-        
-            Convert to (fake) message object attribute existence.
-        """ 
-        return (keyname not in grib_message)
+def _mock_gribapi__grib_is_missing(grib_message, keyname):
+    """ Fake enquiring key existence.
     
-    @staticmethod
-    def grib_get_native_type(grib_message, keyname):
-        """ Fake gribapi type discovery operation. 
+        Convert to (fake) message object attribute existence.
+    """ 
+    return (keyname not in grib_message)
+    
+def _mock_gribapi__grib_get_native_type(grib_message, keyname):
+    """ Fake gribapi type discovery operation. 
 
-            If absent, raise diagnostic exception.
-        """
-        if keyname in grib_message:
-            return type(grib_message[keyname])
-        raise FakeGribapi.GribInternalError(keyname)
+        If absent, raise diagnostic exception.
+    """
+    if keyname in grib_message:
+        return type(grib_message[keyname])
+    raise _mock_gribapi.GribInternalError(keyname)
 
-
-@contextmanager
-def FakeGribapiContextmanager(fake_gribapi_class=FakeGribapi):
-    """ A context within which iris.fileformats.grib.gribapi is faked. """
-    orig_gribapi_module = iris.fileformats.grib.gribapi
-    iris.fileformats.grib.gribapi = fake_gribapi_class()
-    try:
-        yield None
-    finally:
-        # NOTE: the 'try/finally' is *necessary*
-        # -- so it will tidy up after an exception inside the context.
-        iris.fileformats.grib.gribapi = orig_gribapi_module
+_mock_gribapi.grib_get_long = mock.Mock(side_effect=_mock_gribapi_fetch)
+_mock_gribapi.grib_get_string = mock.Mock(side_effect=_mock_gribapi_fetch)
+_mock_gribapi.grib_get_double = mock.Mock(side_effect=_mock_gribapi_fetch)
+_mock_gribapi.grib_get_double_array = mock.Mock(side_effect=_mock_gribapi_fetch)
+_mock_gribapi.grib_is_missing = mock.Mock(
+    side_effect=_mock_gribapi__grib_is_missing)
+_mock_gribapi.grib_get_native_type = mock.Mock(
+    side_effect=_mock_gribapi__grib_get_native_type)
 
 
 @iris.tests.skip_data
@@ -325,15 +299,15 @@ class TestGribLoad(tests.GraphicsTest):
         )
 
         # check unit-handling for each supported unit-code and grib-edition
-        with FakeGribapiContextmanager():
-            for test_controls in  test_set:#
+        with mock.patch('iris.fileformats.grib.gribapi', _mock_gribapi):
+            for test_controls in  test_set:
                 (grib_edition, 
                  timeunit_codenum, 
                  timeunit_secs, 
                  timeunit_str
                 ) = test_controls
                 assert grib_edition in (1,2)
-                
+
                 # select grib-1 or grib-2 basic test message
                 if grib_edition == 1:
                     fake_message = fake_message_ed1
