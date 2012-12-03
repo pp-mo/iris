@@ -35,10 +35,7 @@ import iris.util
 import iris.tests.stock
 
 
-#
-# helper code
-#
-class Fake_GribApi(object):
+class FakeGribapi(object):
     """ Object to replace the gribapi interface with a few callable functions.
 
         Works with a values dictionary replacing a 'real' grib message.
@@ -46,9 +43,9 @@ class Fake_GribApi(object):
     """
 
     class GribInternalError(Exception):
-        """ Fake exception class.
+        """ Exception class to denote key-access fail.
 
-            Detected by grib.py as key-access fail (must be an attribute of the 'gribapi module')
+            Required attribute of the 'gribapi module'.
         """
         pass  
       
@@ -62,9 +59,10 @@ class Fake_GribApi(object):
         """
         if keyname in grib_message:
             return grib_message[keyname]
-        raise Fake_GribApi.GribInternalError(keyname)
+        raise FakeGribapi.GribInternalError(keyname)
 
-    # fakeup various get_XXX methods by converting to dictionary access on the (fake) message object
+    # fakeup various get_XXX methods 
+    # -- by converting to dictionary access on the (fake) message object
     grib_get_long = _fake_grib_get_value_from_name
     grib_get_string = _fake_grib_get_value_from_name
     grib_get_double = _fake_grib_get_value_from_name
@@ -86,24 +84,22 @@ class Fake_GribApi(object):
         """
         if keyname in grib_message:
             return type(grib_message[keyname])
-        raise Fake_GribApi.GribInternalError(keyname)
+        raise FakeGribapi.GribInternalError(keyname)
 
 
 @contextmanager
-def Fakeup_Gribapi_Context(fake_gribapi_class=Fake_GribApi):
-    """ Define a context within which iris.fileformats.grib.gribapi is replaced with a fake interface. """
+def FakeGribapiContextmanager(fake_gribapi_class=FakeGribapi):
+    """ A context within which iris.fileformats.grib.gribapi is faked. """
     orig_gribapi_module = iris.fileformats.grib.gribapi
     iris.fileformats.grib.gribapi = fake_gribapi_class()
     try:
         yield None
     finally:
-        # NOTE: the 'try/finally' is *necessary*, or it won't tidy up after an exception inside the context
+        # NOTE: the 'try/finally' is *necessary*
+        # -- so it will tidy up after an exception inside the context.
         iris.fileformats.grib.gribapi = orig_gribapi_module
 
 
-#
-# main Testcase class
-#        
 @iris.tests.skip_data
 class TestGribLoad(tests.GraphicsTest):
   
@@ -240,9 +236,9 @@ class TestGribLoad(tests.GraphicsTest):
     def test_fp_units(self):
         # Test different units for forecast period (just the ones we care about)
 
-        # define basic 'fake message' contents, for mockup testing on the underlying methods
+        # define basic 'fake message' contents, for testing underlying methods
         #  - these contain just the minimum keys needed to create a GribWrapper
-          
+
         # edition-1 test message data ...
         fake_message_ed1 = {
             'Ni': 1,
@@ -258,8 +254,9 @@ class TestGribLoad(tests.GraphicsTest):
             'minute': 0,
             'timeRangeIndicator': 0,
             'P1':2, 'P2': 0,
-            'unitOfTime': None,                   # NOTE: kludge, these two are the same thing !
-            'indicatorOfUnitOfTimeRange': None,   # NOTE: kludge, these two are the same thing !
+            # time units : must set both of these
+            'unitOfTime': None,
+            'indicatorOfUnitOfTimeRange': None,
             'shapeOfTheEarth': 6,
             'gridType': 'rotated_ll',
             'angleOfRotation': 0.0,
@@ -293,8 +290,8 @@ class TestGribLoad(tests.GraphicsTest):
             'shapeOfTheEarth':6,
             'gridType': 'rotated_ll',
             'angleOfRotation': 0.0,
-            'unitOfTime': None,                   # NOTE: kludge, these two are the same thing !
-            'indicatorOfUnitOfTimeRange': None,   # NOTE: kludge, these two are the same thing !
+            # time units : must be set
+            'indicatorOfUnitOfTimeRange': None,
             'iDirectionIncrementInDegrees': 0.036,
             'jDirectionIncrementInDegrees': 0.036,
             'iScansNegatively': 0,
@@ -305,11 +302,10 @@ class TestGribLoad(tests.GraphicsTest):
             'values': np.array([[1.0]]),
         }
 
-        # setup a list of test control values for each supported unit/edition testcase
+        # make a list of testcases for various time-units and grib-editions
+        # contents : edition, code, unit-equivalent-seconds, description-string
         hour_secs = 3600.0
         test_set = (
-            # edition, code, unit-equivalent-seconds, description-string
-# edition-1
             (1, 0, 60.0, 'minutes'),
             (1, 1, hour_secs, 'hours'),
             (1, 2, 24.0*hour_secs, 'days'),
@@ -319,8 +315,6 @@ class TestGribLoad(tests.GraphicsTest):
             (1, 13, 0.25*hour_secs, '15 minutes'),
             (1, 14, 0.5*hour_secs, '30 minutes'),
             (1, 254, 1.0, 'seconds'),
-
-# edition 2
             (2, 0, 60.0, 'minutes'),
             (2, 1, hour_secs, 'hours'),
             (2, 2, 24.0*hour_secs, 'days'),
@@ -331,37 +325,65 @@ class TestGribLoad(tests.GraphicsTest):
         )
 
         # check unit-handling for each supported unit-code and grib-edition
-        with Fakeup_Gribapi_Context():
-            for (grib_edition, timeunit_codenum, timeunit_secs, timeunit_str) in test_set:
-#                print 'checking: ed=',grib_edition, ' code=',timeunit_codenum, ' str=', timeunit_str
+        with FakeGribapiContextmanager():
+            for test_controls in  test_set:#
+                (grib_edition, 
+                 timeunit_codenum, 
+                 timeunit_secs, 
+                 timeunit_str
+                ) = test_controls
+                assert grib_edition in (1,2)
+                
                 # select grib-1 or grib-2 basic test message
-                fake_message = [fake_message_ed1, fake_message_ed2][grib_edition-1]
-                # set timeunit (NOTE slight kludge -- these 2 keys are aliases in the real gribapi)
-                fake_message['indicatorOfUnitOfTimeRange'] = timeunit_codenum
-                fake_message['unitOfTime'] = timeunit_codenum
+                if grib_edition == 1:
+                    fake_message = fake_message_ed1
+                elif grib_edition == 2:
+                    fake_message = fake_message_ed2
 
-                # make the GribWrapper object to test 
+                # set the timeunit
+                fake_message['indicatorOfUnitOfTimeRange'] = timeunit_codenum
+                if grib_edition == 1:
+                    # for some odd reason, GRIB1 code uses *both* of these
+                    # NOTE kludge -- the 2 keys are really the same thing
+                    fake_message['unitOfTime'] = timeunit_codenum
+
+                # make a GribWrapper object to test
                 wrapped_msg = iris.fileformats.grib.GribWrapper(fake_message)
                 
                 # check the units string
                 forecast_timeunit = wrapped_msg._forecastTimeUnit
-#                forecast_timeunit += '?'
                 self.assertEqual(forecast_timeunit, timeunit_str, 
-                    ('Bad unit string for edition=%01d, unitcode=%01d : expected="%s" GOT="%s"'
-                      % (grib_edition, timeunit_codenum, timeunit_str, forecast_timeunit)
+                    ('Bad unit string for edition={ed:01d}, ' \
+                     'unitcode={code:01d} : ' \
+                     'expected="{wanted}" GOT="{got}"'.format(
+                         ed=grib_edition, 
+                         code=timeunit_codenum, 
+                         wanted=timeunit_str, 
+                         got=forecast_timeunit
+                     )
                     )
                 )
-                interval_start_to_end = wrapped_msg._phenomenonDateTime - wrapped_msg._referenceDateTime
                 
                 # check the data-starttime calculation
+                interval_start_to_end = (
+                    wrapped_msg._phenomenonDateTime
+                     - wrapped_msg._referenceDateTime
+                ) 
                 if grib_edition == 1:
-                    interval_time_units = wrapped_msg.P1*datetime.timedelta(0, timeunit_secs)
+                    interval_from_units = wrapped_msg.P1
                 else:
-                    interval_time_units = wrapped_msg.forecastTime*datetime.timedelta(0, timeunit_secs)
-#                interval_time_units += datetime.timedelta(0, 1)
-                self.assertEqual(interval_start_to_end, interval_time_units,
-                    ('Inconsistent start time offset for edition=%01d, unitcode=%01d : from-unit="%s" from-phenom-minus-ref="%s"'
-                      % (grib_edition, timeunit_codenum, str(interval_time_units), str(interval_start_to_end))
+                    interval_from_units = wrapped_msg.forecastTime
+                interval_from_units *= datetime.timedelta(0, timeunit_secs)
+                self.assertEqual(interval_start_to_end, interval_from_units,
+                    ('Inconsistent start time offset for edition={ed:01d}, '
+                     'unitcode={code:01d} : '
+                     'from-unit="{unit_str}" ' 
+                     'from-phenom-minus-ref="{e2e_str}"'.format(
+                         ed=grib_edition, 
+                         code=timeunit_codenum, 
+                         unit_str=interval_from_units, 
+                         e2e_str=interval_start_to_end
+                     )
                     )
                 )
 
