@@ -15,28 +15,23 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
-import datetime
-from contextlib import contextmanager
-
-import numpy as np
-
-# import iris tests first so that some things can be initialised before importing anything else
+# Import iris tests first so that some things can be initialised before
+# importing anything else
 import iris.tests as tests
 
+import datetime
 import os
-import warnings
 
+import numpy as np
 import matplotlib.pyplot as plt
+import gribapi
+import mock
 
 import iris
 import iris.fileformats.grib
 import iris.plot as iplt
 import iris.util
 import iris.tests.stock
-
-import mock
-
-import gribapi
 
 # Construct a mock object to mimic the gribapi for GribWrapper testing.
 _mock_gribapi = mock.Mock(spec=gribapi)
