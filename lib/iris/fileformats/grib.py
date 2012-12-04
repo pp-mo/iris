@@ -188,71 +188,70 @@ class GribWrapper(object):
 
         return res
 
-    def _time_unit_stringandsecs(self):
-        """
-        Interpret message time unit as udunits-string, and float(seconds).
-        """
-        timeunit_num = self.indicatorOfUnitOfTimeRange
-        edition = self.edition
-
-        # Convert index into a unit string.
-        if timeunit_num == 0:
-            timeunit_str = 'minutes'
-        elif timeunit_num == 1:
-            timeunit_str = 'hours'
-        elif timeunit_num == 2:
-            timeunit_str = 'days'
-        # NOTE: do *not* support calendar-dependent units at all.
-        # So 'else' below throws an exception.
-#        elif timeunit_num == 3:
-#            timeunit_str = 'months'
-#        elif timeunit_num == 4:
-#            timeunit_str = 'years'
-#        elif timeunit_num == 5:
-#            timeunit_str = 'decades'
-#        elif timeunit_num == 6:
-#            timeunit_str = '30 years'
-#        elif timeunit_num == 7:
-#            timeunit_str = 'century'
-        elif timeunit_num == 10:
-            timeunit_str = '3 hours'
-        elif timeunit_num == 11:
-            timeunit_str = '6 hours'
-        elif timeunit_num == 12:
-            timeunit_str = '12 hours'
-        elif timeunit_num == 13 and edition == 1:
-            timeunit_str = '15 minutes'
-        elif timeunit_num == 13 and edition == 2:
-            timeunit_str = 'seconds'
-        elif timeunit_num == 14 and edition == 1:
-            timeunit_str = '30 minutes'
-        elif timeunit_num == 254 and edition == 1:
-            timeunit_str = 'seconds'
-        else:
+    def _timeunit_string(self):
+        """Get the udunits-string for the  message timeunit."""
+        # Make a map of the edition-independent codes.
+        time_strings = {
+            0: 'minutes',
+            1: 'hours',
+            2: 'days',
+            # NOTE: do *not* support calendar-dependent units at all.
+            # So the following possible keys remain unsupported:
+            #  3: 'months',
+            #  4: 'years',
+            #  5: 'decades',
+            #  6: '30 years',
+            #  7: 'century',
+            10: '3 hours',
+            11: '6 hours',
+            12: '12 hours'
+        }
+        # Add the edition-dependent codes.
+        if self.edition == 1:
+            time_strings.update({
+                13: '15 minutes',
+                14: '30 minutes',
+                254: 'seconds',
+            })
+        elif self.edition == 2:
+            time_strings.update({
+                13: 'seconds',
+            })
+        # Test timecode validity.
+        unit_code = self.indicatorOfUnitOfTimeRange
+        if unit_code not in time_strings:
             message = 'Unhandled time unit for forecast ' \
                 'indicatorOfUnitOfTimeRange : ' + str(timeunit_num)
             raise iris.exceptions.NotYetImplementedError(message)
+        # Return a unit-string.
+        return time_strings[unit_code]
 
-        # Also convert the unit-string to a time in seconds.
+    def _timeunit_seconds(self):
+        """Get the number of seconds in the message timeunit."""
+        units_string = self._timeunit_string()
+        # Convert our unit-string to a time in seconds.
         # NOTE: this is easily achieved with iris.unit.Unit ..
-        #    interval_unit = Unit(timeunit_str).convert(1.0, 'seconds')
+        #    interval_unit = Unit(units_string).convert(1.0, 'seconds')
         # ..BUT, we don't want that dependency here, so do it 'by steam'.
-        unit_elems = timeunit_str.split()
-        if len(unit_elems) == 1:
-            # no leading number: add implicit '1 ', asin '1 hours'
-            unit_elems[:0] = '1'
-        u_num, u_basestr = unit_elems
-        timeunit_seconds = {
+        unit_elems = units_string.split()
+        if len(unit_elems) == 2:
+            # Two tokens are a number + base-unit
+            u_num, u_basestr = unit_elems
+        elif len(unit_elems) == 1:
+            # Single token means an implicit '1 of'
+            u_num, u_basestr = '1', unit_elems[0]
+        else:
+            # Something is wrong : force an error below.
+            u_num, u_basestr = '0', 'seconds'
+        baseunit_seconds = {
             'seconds': 1, 'minutes': 60, 'hours': 3600, 'days': 24 * 3600}
-        u_basesecs = timeunit_seconds[u_basestr]
-
-        return timeunit_str, float(int(u_num) * u_basesecs)
-
-    def _time_unit_as_string(self):
-        return self._time_unit_stringandsecs()[0]
-
-    def _time_unit_as_seconds(self):
-        return self._time_unit_stringandsecs()[1]
+        u_basesecs = baseunit_seconds[u_basestr]
+        u_secs = int(u_num) * u_basesecs
+        if not (u_secs > 0.0):
+            raise Exception(
+                'Unexpected time unit string : "{0}"'.format(units_string)
+            )
+        return u_secs
 
     def _compute_extra_keys(self):
         """Compute our extra keys."""
@@ -400,7 +399,7 @@ class GribWrapper(object):
             
         #forecast time unit as a cm string
         #TODO #575 Do we want PP or GRIB style forecast delta?
-        self.extra_keys['_forecastTimeUnit'] = self._time_unit_as_string()
+        self.extra_keys['_forecastTimeUnit'] = self._timeunit_string()
         
         if self.gridType=="regular_ll":
             self.extra_keys['_x_coord_name'] = "longitude"
@@ -500,11 +499,15 @@ class GribWrapper(object):
                 "unhandled grib edition = {ed}".format(self.edition)
             )
 
-        # add start-offset to reference for valid time
-        interval_secs = self._time_unit_as_seconds()
-        verification_datetime = reference_date_time \
-            + datetime.timedelta(seconds=time_diff * interval_secs)
-        return verification_datetime
+        # Get the timeunit interval.
+        interval_secs = self._timeunit_seconds()
+        # Multiply by start-offset and convert to a timedelta.
+        #     NOTE: a 'float' conversion is required here, as time_diff may be
+        #     a numpy scalar, which timedelta will not accept.
+        interval_delta = datetime.timedelta(
+            seconds=float(time_diff * interval_secs))
+        # Return validity_time = (reference_time + start_offset*time_unit).
+        return reference_date_time + interval_delta
 
     def phenomenon_points(self, time_unit):
         """
