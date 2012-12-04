@@ -109,9 +109,10 @@ class GribWrapper(object):
     def __init__(self, grib_message):
         """Store the grib message and compute our extra keys."""
         self.grib_message = grib_message
-        
-        # initialise the key-extension dictionary
-        # NOTE: this attribute *must* exist, or the __getattr__ overload can hit an infinite loop
+
+        # Initialise the key-extension dictionary.
+        # NOTE: this attribute *must* exist, or the the __getattr__ overload
+        # can hit an infinite loop.
         self.extra_keys = {}
 
         self._confirm_in_scope()
@@ -188,17 +189,21 @@ class GribWrapper(object):
         return res
 
     def _time_unit_stringandsecs(self):
-        """ Interpret message time unit as udunits-string, and float(seconds). """
-        timeunit_num =self.indicatorOfUnitOfTimeRange
+        """
+        Interpret message time unit as udunits-string, and float(seconds).
+        """
+        timeunit_num = self.indicatorOfUnitOfTimeRange
         edition = self.edition
-        # convert index into a unit string
+
+        # Convert index into a unit string.
         if timeunit_num == 0:
             timeunit_str = 'minutes'
         elif timeunit_num == 1:
             timeunit_str = 'hours'
         elif timeunit_num == 2:
             timeunit_str = 'days'
-        # NOTE: do *not* support calendar-dependent units at all ('else' below throws exception) 
+        # NOTE: do *not* support calendar-dependent units at all.
+        # So 'else' below throws an exception.
 #        elif timeunit_num == 3:
 #            timeunit_str = 'months'
 #        elif timeunit_num == 4:
@@ -215,38 +220,40 @@ class GribWrapper(object):
             timeunit_str = '6 hours'
         elif timeunit_num == 12:
             timeunit_str = '12 hours'
-        elif timeunit_num == 13 and edition==1:
+        elif timeunit_num == 13 and edition == 1:
             timeunit_str = '15 minutes'
-        elif timeunit_num == 13 and edition==2:
+        elif timeunit_num == 13 and edition == 2:
             timeunit_str = 'seconds'
-        elif timeunit_num == 14 and edition==1:
+        elif timeunit_num == 14 and edition == 1:
             timeunit_str = '30 minutes'
-        elif timeunit_num == 254 and edition==1:
+        elif timeunit_num == 254 and edition == 1:
             timeunit_str = 'seconds'
         else:
-            message = 'Unhandled time unit for forecast indicatorOfUnitOfTimeRange : '+str(timeunit_num)
+            message = 'Unhandled time unit for forecast ' \
+                'indicatorOfUnitOfTimeRange : ' + str(timeunit_num)
             raise iris.exceptions.NotYetImplementedError(message)
-        
-        # ALSO convert the unit-string to a time in seconds
-        # NOTE: this is easily achieved with iris.unit.Unit ...
-        #    interval_unit = iris.unit.Unit(timeunit_str).convert(1.0, 'seconds')
-        # BUT... we don't want that dependency here, so do it 'by steam'
+
+        # Also convert the unit-string to a time in seconds.
+        # NOTE: this is easily achieved with iris.unit.Unit ..
+        #    interval_unit = Unit(timeunit_str).convert(1.0, 'seconds')
+        # ..BUT, we don't want that dependency here, so do it 'by steam'.
         unit_elems = timeunit_str.split()
         if len(unit_elems) == 1:
             # no leading number: add implicit '1 ', asin '1 hours'
-             unit_elems[:0] = '1'
+            unit_elems[:0] = '1'
         u_num, u_basestr = unit_elems
-        u_basesecs = {'seconds':1, 'minutes':60, 'hours':3600, 'days':24*3600}[u_basestr]
-        
-        return timeunit_str, float(int(u_num)*u_basesecs)
+        timeunit_seconds = {
+            'seconds': 1, 'minutes': 60, 'hours': 3600, 'days': 24 * 3600}
+        u_basesecs = timeunit_seconds[u_basestr]
 
-      
+        return timeunit_str, float(int(u_num) * u_basesecs)
+
     def _time_unit_as_string(self):
         return self._time_unit_stringandsecs()[0]
-    
+
     def _time_unit_as_seconds(self):
         return self._time_unit_stringandsecs()[1]
-    
+
     def _compute_extra_keys(self):
         """Compute our extra keys."""
         global unknown_string
@@ -319,7 +326,7 @@ class GribWrapper(object):
 
             # fixed forecastTime in hours
             self.extra_keys['_periodStartDateTime'] = \
-                (self.extra_keys['_referenceDateTime'] + 
+                (self.extra_keys['_referenceDateTime'] +
                  datetime.timedelta(hours=int(forecastTime)))
             self.extra_keys['_periodEndDateTime'] = \
                 datetime.datetime(endYear, endMonth, endDay, endHour, endMinute)
@@ -486,16 +493,19 @@ class GribWrapper(object):
                 raise iris.exceptions.TranslationError("unhandled grib1 timeRangeIndicator = %i" %
                                                        time_range_indicator)
         elif self.edition == 2:
-            time_diff = int(self.stepRange) # gribapi gives us a string!
-            
+            time_diff = int(self.stepRange)  # gribapi gives us a string!
+
         else:
-            raise iris.exceptions.TranslationError("unhandled grib edition = %i" % self.edition)
+            raise iris.exceptions.TranslationError(
+                "unhandled grib edition = {ed}".format(self.edition)
+            )
 
         # add start-offset to reference for valid time
         interval_secs = self._time_unit_as_seconds()
-        verification_datetime = reference_date_time + datetime.timedelta(seconds=time_diff*interval_secs)
+        verification_datetime = reference_date_time \
+            + datetime.timedelta(seconds=time_diff * interval_secs)
         return verification_datetime
-    
+
     def phenomenon_points(self, time_unit):
         """
         Return the phenomenon time point offset from the epoch time reference 

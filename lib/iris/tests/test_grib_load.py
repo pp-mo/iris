@@ -33,27 +33,43 @@ import iris.plot as iplt
 import iris.util
 import iris.tests.stock
 
+
 # Construct a mock object to mimic the gribapi for GribWrapper testing.
 _mock_gribapi = mock.Mock(spec=gribapi)
 _mock_gribapi.GribInternalError = Exception
 
+
 def _mock_gribapi_fetch(message, key):
+    """
+    Fake the gribapi key-fetch.
+
+    Fetch key-value from the fake message (dictionary).
+    If the key is not present, raise the diagnostic exception.
+
+    """
     if key in message.keys():
         return message[key]
     else:
         raise _mock_gribapi.GribInternalError
 
-def _mock_gribapi__grib_is_missing(grib_message, keyname):
-    """ Fake enquiring key existence.
-    
-        Convert to (fake) message object attribute existence.
-    """ 
-    return (keyname not in grib_message)
-    
-def _mock_gribapi__grib_get_native_type(grib_message, keyname):
-    """ Fake gribapi type discovery operation. 
 
-        If absent, raise diagnostic exception.
+def _mock_gribapi__grib_is_missing(grib_message, keyname):
+    """
+    Fake the gribapi key-existence enquiry.
+
+    Return whether the key exists in the fake message (dictionary).
+
+    """
+    return (keyname not in grib_message)
+
+
+def _mock_gribapi__grib_get_native_type(grib_message, keyname):
+    """
+    Fake the gribapi type-discovery operation.
+
+    Return type of key-value in the fake message (dictionary).
+    If the key is not present, raise the diagnostic exception.
+
     """
     if keyname in grib_message:
         return type(grib_message[keyname])
@@ -62,7 +78,8 @@ def _mock_gribapi__grib_get_native_type(grib_message, keyname):
 _mock_gribapi.grib_get_long = mock.Mock(side_effect=_mock_gribapi_fetch)
 _mock_gribapi.grib_get_string = mock.Mock(side_effect=_mock_gribapi_fetch)
 _mock_gribapi.grib_get_double = mock.Mock(side_effect=_mock_gribapi_fetch)
-_mock_gribapi.grib_get_double_array = mock.Mock(side_effect=_mock_gribapi_fetch)
+_mock_gribapi.grib_get_double_array = mock.Mock(
+    side_effect=_mock_gribapi_fetch)
 _mock_gribapi.grib_is_missing = mock.Mock(
     side_effect=_mock_gribapi__grib_is_missing)
 _mock_gribapi.grib_get_native_type = mock.Mock(
@@ -203,10 +220,10 @@ class TestGribLoad(tests.GraphicsTest):
         self.assertEqual(cube.name(), 'air_temperature')
         
     def test_fp_units(self):
-        # Test different units for forecast period (just the ones we care about)
+        # Test different units for forecast period (just ones we care about)
 
-        # define basic 'fake message' contents, for testing underlying methods
-        #  - these contain just the minimum keys needed to create a GribWrapper
+        # Define basic 'fake message' contents, for testing underlying methods.
+        # These contain just the minimum keys needed to create a GribWrapper.
 
         # edition-1 test message data ...
         fake_message_ed1 = {
@@ -222,7 +239,7 @@ class TestGribLoad(tests.GraphicsTest):
             'hour': 12,
             'minute': 0,
             'timeRangeIndicator': 0,
-            'P1':2, 'P2': 0,
+            'P1': 2, 'P2': 0,
             # time units : must set both of these
             'unitOfTime': None,
             'indicatorOfUnitOfTimeRange': None,
@@ -255,8 +272,8 @@ class TestGribLoad(tests.GraphicsTest):
             'hour': 12,
             'minute': 0,
             'productDefinitionTemplateNumber': 0,
-            'stepRange':24,
-            'shapeOfTheEarth':6,
+            'stepRange': 24,
+            'shapeOfTheEarth': 6,
             'gridType': 'rotated_ll',
             'angleOfRotation': 0.0,
             # time units : must be set
@@ -271,88 +288,87 @@ class TestGribLoad(tests.GraphicsTest):
             'values': np.array([[1.0]]),
         }
 
-        # make a list of testcases for various time-units and grib-editions
-        # contents : edition, code, unit-equivalent-seconds, description-string
+        # Make a list of testcases for various time-units and grib-editions.
+        # Format: (edition, code, unit-equivalent-seconds, description-string).
         hour_secs = 3600.0
         test_set = (
             (1, 0, 60.0, 'minutes'),
             (1, 1, hour_secs, 'hours'),
-            (1, 2, 24.0*hour_secs, 'days'),
-            (1, 10, 3.0*hour_secs, '3 hours'),
-            (1, 11, 6.0*hour_secs, '6 hours'),
-            (1, 12, 12.0*hour_secs, '12 hours'),
-            (1, 13, 0.25*hour_secs, '15 minutes'),
-            (1, 14, 0.5*hour_secs, '30 minutes'),
+            (1, 2, 24.0 * hour_secs, 'days'),
+            (1, 10, 3.0 * hour_secs, '3 hours'),
+            (1, 11, 6.0 * hour_secs, '6 hours'),
+            (1, 12, 12.0 * hour_secs, '12 hours'),
+            (1, 13, 0.25 * hour_secs, '15 minutes'),
+            (1, 14, 0.5 * hour_secs, '30 minutes'),
             (1, 254, 1.0, 'seconds'),
             (2, 0, 60.0, 'minutes'),
             (2, 1, hour_secs, 'hours'),
-            (2, 2, 24.0*hour_secs, 'days'),
+            (2, 2, 24.0 * hour_secs, 'days'),
             (2, 13, 1.0, 'seconds'),
-            (2, 10, 3.0*hour_secs, '3 hours'),
-            (2, 11, 6.0*hour_secs, '6 hours'),
-            (2, 12, 12.0*hour_secs, '12 hours'),
+            (2, 10, 3.0 * hour_secs, '3 hours'),
+            (2, 11, 6.0 * hour_secs, '6 hours'),
+            (2, 12, 12.0 * hour_secs, '12 hours'),
         )
 
-        # check unit-handling for each supported unit-code and grib-edition
+        # Check the unit-handling for each supported units-code and edition.
         with mock.patch('iris.fileformats.grib.gribapi', _mock_gribapi):
-            for test_controls in  test_set:
-                (grib_edition, 
-                 timeunit_codenum, 
-                 timeunit_secs, 
-                 timeunit_str
+            for test_controls in test_set:
+                (
+                    grib_edition, timeunit_codenum,
+                    timeunit_secs, timeunit_str
                 ) = test_controls
-                assert grib_edition in (1,2)
+                assert grib_edition in (1, 2)
 
-                # select grib-1 or grib-2 basic test message
+                # Select the grib-1 or grib-2 basic test message.
                 if grib_edition == 1:
                     fake_message = fake_message_ed1
                 elif grib_edition == 2:
                     fake_message = fake_message_ed2
 
-                # set the timeunit
+                # Set the timeunit in the message.
                 fake_message['indicatorOfUnitOfTimeRange'] = timeunit_codenum
                 if grib_edition == 1:
                     # for some odd reason, GRIB1 code uses *both* of these
                     # NOTE kludge -- the 2 keys are really the same thing
                     fake_message['unitOfTime'] = timeunit_codenum
 
-                # make a GribWrapper object to test
+                # Make a GribWrapper object to test.
                 wrapped_msg = iris.fileformats.grib.GribWrapper(fake_message)
-                
-                # check the units string
+
+                # Check the units string.
                 forecast_timeunit = wrapped_msg._forecastTimeUnit
-                self.assertEqual(forecast_timeunit, timeunit_str, 
-                    ('Bad unit string for edition={ed:01d}, ' \
-                     'unitcode={code:01d} : ' \
-                     'expected="{wanted}" GOT="{got}"'.format(
-                         ed=grib_edition, 
-                         code=timeunit_codenum, 
-                         wanted=timeunit_str, 
-                         got=forecast_timeunit
-                     )
+                self.assertEqual(
+                    forecast_timeunit, timeunit_str,
+                    'Bad unit string for edition={ed:01d}, '
+                    'unitcode={code:01d} : '
+                    'expected="{wanted}" GOT="{got}"'.format(
+                        ed=grib_edition,
+                        code=timeunit_codenum,
+                        wanted=timeunit_str,
+                        got=forecast_timeunit
                     )
                 )
-                
-                # check the data-starttime calculation
+
+                # Check the data-starttime calculation.
                 interval_start_to_end = (
                     wrapped_msg._phenomenonDateTime
-                     - wrapped_msg._referenceDateTime
-                ) 
+                    - wrapped_msg._referenceDateTime
+                )
                 if grib_edition == 1:
                     interval_from_units = wrapped_msg.P1
                 else:
                     interval_from_units = wrapped_msg.forecastTime
                 interval_from_units *= datetime.timedelta(0, timeunit_secs)
-                self.assertEqual(interval_start_to_end, interval_from_units,
-                    ('Inconsistent start time offset for edition={ed:01d}, '
-                     'unitcode={code:01d} : '
-                     'from-unit="{unit_str}" ' 
-                     'from-phenom-minus-ref="{e2e_str}"'.format(
-                         ed=grib_edition, 
-                         code=timeunit_codenum, 
-                         unit_str=interval_from_units, 
-                         e2e_str=interval_start_to_end
-                     )
+                self.assertEqual(
+                    interval_start_to_end, interval_from_units,
+                    'Inconsistent start time offset for edition={ed:01d}, '
+                    'unitcode={code:01d} : '
+                    'from-unit="{unit_str}" '
+                    'from-phenom-minus-ref="{e2e_str}"'.format(
+                        ed=grib_edition,
+                        code=timeunit_codenum,
+                        unit_str=interval_from_units,
+                        e2e_str=interval_start_to_end
                     )
                 )
 
