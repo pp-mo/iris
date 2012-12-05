@@ -85,6 +85,8 @@ _mock_gribapi.grib_is_missing = mock.Mock(
 _mock_gribapi.grib_get_native_type = mock.Mock(
     side_effect=_mock_gribapi__grib_get_native_type)
 
+# define seconds in an hour, for general test usage
+_hour_secs = 3600.0
 
 def _make_basic_fakemessage(edition=1):
     # Create a minimal 'fake message', for testing underlying methods.
@@ -300,6 +302,8 @@ class TestGribLoad(tests.GraphicsTest):
         cube = tests.stock.global_grib2()
         self.assertEqual(cube.name(), 'air_temperature')
 
+
+class TestGribTimecodes(tests.GraphicsTest):
     def _run_timetests(self, test_set):
         # Check the unit-handling for given units-codes and editions.
         
@@ -370,42 +374,63 @@ class TestGribLoad(tests.GraphicsTest):
                         e2e_str=interval_start_to_end
                     )
                 )
-        
-    def test_fp_units(self):
-        # Test different units for forecast period (just ones we care about)
 
-        # Define a list of testcases for various time-units and grib-editions.
-        # Format: (edition, code, expected-exception,
-        #          equivalent-seconds, description-string)
-        hour_secs = 3600.0
-        test_set = (
+    # Test groups of testcases for various time-units and grib-editions.
+    # Format: (edition, code, expected-exception, 
+    #          equivalent-seconds, description-string)
+    def test_timeunits_common(self):
+        tests = (
             (1, 0, None, 60.0, 'minutes'),
-            (1, 1, None, hour_secs, 'hours'),
-            (1, 2, None, 24.0 * hour_secs, 'days'),
-            (1, 10, None, 3.0 * hour_secs, '3 hours'),
-            (1, 11, None, 6.0 * hour_secs, '6 hours'),
-            (1, 12, None, 12.0 * hour_secs, '12 hours'),
-            (1, 13, None, 0.25 * hour_secs, '15 minutes'),
-            (1, 14, None, 0.5 * hour_secs, '30 minutes'),
-            (1, 254, None, 1.0, 'seconds'),
-            (2, 0, None, 60.0, 'minutes'),
-            (2, 1, None, hour_secs, 'hours'),
-            (2, 2, None, 24.0 * hour_secs, 'days'),
-            (2, 13, None, 1.0, 'seconds'),
-            (2, 10, None, 3.0 * hour_secs, '3 hours'),
-            (2, 11, None, 6.0 * hour_secs, '6 hours'),
-            (2, 12, None, 12.0 * hour_secs, '12 hours'),
-            # expected error-case
-            (
-                1, 111, 
-                iris.exceptions.NotYetImplementedError(
-                    'Unhandled time unit for forecast '
-                    'indicatorOfUnitOfTimeRange : 111'),
-                1.0, '??'
-            ),
+            (1, 1, None, _hour_secs, 'hours'),
+            (1, 2, None, 24.0 * _hour_secs, 'days'),
+            (1, 10, None, 3.0 * _hour_secs, '3 hours'),
+            (1, 11, None, 6.0 * _hour_secs, '6 hours'),
+            (1, 12, None, 12.0 * _hour_secs, '12 hours'),
         )
-        
-        self._run_timetests(test_set)
+        TestGribTimecodes._run_timetests(self, tests)
+
+
+    @staticmethod
+    def _err_bad_timeunit(code):
+        return iris.exceptions.NotYetImplementedError(
+            'Unhandled time unit for forecast '
+            'indicatorOfUnitOfTimeRange : {code}'.format(code=code)
+        )
+
+    def test_timeunits_grib1_specific(self):
+        tests = (
+            (1, 13, None, 0.25 * _hour_secs, '15 minutes'),
+            (1, 14, None, 0.5 * _hour_secs, '30 minutes'),
+            (1, 254, None, 1.0, 'seconds'),
+            (1, 111, TestGribTimecodes._err_bad_timeunit(111), 1.0, '??'),
+        )
+        TestGribTimecodes._run_timetests(self, tests)
+
+    def test_timeunits_grib2_specific(self):
+        tests = (
+            (2, 13, None, 1.0, 'seconds'),
+            # check the extra grib1 keys FAIL 
+            (2, 14, TestGribTimecodes._err_bad_timeunit(14), 0.0, '??'),
+            (2, 254, TestGribTimecodes._err_bad_timeunit(254), 0.0, '??'),
+        )
+        TestGribTimecodes._run_timetests(self, tests)
+
+    def test_timeunits_calendar(self):
+        tests = (
+            (1, 3, TestGribTimecodes._err_bad_timeunit(3), 0.0, 'months'),
+            (1, 4, TestGribTimecodes._err_bad_timeunit(4), 0.0, 'years'),
+            (1, 5, TestGribTimecodes._err_bad_timeunit(5), 0.0, 'decades'),
+            (1, 6, TestGribTimecodes._err_bad_timeunit(6), 0.0, '30 years'),
+            (1, 7, TestGribTimecodes._err_bad_timeunit(7), 0.0, 'centuries'),
+        )
+        TestGribTimecodes._run_timetests(self, tests)
+
+    def test_timeunits_invalid(self):
+        tests = (
+            (1, 111, TestGribTimecodes._err_bad_timeunit(111), 1.0, '??'),
+            (2, 27, TestGribTimecodes._err_bad_timeunit(27), 1.0, '??'),
+        )
+        TestGribTimecodes._run_timetests(self, tests)        
 
 
 if __name__ == "__main__":
