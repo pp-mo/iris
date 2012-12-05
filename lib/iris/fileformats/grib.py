@@ -221,7 +221,7 @@ class GribWrapper(object):
         unit_code = self.indicatorOfUnitOfTimeRange
         if unit_code not in time_strings:
             message = 'Unhandled time unit for forecast ' \
-                'indicatorOfUnitOfTimeRange : ' + str(timeunit_num)
+                'indicatorOfUnitOfTimeRange : ' + str(unit_code)
             raise iris.exceptions.NotYetImplementedError(message)
         # Return a unit-string.
         return time_strings[unit_code]

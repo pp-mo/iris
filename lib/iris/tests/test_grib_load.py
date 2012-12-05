@@ -32,7 +32,7 @@ import iris.fileformats.grib
 import iris.plot as iplt
 import iris.util
 import iris.tests.stock
-
+import iris.exceptions
 
 # Construct a mock object to mimic the gribapi for GribWrapper testing.
 _mock_gribapi = mock.Mock(spec=gribapi)
@@ -310,6 +310,7 @@ class TestGribLoad(tests.GraphicsTest):
             for test_controls in test_set:
                 (
                     grib_edition, timeunit_codenum,
+                    expected_error,
                     timeunit_secs, timeunit_str
                 ) = test_controls
 
@@ -319,6 +320,17 @@ class TestGribLoad(tests.GraphicsTest):
                     time_code=timeunit_codenum
                 )
 
+                if expected_error:
+                    # Expect GribWrapper construction to fail.
+                    with self.assertRaises(type(expected_error)) as ar_context:
+                        msg = iris.fileformats.grib.GribWrapper(message)
+                    self.assertEqual(
+                        ar_context.exception.args,
+                        expected_error.args)
+                    continue
+                  
+                # 'ELSE'...
+                # Expect the wrapper construction to work.
                 # Make a GribWrapper object and test it.
                 wrapped_msg = iris.fileformats.grib.GribWrapper(message)
 
@@ -367,22 +379,30 @@ class TestGribLoad(tests.GraphicsTest):
         #          equivalent-seconds, description-string)
         hour_secs = 3600.0
         test_set = (
-            (1, 0, 60.0, 'minutes'),
-            (1, 1, hour_secs, 'hours'),
-            (1, 2, 24.0 * hour_secs, 'days'),
-            (1, 10, 3.0 * hour_secs, '3 hours'),
-            (1, 11, 6.0 * hour_secs, '6 hours'),
-            (1, 12, 12.0 * hour_secs, '12 hours'),
-            (1, 13, 0.25 * hour_secs, '15 minutes'),
-            (1, 14, 0.5 * hour_secs, '30 minutes'),
-            (1, 254, 1.0, 'seconds'),
-            (2, 0, 60.0, 'minutes'),
-            (2, 1, hour_secs, 'hours'),
-            (2, 2, 24.0 * hour_secs, 'days'),
-            (2, 13, 1.0, 'seconds'),
-            (2, 10, 3.0 * hour_secs, '3 hours'),
-            (2, 11, 6.0 * hour_secs, '6 hours'),
-            (2, 12, 12.0 * hour_secs, '12 hours'),
+            (1, 0, None, 60.0, 'minutes'),
+            (1, 1, None, hour_secs, 'hours'),
+            (1, 2, None, 24.0 * hour_secs, 'days'),
+            (1, 10, None, 3.0 * hour_secs, '3 hours'),
+            (1, 11, None, 6.0 * hour_secs, '6 hours'),
+            (1, 12, None, 12.0 * hour_secs, '12 hours'),
+            (1, 13, None, 0.25 * hour_secs, '15 minutes'),
+            (1, 14, None, 0.5 * hour_secs, '30 minutes'),
+            (1, 254, None, 1.0, 'seconds'),
+            (2, 0, None, 60.0, 'minutes'),
+            (2, 1, None, hour_secs, 'hours'),
+            (2, 2, None, 24.0 * hour_secs, 'days'),
+            (2, 13, None, 1.0, 'seconds'),
+            (2, 10, None, 3.0 * hour_secs, '3 hours'),
+            (2, 11, None, 6.0 * hour_secs, '6 hours'),
+            (2, 12, None, 12.0 * hour_secs, '12 hours'),
+            # expected error-case
+            (
+                1, 111, 
+                iris.exceptions.NotYetImplementedError(
+                    'Unhandled time unit for forecast '
+                    'indicatorOfUnitOfTimeRange : 111'),
+                1.0, '??'
+            ),
         )
         
         self._run_timetests(test_set)
