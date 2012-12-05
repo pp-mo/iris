@@ -60,6 +60,42 @@ PROCESSING_TYPES = {0:'time mean', 1:'time sum', 2:'time maximum', 3:'time minim
                     6:'time standard_deviation', 7:'time _convariance',
                     8:'time _difference', 9:'time _ratio'}
 
+TIME_CODES_EDITION1 = {
+    0: ('minutes', 60),
+    1: ('hours', 60*60),
+    2: ('days', 24*60*60),
+    # NOTE: do *not* support calendar-dependent units at all.
+    # So the following possible keys remain unsupported:
+    #  3: 'months',
+    #  4: 'years',
+    #  5: 'decades',
+    #  6: '30 years',
+    #  7: 'century',
+    10: ('3 hours', 3*60*60),
+    11: ('6 hours', 6*60*60),
+    12: ('12 hours', 12*60*60),
+    13: ('15 minutes', 15*60),
+    14: ('30 minutes', 30*60),
+    254: ('seconds', 1),
+}
+
+TIME_CODES_EDITION2 = {
+    0: ('minutes', 60),
+    1: ('hours', 60*60),
+    2: ('days', 24*60*60),
+    # NOTE: do *not* support calendar-dependent units at all.
+    # So the following possible keys remain unsupported:
+    #  3: 'months',
+    #  4: 'years',
+    #  5: 'decades',
+    #  6: '30 years',
+    #  7: 'century',
+    10: ('3 hours', 3*60*60),
+    11: ('6 hours', 6*60*60),
+    12: ('12 hours', 12*60*60),
+    13: ('seconds', 1),
+}
+
 unknown_string = "???"
 
 
@@ -188,70 +224,26 @@ class GribWrapper(object):
 
         return res
 
-    def _timeunit_string(self):
-        """Get the udunits-string for the  message timeunit."""
-        # Make a map of the edition-independent codes.
-        time_strings = {
-            0: 'minutes',
-            1: 'hours',
-            2: 'days',
-            # NOTE: do *not* support calendar-dependent units at all.
-            # So the following possible keys remain unsupported:
-            #  3: 'months',
-            #  4: 'years',
-            #  5: 'decades',
-            #  6: '30 years',
-            #  7: 'century',
-            10: '3 hours',
-            11: '6 hours',
-            12: '12 hours'
-        }
-        # Add the edition-dependent codes.
+    def _timeunit_detail(self):
+        """Return the (string, seconds) describing the message time unit."""
         if self.edition == 1:
-            time_strings.update({
-                13: '15 minutes',
-                14: '30 minutes',
-                254: 'seconds',
-            })
-        elif self.edition == 2:
-            time_strings.update({
-                13: 'seconds',
-            })
-        # Test timecode validity.
+            code_to_detail = TIME_CODES_EDITION1
+        else:
+            code_to_detail = TIME_CODES_EDITION2
         unit_code = self.indicatorOfUnitOfTimeRange
-        if unit_code not in time_strings:
+        if unit_code not in code_to_detail:
             message = 'Unhandled time unit for forecast ' \
-                'indicatorOfUnitOfTimeRange : ' + str(unit_code)
+                      'indicatorOfUnitOfTimeRange : ' + str(unit_code)
             raise iris.exceptions.NotYetImplementedError(message)
-        # Return a unit-string.
-        return time_strings[unit_code]
+        return code_to_detail[unit_code]
+
+    def _timeunit_string(self):
+        """Get the udunits string for the message time unit."""
+        return self._timeunit_detail()[0]
 
     def _timeunit_seconds(self):
-        """Get the number of seconds in the message timeunit."""
-        units_string = self._timeunit_string()
-        # Convert our unit-string to a time in seconds.
-        # NOTE: this is easily achieved with iris.unit.Unit ..
-        #    interval_unit = Unit(units_string).convert(1.0, 'seconds')
-        # ..BUT, we don't want that dependency here, so do it 'by steam'.
-        unit_elems = units_string.split()
-        if len(unit_elems) == 2:
-            # Two tokens are a number + base-unit
-            u_num, u_basestr = unit_elems
-        elif len(unit_elems) == 1:
-            # Single token means an implicit '1 of'
-            u_num, u_basestr = '1', unit_elems[0]
-        else:
-            # Something is wrong : force an error below.
-            u_num, u_basestr = '0', 'seconds'
-        baseunit_seconds = {
-            'seconds': 1, 'minutes': 60, 'hours': 3600, 'days': 24 * 3600}
-        u_basesecs = baseunit_seconds[u_basestr]
-        u_secs = int(u_num) * u_basesecs
-        if not (u_secs > 0.0):
-            raise Exception(
-                'Unexpected time unit string : "{0}"'.format(units_string)
-            )
-        return u_secs
+        """Get the number of seconds in the message time unit."""
+        return self._timeunit_detail()[1]
 
     def _compute_extra_keys(self):
         """Compute our extra keys."""
