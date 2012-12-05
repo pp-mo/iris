@@ -86,6 +86,87 @@ _mock_gribapi.grib_get_native_type = mock.Mock(
     side_effect=_mock_gribapi__grib_get_native_type)
 
 
+def _make_basic_fakemessage(edition=1):
+    # Create a minimal 'fake message', for testing underlying methods.
+    # Returns a dictionary representing the message.
+    # Defines just the minimum keys required to create a GribWrapper.
+
+    # Set values for all the required edition-independent keys.
+    message = {
+        'Ni': 1,
+        'Nj': 1,
+        'alternativeRowScanning': 0,
+        'centre': 'ecmf',
+        'year': 2007,
+        'month': 3,
+        'day': 23,
+        'hour': 12,
+        'minute': 0,
+        'indicatorOfUnitOfTimeRange': 1,
+        'shapeOfTheEarth': 6,
+        'gridType': 'rotated_ll',
+        'angleOfRotation': 0.0,
+        'iDirectionIncrementInDegrees': 0.036,
+        'jDirectionIncrementInDegrees': 0.036,
+        'iScansNegatively': 0,
+        'jScansPositively': 1,
+        'longitudeOfFirstGridPointInDegrees': -5.70,
+        'latitudeOfFirstGridPointInDegrees': -4.452,
+        'jPointsAreConsecutive': 0,
+        'values': np.array([[1.0]]),
+    }
+    
+    # Add extra 'standard' keys dependent on edition number.
+    message['edition'] = edition
+    if edition == 1:
+        message.update({
+            'startStep': 24,
+            'timeRangeIndicator': 1,
+            'P1': 2, 'P2': 0,
+            # time unit - needed AS WELL as 'indicatorOfUnitOfTimeRange'
+            'unitOfTime': 1,
+        })
+    if edition == 2:
+        message.update({
+            'iDirectionIncrementGiven': 1,
+            'jDirectionIncrementGiven': 1,
+            'uvRelativeToGrid': 0,
+            'forecastTime': 24,
+            'productDefinitionTemplateNumber': 0,
+            'stepRange': 24,
+        })
+    
+    # Return the message.
+    return message
+
+def _set_fakemessage_timecode(message, timecode):
+    # Do timecode setting (somewhat edition-dependent).
+    message['indicatorOfUnitOfTimeRange'] = timecode
+    if message['edition'] == 1:
+        # for some odd reason, GRIB1 code uses *both* of these
+        # NOTE kludge -- the 2 keys are really the same thing
+        message['unitOfTime'] = timecode
+    
+def _make_fake_message(edition=1, time_code=None, **control_keys):
+    # Create a basic 'fake message', for testing underlying methods.
+    # Returns a dictionary representing the message.
+    # 'edition' and '_time_code' are specially managed.
+    # Kwargs 'control_keys' can set/add other keys as required.
+
+    # Set values for all the required edition-independent keys.
+    message = _make_basic_fakemessage(edition)
+
+    # Do timecode setting (somewhat edition-dependent).
+    if time_code is not None:
+        _set_fakemessage_timecode(message, time_code)
+    
+    # Implement any remaining control_keys by just setting values.
+    message.update(control_keys)
+    
+    # Return the message.
+    return message
+        
+
 @iris.tests.skip_data
 class TestGribLoad(tests.GraphicsTest):
   
@@ -218,77 +299,11 @@ class TestGribLoad(tests.GraphicsTest):
         iris.fileformats.grib.reset_load_rules()
         cube = tests.stock.global_grib2()
         self.assertEqual(cube.name(), 'air_temperature')
-        
+
     def test_fp_units(self):
         # Test different units for forecast period (just ones we care about)
 
-        # Define basic 'fake message' contents, for testing underlying methods.
-        # These contain just the minimum keys needed to create a GribWrapper.
-
-        # edition-1 test message data ...
-        fake_message_ed1 = {
-            'Ni': 1,
-            'Nj': 1,
-            'edition': 1,
-            'alternativeRowScanning': 0,
-            'startStep': 24,
-            'centre': 'ecmf',
-            'year': 2007,
-            'month': 3,
-            'day': 23,
-            'hour': 12,
-            'minute': 0,
-            'timeRangeIndicator': 0,
-            'P1': 2, 'P2': 0,
-            # time units : must set both of these
-            'unitOfTime': None,
-            'indicatorOfUnitOfTimeRange': None,
-            'shapeOfTheEarth': 6,
-            'gridType': 'rotated_ll',
-            'angleOfRotation': 0.0,
-            'iDirectionIncrementInDegrees': 0.036,
-            'jDirectionIncrementInDegrees': 0.036,
-            'iScansNegatively': 0,
-            'jScansPositively': 1,
-            'longitudeOfFirstGridPointInDegrees': -5.70,
-            'latitudeOfFirstGridPointInDegrees': -4.452,
-            'jPointsAreConsecutive': 0,
-            'values': np.array([[1.0]]),
-        }
-        # edition-2 test message data ...
-        fake_message_ed2 = {
-            'Ni': 1,
-            'Nj': 1,
-            'edition': 2,
-            'alternativeRowScanning': 0,
-            'iDirectionIncrementGiven': 1,
-            'jDirectionIncrementGiven': 1,
-            'uvRelativeToGrid': 0,
-            'forecastTime': 24,
-            'centre': 'ecmf',
-            'year': 2007,
-            'month': 3,
-            'day': 23,
-            'hour': 12,
-            'minute': 0,
-            'productDefinitionTemplateNumber': 0,
-            'stepRange': 24,
-            'shapeOfTheEarth': 6,
-            'gridType': 'rotated_ll',
-            'angleOfRotation': 0.0,
-            # time units : must be set
-            'indicatorOfUnitOfTimeRange': None,
-            'iDirectionIncrementInDegrees': 0.036,
-            'jDirectionIncrementInDegrees': 0.036,
-            'iScansNegatively': 0,
-            'jScansPositively': 1,
-            'longitudeOfFirstGridPointInDegrees': -5.70,
-            'latitudeOfFirstGridPointInDegrees': -4.452,
-            'jPointsAreConsecutive': 0,
-            'values': np.array([[1.0]]),
-        }
-
-        # Make a list of testcases for various time-units and grib-editions.
+        # Define a list of testcases for various time-units and grib-editions.
         # Format: (edition, code, unit-equivalent-seconds, description-string).
         hour_secs = 3600.0
         test_set = (
@@ -319,18 +334,11 @@ class TestGribLoad(tests.GraphicsTest):
                 ) = test_controls
                 assert grib_edition in (1, 2)
 
-                # Select the grib-1 or grib-2 basic test message.
-                if grib_edition == 1:
-                    fake_message = fake_message_ed1
-                elif grib_edition == 2:
-                    fake_message = fake_message_ed2
-
-                # Set the timeunit in the message.
-                fake_message['indicatorOfUnitOfTimeRange'] = timeunit_codenum
-                if grib_edition == 1:
-                    # for some odd reason, GRIB1 code uses *both* of these
-                    # NOTE kludge -- the 2 keys are really the same thing
-                    fake_message['unitOfTime'] = timeunit_codenum
+                # Create a fake message suitable for this test.
+                fake_message = _make_fake_message(
+                    edition=grib_edition,
+                    time_code=timeunit_codenum
+                )
 
                 # Make a GribWrapper object to test.
                 wrapped_msg = iris.fileformats.grib.GribWrapper(fake_message)
