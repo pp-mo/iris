@@ -88,6 +88,7 @@ _mock_gribapi.grib_get_native_type = mock.Mock(
 # define seconds in an hour, for general test usage
 _hour_secs = 3600.0
 
+
 def _make_basic_fakemessage(edition=1):
     # Create a minimal 'fake message', for testing underlying methods.
     # Returns a dictionary representing the message.
@@ -117,7 +118,7 @@ def _make_basic_fakemessage(edition=1):
         'jPointsAreConsecutive': 0,
         'values': np.array([[1.0]]),
     }
-    
+
     # Add extra 'standard' keys dependent on edition number.
     message['edition'] = edition
     if edition == 1:
@@ -137,9 +138,10 @@ def _make_basic_fakemessage(edition=1):
             'productDefinitionTemplateNumber': 0,
             'stepRange': 24,
         })
-    
+
     # Return the message.
     return message
+
 
 def _set_fakemessage_timecode(message, timecode):
     # Do timecode setting (somewhat edition-dependent).
@@ -148,7 +150,8 @@ def _set_fakemessage_timecode(message, timecode):
         # for some odd reason, GRIB1 code uses *both* of these
         # NOTE kludge -- the 2 keys are really the same thing
         message['unitOfTime'] = timecode
-    
+
+
 def _make_fake_message(edition=1, time_code=None, **control_keys):
     # Create a basic 'fake message', for testing underlying methods.
     # Returns a dictionary representing the message.
@@ -161,13 +164,13 @@ def _make_fake_message(edition=1, time_code=None, **control_keys):
     # Do timecode setting (somewhat edition-dependent).
     if time_code is not None:
         _set_fakemessage_timecode(message, time_code)
-    
+
     # Implement any remaining control_keys by just setting values.
     message.update(control_keys)
-    
+
     # Return the message.
     return message
-        
+
 
 @iris.tests.skip_data
 class TestGribLoad(tests.GraphicsTest):
@@ -306,7 +309,7 @@ class TestGribLoad(tests.GraphicsTest):
 class TestGribTimecodes(tests.GraphicsTest):
     def _run_timetests(self, test_set):
         # Check the unit-handling for given units-codes and editions.
-        
+
         # Operates on lists of cases for various time-units and grib-editions.
         # Format: (edition, code, expected-exception,
         #          equivalent-seconds, description-string)
@@ -332,7 +335,7 @@ class TestGribTimecodes(tests.GraphicsTest):
                         ar_context.exception.args,
                         expected_error.args)
                     continue
-                  
+
                 # 'ELSE'...
                 # Expect the wrapper construction to work.
                 # Make a GribWrapper object and test it.
@@ -376,7 +379,7 @@ class TestGribTimecodes(tests.GraphicsTest):
                 )
 
     # Test groups of testcases for various time-units and grib-editions.
-    # Format: (edition, code, expected-exception, 
+    # Format: (edition, code, expected-exception,
     #          equivalent-seconds, description-string)
     def test_timeunits_common(self):
         tests = (
@@ -388,7 +391,6 @@ class TestGribTimecodes(tests.GraphicsTest):
             (1, 12, None, 12.0 * _hour_secs, '12 hours'),
         )
         TestGribTimecodes._run_timetests(self, tests)
-
 
     @staticmethod
     def _err_bad_timeunit(code):
@@ -409,7 +411,7 @@ class TestGribTimecodes(tests.GraphicsTest):
     def test_timeunits_grib2_specific(self):
         tests = (
             (2, 13, None, 1.0, 'seconds'),
-            # check the extra grib1 keys FAIL 
+            # check the extra grib1 keys FAIL
             (2, 14, TestGribTimecodes._err_bad_timeunit(14), 0.0, '??'),
             (2, 254, TestGribTimecodes._err_bad_timeunit(254), 0.0, '??'),
         )
@@ -430,7 +432,7 @@ class TestGribTimecodes(tests.GraphicsTest):
             (1, 111, TestGribTimecodes._err_bad_timeunit(111), 1.0, '??'),
             (2, 27, TestGribTimecodes._err_bad_timeunit(27), 1.0, '??'),
         )
-        TestGribTimecodes._run_timetests(self, tests)        
+        TestGribTimecodes._run_timetests(self, tests)
 
 
 if __name__ == "__main__":
