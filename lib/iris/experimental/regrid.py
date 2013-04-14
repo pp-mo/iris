@@ -26,6 +26,50 @@ import iris.coords
 import iris.cube
 
 
+def _get_xy_coords(cube, dim_coords_only=False):
+    """
+    Return the x and y axis coordinates from a cube.
+
+    This function raises a ValueError if the cube does not contain one and
+    only one set of x and y dimension coordinates. It also raises a ValueError
+    if the identified x and y coordinates do not have coordinate systems that
+    are equal.
+
+    Args:
+
+    * cube:
+        An instance of :class:`iris.cube.Cube`.
+    
+    Kwargs:
+    * dim_coords_only (bool):
+        Accept only dimension coordinates.
+
+    Returns:
+        A tuple containing the cube's x and y dimension coordinates.
+
+    """
+    x_coords = cube.coords(axis='x', dim_coords=dim_coords_only)
+    if dim_coords_only:
+        coord_err = 'Cube {!r} must contain a single 1D {:1s} coordinate.'
+    else:
+        coord_err = 'Cube {!r} must contain a single {:1s} coordinate.'
+    if len(x_coords) != 1:
+        raise ValueError(coord_err.format(cube.name(), 'x'))
+    x_coord = x_coords[0]
+
+    y_coords = cube.coords(axis='y', dim_coords=dim_coords_only)
+    if len(y_coords) != 1:
+        raise ValueError(coord_err.format(cube.name(), 'y'))
+    y_coord = y_coords[0]
+
+    if x_coord.coord_system != y_coord.coord_system:
+        raise ValueError("The cube's x ({!r}) and y ({!r}) "
+                         "coordinates must have the same coordinate "
+                         "system.".format(x_coord.name(), y_coord.name()))
+
+    return x_coord, y_coord
+
+
 def _get_xy_dim_coords(cube):
     """
     Return the x and y dimension coordinates from a cube.
@@ -44,24 +88,7 @@ def _get_xy_dim_coords(cube):
         A tuple containing the cube's x and y dimension coordinates.
 
     """
-    x_coords = cube.coords(axis='x', dim_coords=True)
-    if len(x_coords) != 1:
-        raise ValueError('Cube {!r} must contain a single 1D x '
-                         'coordinate.'.format(cube.name()))
-    x_coord = x_coords[0]
-
-    y_coords = cube.coords(axis='y', dim_coords=True)
-    if len(y_coords) != 1:
-        raise ValueError('Cube {!r} must contain a single 1D y '
-                         'coordinate.'.format(cube.name()))
-    y_coord = y_coords[0]
-
-    if x_coord.coord_system != y_coord.coord_system:
-        raise ValueError("The cube's x ({!r}) and y ({!r}) "
-                         "coordinates must have the same coordinate "
-                         "system.".format(x_coord.name(), y_coord.name()))
-
-    return x_coord, y_coord
+    return _get_xy_coords(cube, dim_coords_only=True)
 
 
 def _sample_grid(src_coord_system, grid_x_coord, grid_y_coord):

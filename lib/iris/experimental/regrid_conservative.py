@@ -52,6 +52,43 @@ def _convert_latlons(crs, x_array, y_array):
     return ll_values[..., 0], ll_values[..., 1]
 
 
+def where_cell_bounds_repeat(coord):
+    bounds = coord.bounds
+    return np.logical_and(bounds[:-1, :-1, 1] == bounds[:-1, 1:, 0],
+                          bounds[:-1, :-1, 2] == bounds[1:, 1:, 0],
+                          bounds[:-1, :-1, 3] == bounds[1:, :-1, 0])
+
+
+def pba(boolarray2d):
+    """" Print boolean array (testing only). """
+    ny, nx = boolarray2d.shape
+    ll = [''.join(['1' if line[ix] else '0' for ix in range(nx)])
+           for line in boolarray2d]
+    return ll
+
+
+class Error2dBoundsNoncontiguous(ValueError):
+    pass
+
+
+def get_contiguous_bounds_2d(coord):
+    if not coord.has_bounds():
+        # TODO: we can 'make' them.  But for now, we aren't going to.
+        raise ValueError('Cannot infer contiguous bounds for two-dimensional '
+                         'coord with no bounds, "{:s}".'.format(
+                             coord.name()))
+    if not np.all(where_cell_bounds_repeat(coord)):
+        raise Error2dBoundsNoncontiguous(
+            'Two-dimensional coordinate "{:s}" '
+            'has non-contiguous bounds.'.format(coord.name()))
+    contiguous_bounds = np.zeros((coord.shape[0] + 1, coord.shape[1] + 1))
+    contiguous_bounds[0:-1, 0:-1] = coord.bounds[:, :, 0]
+    contiguous_bounds[0:-1, -1] = coord.bounds[:, -1, 1]  # end x column
+    contiguous_bounds[-1, 0:-1] = coord.bounds[-1, :, 3]  # end y row
+    contiguous_bounds[-1, -1] = coord.bounds[-1, -1, 2]   # top-right point
+    return contiguous_bounds
+
+
 def _make_esmpy_field_from_coords(x_coord, y_coord, ref_name='field',
                                   data=None, mask=None):
     """
@@ -76,14 +113,35 @@ def _make_esmpy_field_from_coords(x_coord, y_coord, ref_name='field',
         Add a mask item to the grid, assigning it 0/1 where mask=False/True.
 
     """
+    # Construct basic grid : method depends on whether coords are 1d OR 2d
+    if x_coord.ndim == 1 and y_coord.ndim == 1:
+        # 1-d coords.  May not be DimCoords, so ought to check monotonicity ??
+        if not x_coord.is_monotonic() or not y_coord.is_monotonic():
+            raise ValueError('One-dimensional x and y coords ("{:s}" and "{:s})" '
+                             'must be monotonic.'.format(
+                                 x_coord.name(), y_coord.name()))
+        dims = [len(coord.points) for coord in (x_coord, y_coord)]
+        dims = np.array(dims, dtype=np.int32)  # specific type required by ESMF.
+        # Construct all cell corner coordinates as true-lat-lons
+        # NOTE: contiguous_bounds calls 'guess_bounds' if required.
+        # NOTE: Maybe not happy with this, could _check_ for bounds first ?
+        x_bounds, y_bounds = np.meshgrid(x_coord.contiguous_bounds(),
+                                         y_coord.contiguous_bounds())
+    elif x_coord.ndim == 2 and y_coord.ndim == 2:
+        # 2-d coords, must be bounded
+        # TODO: infer, with unbounded 2d (see recent work to extrapolate in lat-lon space)
+        # TODO: but ORCA is 2d without full connectivity
+        try:
+            x_bounds, y_bounds = [get_contiguous_bounds_2d(coord)
+                                  for coord in (x_coord, y_coord)]
+        except Error2dBoundsNoncontiguous:
+            # Existing bounds not contiguous, like ORCA.
+            # TODO: we want to represent this as a Mesh ...
+            raise
+           
     # Create a Grid object describing the coordinate cells.
-    dims = [len(coord.points) for coord in (x_coord, y_coord)]
-    dims = np.array(dims, dtype=np.int32)  # specific type required by ESMF.
     grid = ESMF.Grid(dims)
 
-    # Get all cell corner coordinates as true-lat-lons
-    x_bounds, y_bounds = np.meshgrid(x_coord.contiguous_bounds(),
-                                     y_coord.contiguous_bounds())
     grid_crs = _get_coord_crs(x_coord)
     lon_bounds, lat_bounds = _convert_latlons(grid_crs, x_bounds, y_bounds)
 
