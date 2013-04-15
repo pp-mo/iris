@@ -151,8 +151,8 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
     Args:
 
     * source_cube (:class:`iris.cube.Cube`):
-        Source data.  Must be two-dimensional, with two identifiable horizontal
-        dimension coordinates.
+        Source data.  Must have two identifiable horizontal dimension
+        coordinates.
     * grid_cube_or_coords :
         Either a :class:`iris.cube.Cube`, or a pair of
         :class:`iris.coords.Coord`, defining the target horizontal grid.
@@ -160,20 +160,25 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
 
     Returns:
         A new cube derived from source_cube, regridded onto the specified
-        horizontal grid.  Any additional coordinates mapped onto horizontal
-        spatial axes are lost, while all other metadata is retained.
+        horizontal grid.
 
-    ..note:
+    Any additional coordinates mapped onto horizontal spatial axes are removed,
+    while all other metadata is retained.
+
+    Any factory-derived auxiliary coordinates are regridded with linear
+    interpolation.
+
+    .. note::
         Both source and destination cubes must have two dimension coordinates
-        identified with axes 'x' and 'y', and having the same, defined
-        coord_system.
-        The grids are defined by `iris.coords.Coord.contiguous_bounds`() of
+        identified with axes 'x' and 'y' which share a known coord_system.
+        The grids are defined by :meth:`iris.coords.Coord.contiguous_bounds` of
         these.
 
-    ..note:
+    .. note::
         Initialises the ESMF Manager, if it was not already called.
         This implements default Manager operations (e.g. logging).
-        To alter these, use an earlier ESMF.Manager() call.
+
+        To alter this, make a prior call to ESMF.Manager().
 
     """
     # Process parameters to get input+output horizontal coordinates.
@@ -191,60 +196,88 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
     if _get_coord_crs(dst_coords[0]) is None:
         raise ValueError('Destination X+Y coordinates have no coord_system.')
 
-    # FOR NOW: 2d only
-    if source_cube.ndim != 2:
-        raise ValueError('Source cube must be 2-dimensional.')
-
     # Initialise the ESMF manager in case it was not already done.
     ESMF.Manager()
         # NOTE: Implements default settings.  If you don't like these, call it
         # yourself first (then this call does nothing).
 
-    # Get the source data, reformed into the right dimension order, (x,y).
-    src_data = source_cube.data
+    # Create a data array for the output cube.
     src_dims_xy = [source_cube.coord_dims(coord)[0] for coord in src_coords]
-    src_data = src_data.transpose(src_dims_xy)
+    # Size matches source, except for X+Y dimensions
+    dst_shape = np.array(source_cube.shape)
+    dst_shape[src_dims_xy] = [coord.shape[0] for coord in dst_coords]
+    # NOTE: result array is masked -- fix this afterward if all unmasked
+    fullcube_data = np.ma.zeros(dst_shape)
 
-    # Work out whether we have missing data to define a source grid mask.
-    srcdata_mask = np.ma.getmask(src_data)
-    if not np.any(srcdata_mask):
-        srcdata_mask = None
+    # Iterate 2d slices over all possible indices of the 'other' dimensions
+    all_other_dims = filter(lambda i_dim: i_dim not in src_dims_xy,
+                            xrange(source_cube.ndim))
+    all_combinations_of_other_inds = np.ndindex(*dst_shape[all_other_dims])
+    for other_indices in all_combinations_of_other_inds:
+        # Construct a tuple of slices to address the 2d xy field
+        slice_indices_array = np.array([slice(None)] * source_cube.ndim)
+        slice_indices_array[all_other_dims] = other_indices
+        slice_indices_tuple = tuple(slice_indices_array)
 
-    # Construct ESMF Field objects on source and destination grids.
-    src_field = _make_esmpy_field_from_coords(src_coords[0], src_coords[1],
-                                              data=src_data,
-                                              mask=srcdata_mask)
-    dst_field = _make_esmpy_field_from_coords(dst_coords[0], dst_coords[1])
+        # Get the source data, reformed into the right dimension order, (x,y).
+        src_data_2d = source_cube.data[slice_indices_tuple]
+        if (src_dims_xy[0] > src_dims_xy[1]):
+            src_data_2d = src_data_2d.transpose()
 
-    # Make extra Field for destination coverage fraction (for missing data).
-    coverage_field = ESMF.Field(dst_field.grid, 'validmask_dst')
+        # Work out whether we have missing data to define a source grid mask.
+        if np.ma.is_masked(src_data_2d):
+            srcdata_mask = np.ma.getmask(src_data_2d)
+        else:
+            srcdata_mask = None
 
-    # Do the actual regrid with ESMF.
-    regrid_method = ESMF.Regrid(src_field, dst_field,
-                                src_mask_values=np.array([1], dtype=np.int32),
-                                dst_mask_values=np.array([1], dtype=np.int32),
-                                regrid_method=ESMF.RegridMethod.CONSERVE,
-                                unmapped_action=ESMF.UnmappedAction.IGNORE,
-                                dst_frac_field=coverage_field)
-    regrid_method(src_field, dst_field)
-    data = dst_field.data
+        # Construct ESMF Field objects on source and destination grids.
+        src_field = _make_esmpy_field_from_coords(src_coords[0], src_coords[1],
+                                                  data=src_data_2d,
+                                                  mask=srcdata_mask)
+        dst_field = _make_esmpy_field_from_coords(dst_coords[0], dst_coords[1])
 
-    # Convert destination 'coverage fraction' into a simple missing-data mask.
-    # = part of cell is outside the source grid, or over a masked datapoint.
-    dst_mask = coverage_field.data < (1.0 - 1e-8)
-    # Mask the data field if any points are masked.
-    if np.any(dst_mask):
-        data = np.ma.array(data, mask=dst_mask)
+        # Make Field for destination coverage fraction (for missing data calc).
+        coverage_field = ESMF.Field(dst_field.grid, 'validmask_dst')
 
-    # Transpose ESMF result dims (X,Y) back to the order of the source
-    inverse_dims = np.zeros(data.ndim)
-    inverse_dims[src_dims_xy] = np.arange(data.ndim)
-    data = data.transpose(inverse_dims)
+        # Do the actual regrid with ESMF.
+        mask_flag_values = np.array([1], dtype=np.int32)
+        regrid_method = ESMF.Regrid(src_field, dst_field,
+                                    src_mask_values=mask_flag_values,
+                                    regrid_method=ESMF.RegridMethod.CONSERVE,
+                                    unmapped_action=ESMF.UnmappedAction.IGNORE,
+                                    dst_frac_field=coverage_field)
+        regrid_method(src_field, dst_field)
+        data = dst_field.data
+
+        # Convert destination 'coverage fraction' into a missing-data mask.
+        # Set = wherever part of cell goes outside source grid, or overlaps a
+        # masked source cell.
+        coverage_tolerance_threshold = 1.0 - 1.0e-8
+        data.mask = coverage_field.data < coverage_tolerance_threshold
+
+        # Transpose ESMF result dims (X,Y) back to the order of the source
+        if (src_dims_xy[0] > src_dims_xy[1]):
+            data = data.transpose()
+
+        # Paste regridded slice back into parent array
+        fullcube_data[slice_indices_tuple] = data
+
+    # Remove the data mask if completely unused.
+    if not np.ma.is_masked(fullcube_data):
+        fullcube_data = np.array(fullcube_data)
+
+    # Generate a full 2d sample grid, as required for regridding orography
+    # NOTE: as seen in "regrid_bilinear_rectilinear_src_and_grid"
+    # TODO: can this not also be wound into the _create_cube method ?
+    src_cs = src_coords[0].coord_system
+    sample_grid_x, sample_grid_y = i_regrid._sample_grid(src_cs,
+                                                         dst_coords[0],
+                                                         dst_coords[1])
 
     # Return result as a new cube based on the source.
     # TODO: please tidy this interface !!!
     return i_regrid._create_cube(
-        data,
+        fullcube_data,
         src=source_cube,
         x_dim=src_dims_xy[0],
         y_dim=src_dims_xy[1],
@@ -252,6 +285,6 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
         src_y_coord=src_coords[1],
         grid_x_coord=dst_coords[0],
         grid_y_coord=dst_coords[1],
-        sample_grid_x=dst_coords[0].points,
-        sample_grid_y=dst_coords[1].points,
+        sample_grid_x=sample_grid_x,
+        sample_grid_y=sample_grid_y,
         regrid_callback=i_regrid._regrid_bilinear_array)

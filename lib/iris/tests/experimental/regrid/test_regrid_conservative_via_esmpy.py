@@ -15,10 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 """
-Test the :func:`iris.experimental.regrid._get_xy_dim_coords` function.
-
+Tests for :func:`iris.experimental.regrid.regrid_conservative_via_esmpy`.
 """
-from __future__ import print_function
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
@@ -198,6 +196,91 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check area sums again
         self.assertArrayAllClose(c1to2to1_areasum, c1_areasum)
+
+    def test_simple_missing_data(self):
+        """
+        Check for missing data handling.
+
+        Should mask cells that either ..
+          (a) go partly outside the source grid
+          (b) partially overlap masked source data
+
+        """
+        c1, c2 = self.stock_c1_c2
+        c1_areasum = self.stock_c1_areasum
+
+        # regrid from c2 to c1 -- should mask all the edges...
+        c2_to_c1 = regrid_conservative_via_esmpy(c2, c1)
+        self.assertArrayEqual(c2_to_c1.data.mask,
+                              [[True, True, True, True, True],
+                               [True, False, False, False, True],
+                               [True, False, False, False, True],
+                               [True, False, False, False, True],
+                               [True, True, True, True, True]])
+
+        # do same with a particular point masked
+        c2m = c2.copy()
+        c2m.data = np.ma.array(c2m.data)
+        c2m.data[1, 1] = np.ma.masked
+        c2m_to_c1 = regrid_conservative_via_esmpy(c2m, c1)
+        self.assertArrayEqual(c2m_to_c1.data.mask,
+                              [[True, True, True, True, True],
+                               [True, True, True, False, True],
+                               [True, True, True, False, True],
+                               [True, False, False, False, True],
+                               [True, True, True, True, True]])
+
+    def test_multidimensional(self):
+        """
+        Check valid operation on a multidimensional cube.
+
+        Calculation should repeat across multiple dimensions.
+        Any attached orography is interpolated.
+
+        NOTE: in future, extra dimensions may be passed through to ESMF:  At
+        present, it repeats the calculation on 2d slices.  So we check that
+        at least the results are equivalent (as it's quite easy to do).
+        """
+        # Get some higher-dimensional test data
+        c1 = istk.realistic_4d()
+        # Chop down to small size, and mask some data
+        c1 = c1[:3, :4, :16, :12]
+        c1.data[:, 2, :, :] = np.ma.masked
+        c1.data[1, 1, 3:9, 4:7] = np.ma.masked
+
+        # Construct a (coarser) target grid of about the same extent
+        c1_cs = c1.coord(axis='x').coord_system
+        xlims = _minmax(c1.coord(axis='x').contiguous_bounds())
+        ylims = _minmax(c1.coord(axis='y').contiguous_bounds())
+        # Reduce the dimensions slightly to avoid NaNs in regridded orography
+        delta = 0.05
+            # NOTE: this is *not* a small amount.  Think there is a bug.
+            # NOTE: See https://github.com/SciTools/iris/issues/458
+        xlims = np.interp([delta, 1.0 - delta], [0, 1], xlims)
+        ylims = np.interp([delta, 1.0 - delta], [0, 1], ylims)
+        pole_latlon = (c1_cs.grid_north_pole_latitude,
+                       c1_cs.grid_north_pole_longitude)
+        c2 = _make_test_cube((7, 8), xlims, ylims, pole_latlon=pole_latlon)
+
+        # regrid onto new grid
+        c1_to_c2 = regrid_conservative_via_esmpy(c1, c2)
+
+        # check that all the original coords exist in the new cube
+        # NOTE: this also effectively confirms we haven't lost the orography
+        def list_coord_names(cube):
+            return sorted([coord.name() for coord in cube.coords()])
+
+        self.assertEqual(list_coord_names(c1_to_c2), list_coord_names(c1))
+
+        # check that each xy 'slice' has same values as if done on its own.
+        for i_t, i_p in np.ndindex(c1.shape[:2]):
+            c1_slice = c1[i_t, i_p]
+            c2_slice = regrid_conservative_via_esmpy(c1_slice, c2)
+            subcube = c1_to_c2[i_t, i_p]
+            self.assertEqual(subcube, c2_slice)
+
+        # check all other metadata
+        self.assertEqual(c1_to_c2.metadata, c1.metadata)
 
     def test_xy_transposed(self):
         """ Test effects of transposing X and Y in src/dst data. """
