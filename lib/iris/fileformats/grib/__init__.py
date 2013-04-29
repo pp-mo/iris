@@ -32,8 +32,10 @@ import iris.proxy
 iris.proxy.apply_proxy('gribapi', globals())
 
 import iris.coord_systems as coord_systems
+# NOTE: careful here, to avoid circular imports (as iris imports grib)
+from iris.fileformats.grib import grib_phenom_translation as gptx
+from iris.fileformats.grib import grib_save_rules
 import iris.unit
-import grib_save_rules
 
 
 
@@ -301,7 +303,33 @@ class GribWrapper(object):
             '_x_coord_name':unknown_string, '_y_coord_name':unknown_string,
             # These are here to avoid repetition in the rules files,
             # and reduce the very long line lengths.
-            '_x_points':None, '_y_points':None}
+            '_x_points':None, '_y_points':None,
+            '_cf_data':None}
+
+        # cf phenomenon translation
+        if edition == 1:
+            table2_version = gribapi.grib_get_long(self.grib_message,
+                                                   "table2Version")
+            centre_number = gribapi.grib_get_long(self.grib_message, "centre")
+            param_number = gribapi.grib_get_long(self.grib_message,
+                                                 "indicatorOfParameter")
+            cf_data = gptx.grib1_phenom_to_cf_info(
+                table2_version=table2_version,
+                centre_number=centre_number,
+                param_number=param_number)
+            self.extra_keys['_cf_data'] = cf_data
+        else:
+            param_discipline = gribapi.grib_get_long(self.grib_message,
+                                                     "discipline")
+            param_category = gribapi.grib_get_long(self.grib_message,
+                                                   "parameterCategory")
+            param_number = gribapi.grib_get_long(self.grib_message,
+                                                 "parameterNumber")
+            cf_data = gptx.grib2_phenom_to_cf_info(
+                param_discipline=param_discipline,
+                param_category=param_category,
+                param_number=param_number)
+            self.extra_keys['_cf_data'] = cf_data
 
         #reference date
         self.extra_keys['_referenceDateTime'] = \

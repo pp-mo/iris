@@ -5,6 +5,13 @@
       <coord>
         <dimCoord id="73141289" points="[0]" shape="(1,)" standard_name="forecast_period" units="Unit('hours')" value_type="int32"/>
       </coord>
+      <coord>
+        <dimCoord id="5ca2009" long_name="height" points="[0.0]" shape="(1,)" units="Unit('m')" value_type="float64">
+          <attributes>
+            <attribute name="positive" value="up"/>
+          </attributes>
+        </dimCoord>
+      </coord>
       <coord datadims="[0]">
         <dimCoord id="a42bcac2" points="[58.0, 57.875, 57.75, ..., 18.25, 18.125, 18.0]" shape="(321,)" standard_name="latitude" units="Unit('degrees')" value_type="float64">
           <geogCS earth_radius="6371229.0"/>
