@@ -305,7 +305,8 @@ class TestLicenseHeaders(unittest.TestCase):
                             'docs/iris/src/userguide/plotting_examples/*.py',
                             'docs/iris/src/developers_guide/gitwash_dumper.py',
                             'docs/iris/build/*',
-                            'lib/iris/fileformats/_pyke_rules/*')
+                            'lib/iris/fileformats/_pyke_rules/*',
+                            'lib/iris/fileformats/grib/grib_cf_map.py')
 
         try:
             last_change_by_fname = self.last_change_by_fname()
