@@ -32,7 +32,16 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-import ESMF
+# Import ESMF if installed, else fail quietly + disable all the tests.
+try:
+    import ESMF
+    from iris.experimental.regrid_conservative import \
+        regrid_conservative_via_esmpy
+    skip_esmf = lambda fn: fn
+except ImportError:
+    ESMF = None
+    skip_esmf = unittest.skip(
+        reason='Requires ESMF module, which is not available.')
 
 import cartopy.crs as ccrs
 import iris
@@ -41,8 +50,6 @@ import iris.analysis.cartography as i_cartog
 import iris.plot as iplt
 import iris.quickplot as qplt
 import iris.tests.stock as istk
-
-from iris.experimental.regrid_conservative import regrid_conservative_via_esmpy
 
 
 _plain_geodetic_cs = iris.coord_systems.GeogCS(
@@ -120,6 +127,7 @@ def _donothing_context_manager():
     yield
 
 
+@skip_esmf
 class TestConservativeRegrid(tests.IrisTest):
     @classmethod
     def setUpClass(self):
