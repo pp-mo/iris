@@ -162,10 +162,10 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
         A new cube derived from source_cube, regridded onto the specified
         horizontal grid.
 
-    Any additional coordinates mapped onto horizontal spatial axes are removed,
-    while all other metadata is retained.
-
-    Any factory-derived auxiliary coordinates are regridded with linear
+    Any additional coordinates which map onto the horizontal dimensions are
+    removed, while all other metadata is retained.
+    If there are coordinate factories with 2d horizontal reference surfaces,
+    these reference surfaces are also regridded, using ordinary bilinear
     interpolation.
 
     .. note::
@@ -198,8 +198,6 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
 
     # Initialise the ESMF manager in case it was not already done.
     ESMF.Manager()
-        # NOTE: Implements default settings.  If you don't like these, call it
-        # yourself first (then this call does nothing).
 
     # Create a data array for the output cube.
     src_dims_xy = [source_cube.coord_dims(coord)[0] for coord in src_coords]
