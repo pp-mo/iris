@@ -25,7 +25,7 @@ re-implemented.
 import numpy as np
 
 #import ESMF
-import spherical_geometry as sph
+import iris.experimental.spherical_geometry as sph
 
 import cartopy.crs as ccrs
 import iris
