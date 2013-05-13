@@ -68,9 +68,9 @@ class Test_non_hybrid_surfaces(tests.IrisTest):
         grib = None
         cube = iris.cube.Cube([1,2,3,4,5]) 
         grib_save_rules.non_hybrid_surfaces(cube, grib)
-        mock_set_long.assert_any_call(grib, "typeOfFirstFixedSurface", 1)
-        mock_set_long.assert_any_call(grib, "scaleFactorOfFirstFixedSurface", 0)
-        mock_set_long.assert_any_call(grib, "scaledValueOfFirstFixedSurface", 0)
+        mock_set_long.assert_any_call(grib, "typeOfFirstFixedSurface", -1)
+        mock_set_long.assert_any_call(grib, "scaleFactorOfFirstFixedSurface", 255)
+        mock_set_long.assert_any_call(grib, "scaledValueOfFirstFixedSurface", -1)
         mock_set_long.assert_any_call(grib, "typeOfSecondFixedSurface", -1)
         mock_set_long.assert_any_call(grib, "scaleFactorOfSecondFixedSurface", 255)
         mock_set_long.assert_any_call(grib, "scaledValueOfSecondFixedSurface", -1)

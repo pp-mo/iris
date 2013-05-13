@@ -318,18 +318,28 @@ class GribWrapper(object):
                 centre_number=centre_number,
                 param_number=param_number)
             self.extra_keys['_cf_data'] = cf_data
-        else:
-            param_discipline = gribapi.grib_get_long(self.grib_message,
-                                                     "discipline")
-            param_category = gribapi.grib_get_long(self.grib_message,
-                                                   "parameterCategory")
-            param_number = gribapi.grib_get_long(self.grib_message,
-                                                 "parameterNumber")
-            cf_data = gptx.grib2_phenom_to_cf_info(
-                param_discipline=param_discipline,
-                param_category=param_category,
-                param_number=param_number)
-            self.extra_keys['_cf_data'] = cf_data
+        elif edition == 2:
+            # We can encode standard parameters which are recognised by
+            # grib_phenomenon_translation.
+            tables_version = gribapi.grib_get_long(self.grib_message,
+                                                   "tablesVersion")
+            # Don't interpret params if 'master tables version' is 255, as then
+            # local params could have the same codes as standard ones.
+            if tables_version != 255:
+                # Look for a known cf translation for this parameter.
+                # N.B. As *standard* tables are backwards-compatible, the
+                # "master tables version" is *not* part of the lookup info.
+                param_discipline = gribapi.grib_get_long(self.grib_message,
+                                                         "discipline")
+                param_category = gribapi.grib_get_long(self.grib_message,
+                                                       "parameterCategory")
+                param_number = gribapi.grib_get_long(self.grib_message,
+                                                     "parameterNumber")
+                cf_data = gptx.grib2_phenom_to_cf_info(
+                    param_discipline=param_discipline,
+                    param_category=param_category,
+                    param_number=param_number)
+                self.extra_keys['_cf_data'] = cf_data
 
         #reference date
         self.extra_keys['_referenceDateTime'] = \

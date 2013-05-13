@@ -357,16 +357,7 @@ grib.levelType == 'pl'
 THEN
 CoordAndDims(DimCoord(points=grib.level,  long_name="pressure", units="hPa"))
 
-# Add height=0 for level-type 'surface'
-# -- *Except* for known ecmwf-local-table params
-IF
-grib.edition == 1
-grib.levelType == 'sfc'
-grib._cf_data is None
-THEN
-CoordAndDims(DimCoord(points=0.0,  long_name="height", units="m", attributes={'positive':'up'}))
-
-# Recognise specific known ecmwf-local-table params, and add height in some cases
+# Recognise specific ecmwf-local-table params, with custom height in some cases
 IF
 grib.edition == 1
 grib.levelType == 'sfc'

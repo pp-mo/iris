@@ -166,6 +166,7 @@ class FakeGribMessage(dict):
                 'stepRange': 24,
                 'discipline': 9999,
                 'parameterCategory': 9999,
+                'tablesVersion': 4
             })
 
     def set_timeunit_code(self, timecode):
