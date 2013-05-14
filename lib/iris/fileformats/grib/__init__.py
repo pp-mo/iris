@@ -327,8 +327,11 @@ class GribWrapper(object):
             # local params could have the same codes as standard ones.
             if tables_version != 255:
                 # Look for a known cf translation for this parameter.
-                # N.B. As *standard* tables are backwards-compatible, the
-                # "master tables version" is *not* part of the lookup info.
+                # Note: at present, we don't include tables version in this,
+                # so this could return a code which technically does not exist
+                # "until a later table version".  However, as codes cannot be
+                # deleted or reused, it can not translate as something _else_,
+                # only as 'undefined'.  So it is a very minor issue.
                 param_discipline = gribapi.grib_get_long(self.grib_message,
                                                          "discipline")
                 param_category = gribapi.grib_get_long(self.grib_message,

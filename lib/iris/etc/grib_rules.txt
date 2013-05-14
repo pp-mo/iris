@@ -357,7 +357,8 @@ grib.levelType == 'pl'
 THEN
 CoordAndDims(DimCoord(points=grib.level,  long_name="pressure", units="hPa"))
 
-# Recognise specific ecmwf-local-table params, with custom height in some cases
+# Handle grib1 phenomena which define an "implied" height value, for example
+# "2-metre temperature".  (note: Grib2 rules out such things)
 IF
 grib.edition == 1
 grib.levelType == 'sfc'
