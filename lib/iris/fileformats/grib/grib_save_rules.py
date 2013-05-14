@@ -307,7 +307,7 @@ def non_hybrid_surfaces(cube, grib):
     else:
         # check for *ANY* height coords at all...
         v_coords = cube.coords(axis='z')
-        if len(v_coords) == 0:
+        if not v_coords:
             # NO vertical coordinate.
             # Record all as 'missing'
             gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", -1)
@@ -429,7 +429,18 @@ def time_processing_period(cube, grib):
     
 
 def _cube_method_is_time_processed(cube):
-    if not(cube.cell_methods) or len(cube.cell_methods) == 0:
+    """
+    Test whether we can identify the cube as a statistic over time.
+
+    (In which case, we should record it under template 4.8 rather than 4.0.)
+
+    At present, this is *not* a definitive or exhaustive test, as we don't
+    have full support for cell methods.
+    So for now, just look for some simple cases that we can understand, and for
+    anything else return False.
+
+    """
+    if cube.cell_methods:
         return False
     last_method_coords = cube.cell_methods[0].coord_names
     if len(last_method_coords) != 1:

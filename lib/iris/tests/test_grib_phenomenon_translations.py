@@ -62,7 +62,7 @@ class TestGribPhenomenonLookup(itests.IrisTest):
                 self.assertEqual(cfdata.long_name, long_name)
                 self.assertEqual(cfdata.units, iris_units)
                 if height is None:
-                    self.assertTrue(np.isnan(cfdata.set_height))
+                    self.assertIsNone(cfdata.set_height)
                 else:
                     self.assertEqual(cfdata.set_height, float(height))
 
