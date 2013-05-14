@@ -362,7 +362,7 @@ IF
 grib.edition == 1
 grib.levelType == 'sfc'
 grib._cf_data is not None
-not np.isnan(grib._cf_data.set_height)
+grib._cf_data.set_height is not None
 THEN
 CoordAndDims(DimCoord(points=grib._cf_data.set_height,  long_name="height", units="m", attributes={'positive':'up'}))
 

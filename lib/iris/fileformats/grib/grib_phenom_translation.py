@@ -98,12 +98,10 @@ def _add_grib1_cf_entry(table2_version, centre_number, param_number,
             return
     # convert units string to iris Unit (i.e. mainly, check it is good)
     iris_units = iris.unit.Unit(cfdata.unit)
-    # convert height to float : use np.NaN for no set height
-    height = float(set_height) if set_height is not None else np.NaN
     cf_data = _GribToCfDataClass(standard_name=cfdata.standard_name,
                                  long_name=cfdata.long_name,
                                  units=iris_units,
-                                 set_height=height)
+                                 set_height=set_height)
     _GRIB1_CF_TABLE[grib1_key] = cf_data
 
 # Interpret the imported Grib1-to-CF table into a lookup table
@@ -174,7 +172,7 @@ def _add_grib2_cf_entry(param_discipline, param_category, param_number,
     cf_data = _GribToCfDataClass(standard_name=cfdata.standard_name,
                                  long_name=cfdata.long_name,
                                  units=iris_units,
-                                 set_height=np.NaN)
+                                 set_height=None)
     _GRIB2_CF_TABLE[grib2_key] = cf_data
 
 
@@ -246,7 +244,7 @@ def grib1_phenom_to_cf_info(table2_version, centre_number, param_number):
     * standard_name
     * long_name
     * units : a :class:`iris.unit.Unit`
-    * set_height :  a scalar 'height' value , or np.NaN
+    * set_height :  a scalar 'height' value , or None
 
     """
     grib1_key = _Grib1ToCfKeyClass(table2_version=table2_version,
