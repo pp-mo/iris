@@ -14,26 +14,45 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris. If not, see <http://www.gnu.org/licenses/>.
+"""
+Provides Grib phenomenon translations in a form matching output from the
+prototype Metarelate project.
 
-# DO NOT EDIT: AUTO-GENERATED TRANSLATIONS
+At present, only these relations are actually used :
+* grib1 --> cf
+* grib2 --> cf
+* cf --> grib2
 
+Notes:
+* The format here will surely change in future.
+* This file is currently not pep8 compliant.
+* Only the tables actually *used* have been manually modified, i.e.
+GRIB1Local_TO_CF, GRIB2_TO_CF and CF_TO_GRIB2.  The other tables may now be
+inconsistent with these changes.
+
+This file is currently *not* actual Metarelate output, so these translations
+are still controlled entirely by the Iris repository.
+Therefore, this file is the place where any further changes and additions
+should be made.
+
+"""
 
 import collections
 
-#
-# PP OUTSTANDING PROBLEMS, CHANGES + NOTES ....
-#   * CAPE had 'Kg', which udunits rejects (wants lowercase "kg")
-#   * dewpoint was missing from both Grib1 and Grib2
-#   * "grib_physical _atmosphere_albedo" name had a space in it
-#   * ALBEDO in Grib2 should be a *percentage* (though fraction in Grib1 cases)
-#   * why air_temperature is in "kelvin" not "K" ?
-#   * Why do G1Lparam and G2param contain an "edition" attribute ?
-#     -- surely this is already implied in the name?
-#
-# NOTE: have only edited the parts *used* for the climate-means project
-# i.e. GRIB1Local_TO_CF  and  CF_TO_GRIB2
-# other parts are now inconsistent
-#
+# LIST OF CHANGES:
+# Differences from the current Metarelate output.
+# * CAPE had 'Kg', replaced with 'kg' (lowercase) as udunits requires it.
+# * dewpoint added to both Grib1 and Grib2
+# * "grib_physical _atmosphere_albedo" : removed space from name
+# * albedo in Grib2 changed to a *percentage* (but still a fraction in Grib1)
+# * air_temperature unit "kelvin" changed to "K", as udunits requires it.
+
+# OUTSTANDING QUESTIONS:
+# Remarks regarding the Metarelate output format
+# * Why do G1Lparam and G2param contain an "edition" attribute ?
+#     -- this seems already implied in the names
+# * It would seem preferable to combine the tables GRIB1Local_TO_CF and
+#     GRIB1LocalConstrained_TO_CF, if possible
 
 G2param = collections.namedtuple('G2param', ['edition', 'discipline',
                                              'category', 'number'])
