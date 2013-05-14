@@ -440,7 +440,7 @@ def _cube_method_is_time_processed(cube):
     anything else return False.
 
     """
-    if cube.cell_methods:
+    if not cube.cell_methods:
         return False
     last_method_coords = cube.cell_methods[0].coord_names
     if len(last_method_coords) != 1:
