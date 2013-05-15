@@ -165,12 +165,13 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
     Any additional coordinates which map onto the horizontal dimensions are
     removed, while all other metadata is retained.
     If there are coordinate factories with 2d horizontal reference surfaces,
-    these reference surfaces are also regridded, using ordinary bilinear
+    the reference surfaces are also regridded, using ordinary bilinear
     interpolation.
 
     .. note::
         Both source and destination cubes must have two dimension coordinates
-        identified with axes 'x' and 'y' which share a known coord_system.
+        identified with axes 'x' and 'y' which share a coord_system with a
+        Cartopy crs.
         The grids are defined by :meth:`iris.coords.Coord.contiguous_bounds` of
         these.
 
@@ -190,11 +191,18 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
 
     # Check source+target coordinates are suitable.
     # NOTE: '_get_xy_dim_coords' ensures the coords exist; are unique; and have
-    # same coord_system.  We also need them to have a _valid_ coord_system.
-    if _get_coord_crs(src_coords[0]) is None:
-        raise ValueError('Source X+Y coordinates have no coord_system.')
-    if _get_coord_crs(dst_coords[0]) is None:
-        raise ValueError('Destination X+Y coordinates have no coord_system.')
+    # the same coord_system.  We also need them to have a valid Cartopy crs.
+    for pairname, paircoords in zip(('Source', 'Target'),
+                                    (src_coords, dst_coords)):
+        # Check these are 2 DimCoords with the same coord_system.
+        if (len(paircoords) != 2
+            or not all([isinstance(coord, iris.coords.DimCoord)
+                        for coord in paircoords])
+            or paircoords[0].coord_system != paircoords[1].coord_system
+            or not _get_coord_crs(paircoords[0])):
+                raise ValueError(
+                    '{} grid coordinates must be two DimCoords (x,y), with '
+                    'matching coord_system and Cartopy crs.'.format(pairname))
 
     # Initialise the ESMF manager in case it was not already done.
     ESMF.Manager()
