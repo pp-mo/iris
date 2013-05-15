@@ -308,40 +308,23 @@ class GribWrapper(object):
 
         # cf phenomenon translation
         if edition == 1:
-            table2_version = gribapi.grib_get_long(self.grib_message,
-                                                   "table2Version")
+            # Get centre code (N.B. self.centre has default type = string)
             centre_number = gribapi.grib_get_long(self.grib_message, "centre")
-            param_number = gribapi.grib_get_long(self.grib_message,
-                                                 "indicatorOfParameter")
+            # Look for a known grib1-to-cf translation (or None).
             cf_data = gptx.grib1_phenom_to_cf_info(
-                table2_version=table2_version,
+                table2_version=self.table2Version,
                 centre_number=centre_number,
-                param_number=param_number)
+                param_number=self.indicatorOfParameter)
             self.extra_keys['_cf_data'] = cf_data
         elif edition == 2:
-            # We can encode standard parameters which are recognised by
-            # grib_phenomenon_translation.
-            tables_version = gribapi.grib_get_long(self.grib_message,
-                                                   "tablesVersion")
-            # Don't interpret params if 'master tables version' is 255, as then
-            # local params could have the same codes as standard ones.
-            if tables_version != 255:
-                # Look for a known cf translation for this parameter.
-                # Note: at present, we don't include tables version in this,
-                # so this could return a code which technically does not exist
-                # "until a later table version".  However, as codes cannot be
-                # deleted or reused, it can not translate as something _else_,
-                # only as 'undefined'.  So it is a very minor issue.
-                param_discipline = gribapi.grib_get_long(self.grib_message,
-                                                         "discipline")
-                param_category = gribapi.grib_get_long(self.grib_message,
-                                                       "parameterCategory")
-                param_number = gribapi.grib_get_long(self.grib_message,
-                                                     "parameterNumber")
+            # Don't attempt to interpret params if 'master tables version' is
+            # 255, as local params may then have same codes as standard ones.
+            if self.tablesVersion != 255:
+                # Look for a known grib2-to-cf translation (or None).
                 cf_data = gptx.grib2_phenom_to_cf_info(
-                    param_discipline=param_discipline,
-                    param_category=param_category,
-                    param_number=param_number)
+                    param_discipline=self.discipline,
+                    param_category=self.parameterCategory,
+                    param_number=self.parameterNumber)
                 self.extra_keys['_cf_data'] = cf_data
 
         #reference date
