@@ -397,7 +397,14 @@ def type_of_statistical_processing(cube, grib, coord):
 
 
 def time_processing_period(cube, grib):
-    """For template 4.8 (time mean, time max, etc)"""
+    """
+    For template 4.8 (time mean, time max, etc).
+
+    The time range is taken from the 'time' coordinate bounds.
+    If the cell-method coordinate is not 'time' itself, the type of statistic
+    will always be 'unknown'.
+
+    """
     # We could probably split this function up a bit
     
     # Can safely assume bounded pt.
@@ -426,28 +433,40 @@ def time_processing_period(cube, grib):
     
     gribapi.grib_set_long(grib, "indicatorOfUnitForTimeIncrement", 255)  # time unit between successive source fields (not setting this at present)
     gribapi.grib_set_long(grib, "timeIncrement", 0)  # between successive source fields (just set to 0 for now)
-    
 
-def _cube_method_is_time_processed(cube):
+
+def _cube_is_time_statistic(cube):
     """
-    Test whether we can identify the cube as a statistic over time.
+    Test whether we can identify this cube as a statistic over time.
 
-    (In which case, we should record it under template 4.8 rather than 4.0.)
-
-    At present, this is *not* a definitive or exhaustive test, as we don't
-    have full support for cell methods.
-    So for now, just look for some simple cases that we can understand, and for
-    anything else return False.
+    At present, accept anything whose latest cell method operates over a single
+    coordinate that "looks like" a time factor (i.e. some specific names).
+    In particular, we recognise the coordinate names defined in
+    :py:mod:`iris.coord_categorisation`.
 
     """
+    # The *only* relevant information is in cell_methods, as coordinates or
+    # dimensions of aggregation may no longer exist.  So it's not possible to
+    # be definitive, but we handle *some* useful cases.
+    # In other cases just say "no", which is safe even when not ideal.
+
+    # Identify a single coordinate from the latest cell_method.
     if not cube.cell_methods:
         return False
-    last_method_coords = cube.cell_methods[0].coord_names
-    if len(last_method_coords) != 1:
+    latest_coordnames = cube.cell_methods[-1].coord_names
+    if len(latest_coordnames) != 1:
         return False
-    if iris.util.guess_coord_axis(cube.coord(last_method_coords[0])) != 'T':
-        return False
-    return True
+    coord_name = latest_coordnames[0]
+
+    # Define accepted time names, including those from coord_categorisations.
+    recognised_time_names = ['time', 'year', 'month', 'day', 'weekday',
+                             'season']
+
+    # Accept it if the name is recognised.
+    # Currently does *not* recognise related names like 'month_number' or
+    # 'years', as that seems potentially unsafe.
+    return coord_name in recognised_time_names
+
 
 def product_template(cube, grib):
     # This will become more complex if we cover more templates, such as 4.15
@@ -459,7 +478,7 @@ def product_template(cube, grib):
         return
 
     # time processed (template 4.8)
-    if _cube_method_is_time_processed(cube):
+    if _cube_is_time_statistic(cube):
         gribapi.grib_set_long(grib, "productDefinitionTemplateNumber", 8)
         product_common(cube, grib)
         time_processing_period(cube, grib)
