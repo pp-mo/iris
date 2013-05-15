@@ -69,10 +69,6 @@ _Grib1ToCfKeyClass = collections.namedtuple(
     'Grib1CfKey',
     ('table2_version', 'centre_number', 'param_number'))
 
-_Grib2ToCfKeyClass = collections.namedtuple(
-    'Grib2CfKey',
-    ('param_discipline', 'param_category', 'param_number'))
-
 # NOTE: this form is currently used for both Grib1 *and* Grib2
 _GribToCfDataClass = collections.namedtuple(
     'Grib1CfData',

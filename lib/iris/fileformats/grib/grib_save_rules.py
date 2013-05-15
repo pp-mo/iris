@@ -297,7 +297,7 @@ def non_hybrid_surfaces(cube, grib):
         grib_v_code = 102
         output_unit = iris.unit.Unit("m")
         v_coord = cube.coord("altitude")
-        
+
     # height
     elif cube.coords("height"):
         grib_v_code = 103
@@ -307,50 +307,49 @@ def non_hybrid_surfaces(cube, grib):
     else:
         # check for *ANY* height coords at all...
         v_coords = cube.coords(axis='z')
-        if not v_coords:
-            # NO vertical coordinate.
-            # Record all as 'missing'
-            gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", -1)
-            gribapi.grib_set_long(grib, "scaleFactorOfFirstFixedSurface", 255)
-            gribapi.grib_set_long(grib, "scaledValueOfFirstFixedSurface", -1)
-            # secondary surface also missing
-            gribapi.grib_set_long(grib, "typeOfSecondFixedSurface", -1)
-            gribapi.grib_set_long(grib, "scaleFactorOfSecondFixedSurface", 255)
-            gribapi.grib_set_long(grib, "scaledValueOfSecondFixedSurface", -1)
-            # all done here, skip check for bounded layer
-            return
-        else:
-            # There are vertical coordinate(s), but we don't understand them..
+        if v_coords:
+            # There are vertical coordinate(s), but we don't understand them...
             v_coords_str = ' ,'.join(["'{}'".format(c.name())
                                       for c in v_coords])
             raise iris.exceptions.TranslationError(
                 'The vertical-axis coordinate(s) ({}) '
                 'are not recognised or handled.'.format(v_coords_str))
-
-    if not v_coord.has_bounds():
-        # no known bounds : set with no second surface
-        output_v = v_coord.units.convert(v_coord.points[0], output_unit)
-        if output_v - abs(output_v):
-            warnings.warn("Vertical level encoding problem : Scaling required.")
-        output_v = int(output_v)
-
-        gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", grib_v_code)
-        gribapi.grib_set_long(grib, "scaleFactorOfFirstFixedSurface", 0)
-        gribapi.grib_set_long(grib, "scaledValueOfFirstFixedSurface", output_v)
+        # NO vertical coordinate.
+        v_coord = None
+        # Record all as 'missing'
+        gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", -1)
+        gribapi.grib_set_long(grib, "scaleFactorOfFirstFixedSurface", 255)
+        gribapi.grib_set_long(grib, "scaledValueOfFirstFixedSurface", -1)
+        # secondary surface also missing
         gribapi.grib_set_long(grib, "typeOfSecondFixedSurface", -1)
-        gribapi.grib_set_long(grib, "scaleFactorOfSecondFixedSurface", 255)  # missing, byte
-        gribapi.grib_set_long(grib, "scaledValueOfSecondFixedSurface", -1)   # missing, long        
-    else:
-        # bounded : set lower+upper surfaces
-        output_v = v_coord.units.convert(v_coord.bounds[0,0], output_unit)
-        if (output_v[0] - abs(output_v[0])) or (output_v[1] - abs(output_v[1])):
-            warnings.warn("Vertical level encoding problem : Scaling required.")
-        gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", grib_v_code)
-        gribapi.grib_set_long(grib, "scaleFactorOfFirstFixedSurface", 0)
-        gribapi.grib_set_long(grib, "scaledValueOfFirstFixedSurface", output_v[0])
-        gribapi.grib_set_long(grib, "typeOfSecondFixedSurface", grib_v_code)
-        gribapi.grib_set_long(grib, "scaleFactorOfSecondFixedSurface", 0)
-        gribapi.grib_set_long(grib, "scaledValueOfSecondFixedSurface", output_v[1])
+        gribapi.grib_set_long(grib, "scaleFactorOfSecondFixedSurface", 255)
+        gribapi.grib_set_long(grib, "scaledValueOfSecondFixedSurface", -1)
+
+    if v_coord:
+        if not v_coord.has_bounds():
+            # no known bounds : set with no second surface
+            output_v = v_coord.units.convert(v_coord.points[0], output_unit)
+            if output_v - abs(output_v):
+                warnings.warn("Vertical level encoding problem : Scaling required.")
+            output_v = int(output_v)
+
+            gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", grib_v_code)
+            gribapi.grib_set_long(grib, "scaleFactorOfFirstFixedSurface", 0)
+            gribapi.grib_set_long(grib, "scaledValueOfFirstFixedSurface", output_v)
+            gribapi.grib_set_long(grib, "typeOfSecondFixedSurface", -1)
+            gribapi.grib_set_long(grib, "scaleFactorOfSecondFixedSurface", 255)  # missing, byte
+            gribapi.grib_set_long(grib, "scaledValueOfSecondFixedSurface", -1)   # missing, long        
+        else:
+            # bounded : set lower+upper surfaces
+            output_v = v_coord.units.convert(v_coord.bounds[0,0], output_unit)
+            if (output_v[0] - abs(output_v[0])) or (output_v[1] - abs(output_v[1])):
+                warnings.warn("Vertical level encoding problem : Scaling required.")
+            gribapi.grib_set_long(grib, "typeOfFirstFixedSurface", grib_v_code)
+            gribapi.grib_set_long(grib, "scaleFactorOfFirstFixedSurface", 0)
+            gribapi.grib_set_long(grib, "scaledValueOfFirstFixedSurface", output_v[0])
+            gribapi.grib_set_long(grib, "typeOfSecondFixedSurface", grib_v_code)
+            gribapi.grib_set_long(grib, "scaleFactorOfSecondFixedSurface", 0)
+            gribapi.grib_set_long(grib, "scaledValueOfSecondFixedSurface", output_v[1])
 
 
 def surfaces(cube, grib):
