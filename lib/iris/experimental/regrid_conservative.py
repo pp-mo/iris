@@ -52,28 +52,16 @@ def _convert_latlons(crs, x_array, y_array):
     return ll_values[..., 0], ll_values[..., 1]
 
 
-def _make_esmpy_field_from_coords(x_coord, y_coord, ref_name='field',
-                                  data=None, mask=None):
+def _make_esmpy_grid_from_coords(x_coord, y_coord):
     """
-    Create an ESMPy ESMF.Field on given coordinates.
-
     Create a ESMF.Grid from the coordinates, defining corners and centre
     positions as lats+lons.
-    Add a grid mask if provided.
-    Create and return a Field mapped on this Grid, setting data if provided.
 
     Args:
 
     * x_coord, y_coord (:class:`iris.coords.Coord`):
         One-dimensional coordinates of shape (nx,) and (ny,).
         Their contiguous bounds define an ESMF.Grid of shape (nx, ny).
-
-    Kwargs:
-
-    * data (:class:`numpy.ndarray`, shape (nx,ny)):
-        Set the Field data content.
-    * mask (:class:`numpy.ndarray`, boolean, shape (nx,ny)):
-        Add a mask item to the grid, assigning it 0/1 where mask=False/True.
 
     """
     # Create a Grid object describing the coordinate cells.
@@ -124,14 +112,38 @@ def _make_esmpy_field_from_coords(x_coord, y_coord, ref_name='field',
     grid_centers_y = grid.get_coords(1, ESMF.StaggerLoc.CENTER)
     grid_centers_y[:] = lat_points
 
-    # Add a mask item, if requested
+    return grid
+
+
+def _make_esmpy_field(grid, ref_name='field',
+                      data=None, mask=None):
+    """
+    Create a ESMF.Field on the given grid, with optional data+mask.
+
+    Create and return a Field mapped on this Grid, setting data if provided.
+    If mask provided, also add a mask to the grid.
+
+    Args:
+
+    * grid (:class:`EMSF.Grid`):
+        grid the field is based on.
+
+    Kwargs:
+
+    * data (:class:`numpy.ndarray`, shape (nx,ny)):
+        Set the Field data content.
+    * mask (:class:`numpy.ndarray`, boolean, shape (nx,ny)):
+        Add a mask item to the grid, assigning it 0/1 where mask=False/True.
+
+    """
+    # Add a mask item to the grid, if requested
     if mask is not None:
         grid.add_item(ESMF.GridItem.MASK,
                       [ESMF.StaggerLoc.CENTER])
         grid_mask = grid.get_item(ESMF.GridItem.MASK)
         grid_mask[:] = np.where(mask, 1, 0)
 
-    # create a Field based on this grid
+    # create a Field based on the grid
     field = ESMF.Field(grid, ref_name)
 
     # assign data content, if provided
@@ -145,13 +157,13 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
     """
     Perform a conservative regridding with ESMPy.
 
-    Regrids the data of a source cube onto a new grid defined by a destination
+    Regrids the dst_field of a source cube onto a new grid defined by a destination
     cube or coordinates.
 
     Args:
 
     * source_cube (:class:`iris.cube.Cube`):
-        Source data.  Must have two identifiable horizontal dimension
+        Source dst_field.  Must have two identifiable horizontal dimension
         coordinates.
     * grid_cube_or_coords :
         Either a :class:`iris.cube.Cube`, or a pair of
@@ -207,7 +219,7 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
     # Initialise the ESMF manager in case it was not already done.
     ESMF.Manager()
 
-    # Create a data array for the output cube.
+    # Create a dst_field array for the output cube.
     src_dims_xy = [source_cube.coord_dims(coord)[0] for coord in src_coords]
     # Size matches source, except for X+Y dimensions
     dst_shape = np.array(source_cube.shape)
@@ -225,25 +237,26 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
         slice_indices_array[all_other_dims] = other_indices
         slice_indices_tuple = tuple(slice_indices_array)
 
-        # Get the source data, reformed into the right dimension order, (x,y).
+        # Get the source dst_field, reformed into the right dimension order, (x,y).
         src_data_2d = source_cube.data[slice_indices_tuple]
         if (src_dims_xy[0] > src_dims_xy[1]):
             src_data_2d = src_data_2d.transpose()
 
-        # Work out whether we have missing data to define a source grid mask.
+        # Work out whether we have missing dst_field to define a source grid mask.
         if np.ma.is_masked(src_data_2d):
             srcdata_mask = np.ma.getmask(src_data_2d)
         else:
             srcdata_mask = None
 
         # Construct ESMF Field objects on source and destination grids.
-        src_field = _make_esmpy_field_from_coords(src_coords[0], src_coords[1],
-                                                  data=src_data_2d,
-                                                  mask=srcdata_mask)
-        dst_field = _make_esmpy_field_from_coords(dst_coords[0], dst_coords[1])
+        src_grid = _make_esmpy_grid_from_coords(src_coords[0], src_coords[1])
+        src_field = _make_esmpy_field(src_grid,
+                                      data=src_data_2d, mask=srcdata_mask)
+        dst_grid = _make_esmpy_grid_from_coords(dst_coords[0], dst_coords[1])
+        dst_field = _make_esmpy_field(dst_grid)
 
-        # Make Field for destination coverage fraction (for missing data calc).
-        coverage_field = ESMF.Field(dst_field.grid, 'validmask_dst')
+        # Make Field for destination coverage fraction (for missing dst_field calc).
+        coverage_field = _make_esmpy_field(dst_grid, 'validmask_dst')
 
         # Do the actual regrid with ESMF.
         mask_flag_values = np.array([1], dtype=np.int32)
@@ -253,22 +266,21 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube_or_coords):
                                     unmapped_action=ESMF.UnmappedAction.IGNORE,
                                     dst_frac_field=coverage_field)
         regrid_method(src_field, dst_field)
-        data = dst_field.data
 
-        # Convert destination 'coverage fraction' into a missing-data mask.
+        # Convert destination 'coverage fraction' into a missing-dst_field mask.
         # Set = wherever part of cell goes outside source grid, or overlaps a
         # masked source cell.
         coverage_tolerance_threshold = 1.0 - 1.0e-8
-        data.mask = coverage_field.data < coverage_tolerance_threshold
+        dst_field.mask = coverage_field.data < coverage_tolerance_threshold
 
         # Transpose ESMF result dims (X,Y) back to the order of the source
         if (src_dims_xy[0] > src_dims_xy[1]):
-            data = data.transpose()
+            dst_field = dst_field.transpose()
 
         # Paste regridded slice back into parent array
-        fullcube_data[slice_indices_tuple] = data
+        fullcube_data[slice_indices_tuple] = dst_field
 
-    # Remove the data mask if completely unused.
+    # Remove the dst_field mask if completely unused.
     if not np.ma.is_masked(fullcube_data):
         fullcube_data = np.array(fullcube_data)
 
