@@ -62,7 +62,8 @@ class SphPoint(object):
         return SphPoint(*convert_xyz_to_latlon(-x, -y, -z))
 
     def __eq__(self, other):
-        return np.allclose(self.as_xyz(), other.as_xyz(), rtol=1e-6, atol=1e-6)
+        return np.allclose(self.as_xyz(), other.as_xyz(),
+                           rtol=1e-15, atol=1e-15)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -114,7 +115,7 @@ class SphGcSeg(object):
         self.point_a = sph_point(point_a)
         self.point_b = sph_point(point_b)
         self.pole = self.point_b.cross_product(self.point_a)
-        self.colinear_tolerance = 1e-7
+        self.colinear_tolerance = 1e-15
 
     def reverse(self):
         return SphGcSeg(self.point_b, self.point_a)
@@ -157,7 +158,7 @@ class SphGcSeg(object):
     def angle_to_point(self, point):
         # Angle from AB to AP
         result = math.acos(self._cos_angle_to_point(point))
-        if abs(result) > 1e-7 and self.has_point_on_left_side(point) < 0.0:
+        if abs(result) > 1e-15 and self.has_point_on_left_side(point) < 0.0:
             result = -result
         return result
 
@@ -283,9 +284,10 @@ class SphAcwConvexPolygon(object):
 
     def edge_gcs(self):
         if self._edges is None:
-            self._edges = [SphGcSeg(self.points[i], self.points[i+1])
-                           for i in range(self.n_points - 1)]
-            self._edges += [SphGcSeg(self.points[-1], self.points[0])]
+            points = self.points
+            next_points = points[1:] + points[:1]
+            self._edges = [SphGcSeg(this_pt, next_pt)
+                           for this_pt, next_pt in zip(points, next_points)]
         return self._edges
 
     def contains_point(self, point, in_degrees=False):
@@ -294,13 +296,10 @@ class SphAcwConvexPolygon(object):
                    for gc in self.edge_gcs())
 
     def area(self):
-        angle_total = 0.0
         edges = self.edge_gcs()
-        previous_edge = edges[-1]
-        for this_edge in edges:
-            a = previous_edge.reverse().angle_to_other(this_edge)
-            angle_total += a
-            previous_edge = this_edge
+        preceding_edges = edges[-1:] + edges[:-1]
+        angle_total = sum([prev.reverse().angle_to_other(this)
+                           for prev, this in zip(preceding_edges, edges)])
         angle_total -= math.pi * (self.n_points - 2)
         return angle_total
 
