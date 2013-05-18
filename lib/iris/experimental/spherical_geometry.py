@@ -63,7 +63,7 @@ class SphPoint(object):
 
     def __eq__(self, other):
         return np.allclose(self.as_xyz(), other.as_xyz(),
-                           rtol=1e-15, atol=1e-15)
+                           rtol=1e-6, atol=1e-6)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -115,7 +115,7 @@ class SphGcSeg(object):
         self.point_a = sph_point(point_a)
         self.point_b = sph_point(point_b)
         self.pole = self.point_b.cross_product(self.point_a)
-        self.colinear_tolerance = 1e-15
+        self.colinear_tolerance = 1e-6
 
     def reverse(self):
         return SphGcSeg(self.point_b, self.point_a)
@@ -158,7 +158,8 @@ class SphGcSeg(object):
     def angle_to_point(self, point):
         # Angle from AB to AP
         result = math.acos(self._cos_angle_to_point(point))
-        if abs(result) > 1e-15 and self.has_point_on_left_side(point) < 0.0:
+        if abs(result) > self.colinear_tolerance \
+                and self.has_point_on_left_side(point) < 0.0:
             result = -result
         return result
 

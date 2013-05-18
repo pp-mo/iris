@@ -104,7 +104,7 @@ def _regrid_inner(src_data_2d, src_coords, dst_coords):
     dst_polygons = _make_SphPolygon_array_from_coords(*dst_coords)
 
     # Tolerancing for overlap with masked source, or outside source bounds
-    coverage_eps = 1.0e-8
+    coverage_eps = 1.0e-6
     coverage_tolerance_threshold = 1.0 - coverage_eps
 
     src_nx, src_ny = [len(coord.points) for coord in src_coords]
