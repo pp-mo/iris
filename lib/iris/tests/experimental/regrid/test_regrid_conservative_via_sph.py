@@ -647,6 +647,10 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # perform regrid
         c1to2 = regrid_conservative_via_sph(c1, c2)
+        print 'Base result forward:'
+        print '\n'.join([
+            ', '.join(['%5.1f'%x for x in row])
+            for row in c1to2.data])
 
         # check we have zeros (or nearly) all around the edge..
         c1toc2_zeros = np.ma.array(c1to2.data)
@@ -674,6 +678,10 @@ class TestConservativeRegrid(tests.IrisTest):
         c2_areasum = _cube_area_sum(c2)
 
         c2toc1 = regrid_conservative_via_sph(c2, c1)
+        print 'Base result backward:'
+        print '\n'.join([
+            ', '.join(['%5.1f'%x for x in row])
+            for row in c2toc1.data])
 
         # check we have zeros (or nearly) all around the edge..
         c2toc1_zeros = np.ma.array(c2toc1.data)
