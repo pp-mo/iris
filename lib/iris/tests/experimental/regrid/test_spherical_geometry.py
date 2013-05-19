@@ -2,6 +2,11 @@
 Created on May 8, 2013
 
 @author: itpp
+
+TODO:
+  test SphPoint.distance_to
+  test SphAcwConvexPolygon.centre_and_max_radius
+  test practical overlap speed checks ??
 '''
 from iris import tests
 
