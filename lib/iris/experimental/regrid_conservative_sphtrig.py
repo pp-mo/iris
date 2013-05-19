@@ -89,6 +89,7 @@ def _make_SphPolygon_array_from_coords(x_coord, y_coord):
 
     return cells
 
+debug_regrid = False
 
 def _regrid_inner(src_data_2d, src_coords, dst_coords):
     """
@@ -102,7 +103,8 @@ def _regrid_inner(src_data_2d, src_coords, dst_coords):
     """
     src_polygons = _make_SphPolygon_array_from_coords(*src_coords)
     dst_polygons = _make_SphPolygon_array_from_coords(*dst_coords)
-
+    if debug_regrid:
+        print 'N from, to = ', len(src_polygons), len(dst_polygons)
     # Tolerancing for overlap with masked source, or outside source bounds
     coverage_eps = 1.0e-6
     coverage_tolerance_threshold = 1.0 - coverage_eps
@@ -112,21 +114,34 @@ def _regrid_inner(src_data_2d, src_coords, dst_coords):
     dst_data = np.ma.empty((dst_nx, dst_ny), dtype=np.double)
     ones_where_src_masked = np.ma.getmaskarray(src_data_2d).astype(float)
     ones_where_src_masked = ones_where_src_masked.flatten()
+    if debug_regrid:
+        print 'where src masked = ', ones_where_src_masked
     for dst_ix in range(dst_nx):
         for dst_iy in range(dst_ny):
             dst_polygon = dst_polygons[dst_ix, dst_iy]
+            if debug_regrid:
+                print 'FOR DST at : ', dst_ix, dst_iy
+                print '  dst poly = ', dst_polygon, ' ==> AREA=', dst_polygon.area()
             dst_area = dst_polygon.area()
             per_src_overlaps = [dst_polygon.intersection_with_polygon(src)
                                 for src in src_polygons.flat]
-            per_src_overlaps = [poly.area() if poly is not None else 0.0
-                                for poly in per_src_overlaps]
-            overlaps_sum = sum(per_src_overlaps)
+            per_src_overlap_areas = [poly.area() if poly is not None else 0.0
+                                     for poly in per_src_overlaps]
+            if debug_regrid:
+                print 'BASIC OVERLAPS - src polys :'
+                for p in src_polygons.flat:
+                  print '  ', p
+                print 'BASIC OVERLAPS - overlap polys :'
+                for p, a in zip(per_src_overlaps, per_src_overlap_areas):
+                  print '  ', p, ' ==> AREA=', a
+                print '-'
+            overlaps_sum = sum(per_src_overlap_areas)
             if overlaps_sum < dst_area * coverage_tolerance_threshold:
                 # Masked as not entirely within source bounds.
                 dst_value = np.ma.masked
             else:
-                per_src_overlaps = np.array(per_src_overlaps) / overlaps_sum
-                masked_src_fraction = np.sum(per_src_overlaps
+                per_src_overlaps = np.array(per_src_overlap_areas) / overlaps_sum
+                masked_src_fraction = np.sum(per_src_overlap_areas
                                              * ones_where_src_masked)
                 if masked_src_fraction > coverage_eps:
                     # Masked as it touches some masked source cells.

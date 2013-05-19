@@ -40,11 +40,13 @@ try:
     import ESMF
     from iris.experimental.regrid_conservative_sphtrig import \
         regrid_conservative_via_sph
+    import iris.experimental.regrid_conservative_sphtrig as isph
     skip_sph = lambda fn: fn
 except ImportError:
     ESMF = None
     skip_sph = unittest.skip(
         reason='Requires ESMF module, which is not available.')
+
 
 import cartopy.crs as ccrs
 import iris
@@ -635,7 +637,7 @@ class TestConservativeRegrid(tests.IrisTest):
             [100, 100, 100, 100, 100, 100, 100, 100, 100]],
             dtype=np.float)
 
-        c1_areasum = _cube_area_sum(c1)
+#        c1_areasum = _cube_area_sum(c1)
 
         # construct target cube to receive
         nx2 = 9 + 6
@@ -645,39 +647,45 @@ class TestConservativeRegrid(tests.IrisTest):
         c2 = _make_test_cube((nx2, ny2), c2_xlims, c2_ylims)
         c2.data = np.ma.array(c2.data, mask=True)
 
-        # perform regrid
-        c1to2 = regrid_conservative_via_sph(c1, c2)
-        print 'Base result forward:'
-        print '\n'.join([
-            ', '.join(['%5.1f'%x for x in row])
-            for row in c1to2.data])
+#        # perform regrid
+#        c1to2 = regrid_conservative_via_sph(c1, c2)
+#        print 'Base result forward:'
+#        print '\n'.join([
+#            ', '.join(['%5.1f'%x for x in row])
+#            for row in c1to2.data])
 
-        # check we have zeros (or nearly) all around the edge..
-        c1toc2_zeros = np.ma.array(c1to2.data)
-        c1toc2_zeros[c1toc2_zeros.mask] = 0.0
-        c1toc2_zeros = np.abs(c1toc2_zeros.mask) < 1.0e-6
-        self.assertArrayEqual(c1toc2_zeros[0, :], True)
-        self.assertArrayEqual(c1toc2_zeros[-1, :], True)
-        self.assertArrayEqual(c1toc2_zeros[:, 0], True)
-        self.assertArrayEqual(c1toc2_zeros[:, -1], True)
+#        # check we have zeros (or nearly) all around the edge..
+#        c1toc2_zeros = np.ma.array(c1to2.data)
+#        c1toc2_zeros[c1toc2_zeros.mask] = 0.0
+#        c1toc2_zeros = np.abs(c1toc2_zeros.mask) < 1.0e-6
+#        self.assertArrayEqual(c1toc2_zeros[0, :], True)
+#        self.assertArrayEqual(c1toc2_zeros[-1, :], True)
+#        self.assertArrayEqual(c1toc2_zeros[:, 0], True)
+#        self.assertArrayEqual(c1toc2_zeros[:, -1], True)
 
-        # check the area-sum operation
-        c1to2_areasum = _cube_area_sum(c1to2)
-        self.assertArrayAllClose(c1to2_areasum, c1_areasum, rtol=0.004)
+#        # check the area-sum operation
+#        c1to2_areasum = _cube_area_sum(c1to2)
+#        self.assertArrayAllClose(c1to2_areasum, c1_areasum, rtol=0.004)
 
         #
         # Now repeat, transforming backwards ...
         #
         c1.data = np.ma.array(c1.data, mask=True)
         c2.data[:] = 0.0
-        c2.data[5:-5, 5:-5] = np.array([
-            [199, 199, 199, 199, 100],
-            [100, 100, 199, 199, 100],
-            [100, 100, 199, 199, 199]],
-            dtype=np.float)
-        c2_areasum = _cube_area_sum(c2)
+#        c2.data[5:-5, 5:-5] = np.array([
+#            [199, 199, 199, 199, 100],
+#            [100, 100, 199, 199, 100],
+#            [100, 100, 199, 199, 199]],
+#            dtype=np.float)
+#        c2_areasum = _cube_area_sum(c2)
 
+	c1 = c1[2:3, 7:8]
+        c2 = c2[2:5, 7:9]
+
+        isph.debug_regrid = True
         c2toc1 = regrid_conservative_via_sph(c2, c1)
+        isph.debug_regrid = False
+
         print 'Base result backward:'
         print '\n'.join([
             ', '.join(['%5.1f'%x for x in row])
@@ -692,9 +700,9 @@ class TestConservativeRegrid(tests.IrisTest):
         self.assertArrayEqual(c2toc1_zeros[:, 0], True)
         self.assertArrayEqual(c2toc1_zeros[:, -1], True)
 
-        # check the area-sum operation
-        c2toc1_areasum = _cube_area_sum(c2toc1)
-        self.assertArrayAllClose(c2toc1_areasum, c2_areasum, rtol=0.004)
+#        # check the area-sum operation
+#        c2toc1_areasum = _cube_area_sum(c2toc1)
+#        self.assertArrayAllClose(c2toc1_areasum, c2_areasum, rtol=0.004)
 
     def test_missing_data_rotated(self):
         """

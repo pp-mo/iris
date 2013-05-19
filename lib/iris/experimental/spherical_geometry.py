@@ -230,9 +230,13 @@ class SphAcwConvexPolygon(object):
         # To call this, must be able to calculate edges --> must have no
         # adjacent duplicated points.
         edges = self.edge_gcs()
-        previous_edges = edges[-1:] + edges[:-1]
-        return all([prev.has_point_on_left_side(this.point_b) >= 0.0
-                    for this, prev in zip(edges, previous_edges)])
+#        previous_edges = edges[-1:] + edges[:-1]
+#        return all([prev.has_point_on_left_side(this.point_b) >= 0.0
+#                    for this, prev in zip(edges, previous_edges)])
+        points = self.points
+        return all([all([edge.has_point_on_left_side(point) >= 0.0
+                         for point in points])
+                    for edge in edges])
 
     def _make_anticlockwise_convex(self):
         # Reorder points if required to give anticlockwise convex.
