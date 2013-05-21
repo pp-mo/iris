@@ -443,16 +443,16 @@ class TestSphPolygon(tests.IrisTest):
         # This tests the mechanics of (_is/(_make)_anticlockwise_convex
 
         # Define 5 polygon test vertices - including some co-linear.
-        points = [sph.sph_point(xy)
+        points = [spt(xy)
                   for xy in [[0.0, 0.0],
-                             [0.0, 4.0],
-                             [4.0, 0.0],
                              [0.0, 2.5],
-                             [1.3, 4.0]]]
+                             [0.0, 4.0],
+#                             [4.0, 1.0],
+                             [4.0, 4.0]]]
         base_poly = sph.SphAcwConvexPolygon(points)
         self.assertEqual(base_poly.points.index(points[0]), 0)
         base_points_order = [points.index(p) for p in base_poly.points]
-        print 'Reference points order : ', build_points_order
+        print 'Reference points order : ', base_points_order
         for points_list in itertools.permutations(points):
             build_points_order = [points.index(p) for p in points_list]
             print 'Testing for input order : ', build_points_order
@@ -461,7 +461,7 @@ class TestSphPolygon(tests.IrisTest):
             order = [points.index(p) for p in base_poly.points]
             print '   result order = ', order
             # results should all have same points order, except for rotation
-            index_p0 = order.index(0)
+            i0 = order.index(0)
             self.assertEqual(order[i0:] + order[:i0], base_points_order)        
         
     def test_polygon_contains_point(self):
