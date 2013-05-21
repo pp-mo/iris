@@ -2,9 +2,20 @@
 Created on May 8, 2013
 
 @author: itpp
+
+TODO:
+  test Polygon construction order (show latest bug fix)
+  re-consider tolerancing usage
+  consider existing use of numpy, and ensure dtype=np.double
+  implement + test..
+    - SphPoint.distance_to
+    - SphAcwConvexPolygon.centre_and_max_radius
+    - practical overlap speed checks ??
+    - use of numpy ?
 '''
 from iris import tests
 
+import itertools
 import math
 
 import numpy as np
@@ -427,6 +438,32 @@ class TestSphPolygon(tests.IrisTest):
         with self.assertRaises(ValueError):
             poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
 
+    def test_polygon_create_order(self):
+        # check correct creation independent of points order
+        # This tests the mechanics of (_is/(_make)_anticlockwise_convex
+
+        # Define 5 polygon test vertices - including some co-linear.
+        points = [sph.sph_point(xy)
+                  for xy in [[0.0, 0.0],
+                             [0.0, 4.0],
+                             [4.0, 0.0],
+                             [0.0, 2.5],
+                             [1.3, 4.0]]]
+        base_poly = sph.SphAcwConvexPolygon(points)
+        self.assertEqual(base_poly.points.index(points[0]), 0)
+        base_points_order = [points.index(p) for p in base_poly.points]
+        print 'Reference points order : ', build_points_order
+        for points_list in itertools.permutations(points):
+            build_points_order = [points.index(p) for p in points_list]
+            print 'Testing for input order : ', build_points_order
+            # test construction for each possible ordering
+            poly = sph.SphAcwConvexPolygon(points_list)
+            order = [points.index(p) for p in base_poly.points]
+            print '   result order = ', order
+            # results should all have same points order, except for rotation
+            index_p0 = order.index(0)
+            self.assertEqual(order[i0:] + order[:i0], base_points_order)        
+        
     def test_polygon_contains_point(self):
         # make a square-ish one
         points = [(0, 0), (0, 50), (40, 50), (60, -10)]

@@ -25,10 +25,12 @@ class ZeroPointLatlonError(ValueError):
             args = ['Point too close to zero for lat-lon conversion.']
         super(ZeroPointLatlonError, self).__init__(*args, **kwargs)
 
+POINT_ZERO_MAGNITUDE = 1e-15
+COS_ANGLE_ZERO_MAGNITUDE = 1e-8
 
 def convert_xyz_to_latlon(x, y, z):
     mod_sq = (x * x + y * y + z * z)
-    if abs(mod_sq) < 1e-15:
+    if abs(mod_sq) < POINT_ZERO_MAGNITUDE:
         raise ZeroPointLatlonError()
     lat = math.asin(z / math.sqrt(mod_sq))
     lon = math.atan2(y, x)
@@ -63,7 +65,7 @@ class SphPoint(object):
 
     def __eq__(self, other):
         return np.allclose(self.as_xyz(), other.as_xyz(),
-                           rtol=1e-15, atol=1e-15)
+                           atol=POINT_ZERO_MAGNITUDE)
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -115,7 +117,7 @@ class SphGcSeg(object):
         self.point_a = sph_point(point_a)
         self.point_b = sph_point(point_b)
         self.pole = self.point_b.cross_product(self.point_a)
-        self.colinear_tolerance = 1e-15
+        self.colinear_tolerance = COS_ANGLE_ZERO_MAGNITUDE
 
     def reverse(self):
         return SphGcSeg(self.point_b, self.point_a)
@@ -158,7 +160,8 @@ class SphGcSeg(object):
     def angle_to_point(self, point):
         # Angle from AB to AP
         result = math.acos(self._cos_angle_to_point(point))
-        if abs(result) > 1e-15 and self.has_point_on_left_side(point) < 0.0:
+        if abs(result) > COS_ANGLE_ZERO_MAGNITUDE \
+                and self.has_point_on_left_side(point) < 0.0:
             result = -result
         return result
 
@@ -228,10 +231,18 @@ class SphAcwConvexPolygon(object):
         # Check if our points are arranged in a convex anticlockwise chain.
         # To call this, must be able to calculate edges --> must have no
         # adjacent duplicated points.
-        edges = self.edge_gcs()
-        previous_edges = edges[-1:] + edges[:-1]
-        return all([prev.has_point_on_left_side(this.point_b) >= 0.0
-                    for this, prev in zip(edges, previous_edges)])
+        do_old_calc = True
+        if do_old_calc:
+            edges = self.edge_gcs()
+            previous_edges = edges[-1:] + edges[:-1]
+            return all([prev.has_point_on_left_side(this.point_b) >= 0.0
+                        for this, prev in zip(edges, previous_edges)])
+        else:
+            edges = self.edge_gcs()
+            points = self.points
+            return all([all([edge.has_point_on_left_side(point) >= 0.0
+                             for point in points])
+                        for edge in edges])
 
     def _make_anticlockwise_convex(self):
         # Reorder points if required to give anticlockwise convex.
