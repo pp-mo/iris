@@ -231,7 +231,7 @@ class SphAcwConvexPolygon(object):
         # Check if our points are arranged in a convex anticlockwise chain.
         # To call this, must be able to calculate edges --> must have no
         # adjacent duplicated points.
-        do_old_calc = False
+        do_old_calc = True
         if do_old_calc:
             edges = self.edge_gcs()
             previous_edges = edges[-1:] + edges[:-1]
