@@ -205,9 +205,6 @@ class SphAcwConvexPolygon(object):
     def __init__(self, points=[], in_degrees=False):
         self._set_points([sph_point(point, in_degrees=in_degrees)
                           for point in points])
-        # Remove any initial duplicate points to allow initial AcwConvex check
-        self._remove_duplicate_points()
-        # Rationalise points as required to make them anticlockwise-convex
         self._make_anticlockwise_convex()
 
     def _set_points(self, points):
@@ -229,68 +226,35 @@ class SphAcwConvexPolygon(object):
 
     def _is_anticlockwise_convex(self):
         # Check if our points are arranged in a convex anticlockwise chain.
-        # To call this, must be able to calculate edges --> must have no
+        # To use this, must be able to calculate edges --> must have no
         # adjacent duplicated points.
-        do_old_calc = True
-        if do_old_calc:
-            edges = self.edge_gcs()
-            previous_edges = edges[-1:] + edges[:-1]
-            return all([prev.has_point_on_left_side(this.point_b) >= 0.0
-                        for this, prev in zip(edges, previous_edges)])
-        else:
-            edges = self.edge_gcs()
-            points = self.points
-            return all([all([edge.has_point_on_left_side(point) >= 0.0
-                             for point in points])
-                        for edge in edges])
+        edges = self.edge_gcs()
+        points = self.points
+        return all([all([edge.has_point_on_left_side(point) >= 0.0
+                         for point in points])
+                    for edge in edges])
 
     def _make_anticlockwise_convex(self):
-        # Reorder points if required to give anticlockwise convex.
-        # Raise error if not possible.
-        retrying = False
-        while True:
-            if self._is_anticlockwise_convex():
-                return
-            # Choose any-old edge as a reference for ordering the points
-            edge0 = self.edge_gcs()[0]
-            points = self.points
-            # Calculate angles from reference edge to all other points
-            angles = [edge0.angle_to_point(p) for p in points]
-            # Find "rightmost" point of the rest and move it to [1] position
-            ind_rightmost = 1 + np.argmin(angles[1:])
-            points = [points[0], points[ind_rightmost]] + \
-                points[1:ind_rightmost] + points[ind_rightmost+1:]
-            # Make a new reference segment from new [0:1]
-            if points[0] == points[1]:
-                raise NonConvexPolygonError()
-            edge0 = SphGcSeg(points[0], points[1])
-            # Recalculate all angles relative to this
-            angles = [edge0.angle_to_point(p) for p in points]
-            eps = 1.0e-7
-            max_valid_angle = math.pi + eps
-            min_valid_angle = -eps
-            # Check for all valid angles
-            if any([a > max_valid_angle or a < min_valid_angle
-                    for a in angles]):
-                raise NonConvexPolygonError()
-            # Sort all points into correct order
-            points_and_angles = zip(points, angles)
-            points_and_angles_sorted = sorted(points_and_angles,
-                                              key=lambda p_and_a: p_and_a[1])
-            new_points = [p_and_a[0] for p_and_a in points_and_angles_sorted]
-            # Remove duplicates + repeat if there were any...
-            self._set_points(new_points)
-            self._remove_duplicate_points()
-            if self.points == new_points:
-                # No duplicates : should now be ok
-                break
-            # Reordering produced duplicate points -> retry whole thing.
-            if retrying:
-                # Should only ever happen once !
-                raise Exception('Unexpected loop in polygon reordering.')
-            retrying = True
+        # Reorder points as required, or raise an error if not possible.
+        # Calculate a centre point
+        points = self.points
+        centre_xyz = [np.sum(x)
+                      for x in zip(*[p.as_xyz() for p in points])]
+        centre_point = sph_point(convert_xyz_to_latlon(*centre_xyz))
+        # Make a reference edge from the centre to points[0]
+        edge0 = SphGcSeg(centre_point, points[0])
+        # Calculate angles from reference edge to all points
+        angles = [edge0.angle_to_point(p) for p in points]
+        # Sort all points into this order
+        points_and_angles = zip(points, angles)
+        points_and_angles_sorted = sorted(points_and_angles,
+                                          key=lambda p_and_a: p_and_a[1])
+        new_points = [p_and_a[0] for p_and_a in points_and_angles_sorted]
+        # Set new points, and remove any duplicates
+        self._set_points(new_points)
+        self._remove_duplicate_points()
+        # Should now be as required
         if not self._is_anticlockwise_convex():
-            # Reordered, but still not in desired state
             raise NonConvexPolygonError()
 
     def edge_gcs(self):

@@ -26,10 +26,15 @@ import iris.experimental.spherical_geometry as sph
 
 
 def spt(*args, **kwargs):
-    # wrap sph.sph_point, but default to in_degrees=True
+    # Wrap sph.sph_point, but default to in_degrees=True
     in_degrees = kwargs.pop('in_degrees', True)
     kwargs['in_degrees'] = in_degrees
     return sph.sph_point(*args, **kwargs)
+
+
+def spts(latlon_list):
+    # Convert a list of latlons (in degrees) to SphPoints
+    return [sph.sph_point(p, in_degrees=True) for p in latlon_list]
 
 
 def d2r(degrees):
@@ -379,19 +384,29 @@ class TestSphGcSeg(tests.IrisTest):
         self.assertIsNone(seg1.intersection_points_with_other(seg2))
 
 
+def poly_order_from_0(poly, pts):
+    n_pts = len(pts)
+    assert len(poly.points) == n_pts
+    order = [pts.index(p) for p in poly.points]
+    assert all([i >= 0 for i in order])
+    i0 = order.index(0)
+    return [order[(i + i0) % n_pts] for i in range(n_pts)]
+
+
 class TestSphPolygon(tests.IrisTest):
     def test_polygon_create(self):
-        points = [(0, 0), (0, 50), (50, 50)]
-        poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
-        pts = [spt(p) for p in points]
-        for i in range(len(pts)):
-            self.assertEqual(poly.points[i], pts[i])
+        pts = spts([(0, 0), (0, 50), (50, 50)])
+        correct_order = [0, 1, 2]
+        poly = sph.SphAcwConvexPolygon(pts)
+        order = poly_order_from_0(poly, pts)
+        self.assertEqual(order, correct_order)
 
         # make it reversed : this forces it to correct the order
-        poly = sph.SphAcwConvexPolygon(points[::-1], in_degrees=True)
-        self.assertEqual(poly.points[0], pts[2])
-        self.assertEqual(poly.points[1], pts[0])
-        self.assertEqual(poly.points[2], pts[1])
+        pts = pts[::-1]
+        correct_order = [0, 2, 1]
+        poly = sph.SphAcwConvexPolygon(pts)
+        order = poly_order_from_0(poly, pts)
+        self.assertEqual(order, correct_order)
 
         # check fails on two points
         points = [(0, 0), (0, 50)]
@@ -399,80 +414,51 @@ class TestSphPolygon(tests.IrisTest):
             poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
 
         # make a square-ish one
-        points = [(0, 0), (0, 50), (40, 50), (60, -10)]
-        poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
-        pts = [spt(p) for p in points]
-        for i in range(len(pts)):
-            self.assertEqual(poly.points[i], pts[i])
+        pts = spts([(0, 0), (0, 50), (40, 50), (60, -10)])
+        correct_order = [0, 1, 2, 3]
+        poly = sph.SphAcwConvexPolygon(pts)
+        order = poly_order_from_0(poly, pts)
+        self.assertEqual(order, correct_order)
 
         # check it is ok to have the odd point out of order
-        points = [(0, 0), (0, 50), (40, 50), (60, -10), (15, 55)]
-        poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
-        pts = [spt(p) for p in points]
-        self.assertEqual(poly.points[0], pts[0])
-        self.assertEqual(poly.points[1], pts[1])
-        self.assertEqual(poly.points[2], pts[4])
-        self.assertEqual(poly.points[3], pts[2])
-        self.assertEqual(poly.points[4], pts[3])
+        pts = spts([(0, 0), (0, 50), (40, 50), (60, -10), (15, 55)])
+        correct_order = [0, 1, 4, 2, 3] 
+        poly = sph.SphAcwConvexPolygon(pts)
+        order = poly_order_from_0(poly, pts)
+        self.assertEqual(order, correct_order)
 
         # check still ok if the first two points will no longer be adjacent
-        points = [(0, 0), (0, 50), (40, 50), (70, -10), (-20, 30)]
-        pts = [spt(p) for p in points]
-        poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
-        self.assertEqual(poly.points[0], pts[0])
-        self.assertEqual(poly.points[1], pts[4])
-        self.assertEqual(poly.points[2], pts[1])
-        self.assertEqual(poly.points[3], pts[2])
-        self.assertEqual(poly.points[4], pts[3])
+        pts = spts([(0, 0), (0, 50), (40, 50), (70, -10), (-20, 30)])
+        correct_order = [0, 4, 1, 2, 3]
+        poly = sph.SphAcwConvexPolygon(pts)
+        order = poly_order_from_0(poly, pts)
+        self.assertEqual(order, correct_order)
 
         # testcase for unsuitable points (non-convex)
         # Whereas this is ok..
         points = [(0, 0), (-5, 20), (0, 50), (40, 50), (70, -10)]
-        poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
-        pts = [spt(p) for p in points]
-        for i in range(len(pts)):
-            self.assertEqual(poly.points[i], pts[i])
-
+        sph.SphAcwConvexPolygon(points, in_degrees=True)
         # ..a slightly adjusted point#1 (concave between 0+2) means it is not
         points[1] = (5, 20)
         with self.assertRaises(ValueError):
             poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
 
-    def test_polygon_create_order(self):
+    def test_polygon_create_any_order(self):
         # check correct creation independent of points order
         # This tests the mechanics of (_is/(_make)_anticlockwise_convex
 
         # Define 5 polygon test vertices - including some co-linear.
-        points = [spt(xy)
-                  for xy in [[0.0, 0.0],
-                             [0.0, 2.5],
-                             [0.0, 4.0],
-                             [4.0, 1.0],
-                             [4.0, 0.0]]]
-        base_poly = sph.SphAcwConvexPolygon(points)
-        self.assertEqual(base_poly.points.index(points[0]), 0)
-        base_points_order = [points.index(p) for p in base_poly.points]
-        print
-        print 'Reference points order : ', base_points_order
-        for points_list in itertools.permutations(points):
-            build_points_order = [points.index(p) for p in points_list]
-            # test construction for each possible ordering
-            failed = False
-            try:
-              poly = sph.SphAcwConvexPolygon(points_list)
-              order = [points.index(p) for p in poly.points]
-              # results should all have same points order, except for rotation
-              i0 = order.index(0)
-              order_ok = (order[i0:] + order[:i0]) == base_points_order
-#              self.assertEqual(order[i0:] + order[:i0], base_points_order)
-            except sph.NonConvexPolygonError:
-              failed = True
-            if failed:
-              print 'Order FAIL : ', build_points_order
-            elif not order_ok:
-              print 'Order bad  : ', build_points_order, ' -> ', order
-            else:
-              print '( order ok : ', build_points_order, ' -> ', order, ' )'
+        pts = spts([[0.0, 0.0],
+                    [0.0, 2.5],
+                    [0.0, 4.0],
+                    [4.0, 1.0],
+                    [4.0, 0.0]])
+        base_poly = sph.SphAcwConvexPolygon(pts)
+        base_points_order = poly_order_from_0(base_poly, pts)
+        for pts_perm in itertools.permutations(pts):
+            poly = sph.SphAcwConvexPolygon(pts_perm)
+            permed_points_order = poly_order_from_0(poly, pts)
+            self.assertEqual(permed_points_order, base_points_order)
 
     def test_polygon_contains_point(self):
         # make a square-ish one
@@ -558,6 +544,8 @@ class TestSphPolygon(tests.IrisTest):
         points = [(0, 0), (0, 50), (40, 50), (60, -10)]
         poly = sph.SphAcwConvexPolygon(points, in_degrees=True)
         poly2 = poly.intersection_with_polygon(poly)
+        # correct order by adding explicit first point same as original ...
+        poly2 = sph.SphAcwConvexPolygon([spt((0, 0))]+poly2.points)
         self.assertTrue(all([p1 == p2 for p1, p2 in zip(poly.points,
                                                         poly2.points)]))
 
@@ -588,8 +576,10 @@ class TestSphPolygon(tests.IrisTest):
             hits = [box.contains_point(p) for p in poly.points]
             result = any(hits)
             if not result:
-                print 'FAIL:'
+                print
+                print 'NEAR-POINT SEARCH FAILED:'
                 print 'poly = ', ', '.join([p._ll_str() for p in poly.points])
+                print 'point = ', latlon
                 print 'box = ', ', '.join([p._ll_str() for p in box.points])
             return result
 
