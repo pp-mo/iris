@@ -15,10 +15,9 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 """
-Tests for :func:`iris.experimental.regrid.regrid_conservative_via_sph`.
+Conservative regrid tests, shareable for testing esmpy/spherical_trig.
 
-Trying to be much like the ESMPy version.
-
+Does not execute tests itself, until inherited jointly with iris.tests.IrisTest.
 """
 
 # import iris tests first so that some things can be initialised
@@ -34,17 +33,6 @@ import numpy as np
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-
-# Import ESMF if installed, else fail quietly + disable all the tests.
-try:
-    import ESMF
-    from iris.experimental.regrid_conservative_sphtrig import \
-        regrid_conservative_via_sph
-    skip_sph = lambda fn: fn
-except ImportError:
-    ESMF = None
-    skip_sph = unittest.skip(
-        reason='Requires ESMF module, which is not available.')
 
 import cartopy.crs as ccrs
 import iris
@@ -130,8 +118,16 @@ def _donothing_context_manager():
     yield
 
 
-@skip_sph
-class TestConservativeRegrid(tests.IrisTest):
+class TestConservativeRegrid(object):
+    """
+    Generic test for conservative regrid calls.
+    
+    Used to test both the ESMPy and spherical_geometry approaches.
+    Usage:
+    * Define class that inherits from both this *and* iris.tests.IrisTest.
+    * Provide properties 'self.regrid_call' and 'self.testee_id'.
+
+    """
     def setUp(self):
         # Compute basic test data cubes.
         shape1 = (5, 5)
@@ -149,7 +145,7 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # Save timesaving pre-computed bits
         self.stock_c1_c2 = (c1, c2)
-        self.stock_regrid_c1toc2 = regrid_conservative_via_sph(c1, c2)
+        self.stock_regrid_c1toc2 = self.regrid_call(c1, c2)
         self.stock_c1_areasum = _cube_area_sum(c1)
 
     def test_simple_areas(self):
@@ -164,7 +160,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c1_areasum = self.stock_c1_areasum
 
         # main regrid
-        c1to2 = regrid_conservative_via_sph(c1, c2)
+        c1to2 = self.regrid_call(c1, c2)
 
         c1to2_areasum = _cube_area_sum(c1to2)
 
@@ -182,7 +178,7 @@ class TestConservativeRegrid(tests.IrisTest):
         #
         # regrid back onto original grid again ...
         #
-        c1to2to1 = regrid_conservative_via_sph(c1to2, c1)
+        c1to2to1 = self.regrid_call(c1to2, c1)
 
         c1to2to1_areasum = _cube_area_sum(c1to2to1)
 
@@ -210,7 +206,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c1_areasum = self.stock_c1_areasum
 
         # regrid from c2 to c1 -- should mask all the edges...
-        c2_to_c1 = regrid_conservative_via_sph(c2, c1)
+        c2_to_c1 = self.regrid_call(c2, c1)
         self.assertArrayEqual(c2_to_c1.data.mask,
                               [[True, True, True, True, True],
                                [True, False, False, False, True],
@@ -222,7 +218,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2m = c2.copy()
         c2m.data = np.ma.array(c2m.data)
         c2m.data[1, 1] = np.ma.masked
-        c2m_to_c1 = regrid_conservative_via_sph(c2m, c1)
+        c2m_to_c1 = self.regrid_call(c2m, c1)
         self.assertArrayEqual(c2m_to_c1.data.mask,
                               [[True, True, True, True, True],
                                [True, True, True, False, True],
@@ -263,7 +259,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2 = _make_test_cube((7, 8), xlims, ylims, pole_latlon=pole_latlon)
 
         # regrid onto new grid
-        c1_to_c2 = regrid_conservative_via_sph(c1, c2)
+        c1_to_c2 = self.regrid_call(c1, c2)
 
         # check that all the original coords exist in the new cube
         # NOTE: this also effectively confirms we haven't lost the orography
@@ -275,7 +271,7 @@ class TestConservativeRegrid(tests.IrisTest):
         # check that each xy 'slice' has same values as if done on its own.
         for i_t, i_p in np.ndindex(c1.shape[:2]):
             c1_slice = c1[i_t, i_p]
-            c2_slice = regrid_conservative_via_sph(c1_slice, c2)
+            c2_slice = self.regrid_call(c1_slice, c2)
             subcube = c1_to_c2[i_t, i_p]
             self.assertEqual(subcube, c2_slice)
 
@@ -291,14 +287,14 @@ class TestConservativeRegrid(tests.IrisTest):
         # - i.e.  regrid(data^T)^T == regrid(data)
         c1_yx = c1.copy()
         c1_yx.transpose()
-        testcube_yx = regrid_conservative_via_sph(c1_yx, c2)
+        testcube_yx = self.regrid_call(c1_yx, c2)
         testcube_yx.transpose()
         self.assertEqual(testcube_yx, testcube_xy)
 
         # Check that transposing destination does nothing
         c2_yx = c2.copy()
         c2_yx.transpose()
-        testcube_dst_transpose = regrid_conservative_via_sph(c1, c2_yx)
+        testcube_dst_transpose = self.regrid_call(c1, c2_yx)
         self.assertEqual(testcube_dst_transpose, testcube_xy)
 
     def test_dst_coords(self):
@@ -309,11 +305,11 @@ class TestConservativeRegrid(tests.IrisTest):
 
         dst_x = c2.coord(axis='x')
         dst_y = c2.coord(axis='y')
-        testcube_coords = regrid_conservative_via_sph(c1, (dst_x, dst_y))
+        testcube_coords = self.regrid_call(c1, (dst_x, dst_y))
         self.assertEqual(testcube_coords, testcube)
 
         # Check that swapping dst_coords produces transposed results.
-        testcube_coords_yx = regrid_conservative_via_sph(c1, (dst_y, dst_x))
+        testcube_coords_yx = self.regrid_call(c1, (dst_y, dst_x))
         testcube_coords_yx.transpose()
         self.assertEqual(testcube_coords_yx, testcube)
 
@@ -321,7 +317,7 @@ class TestConservativeRegrid(tests.IrisTest):
         """ Test regridding onto the identical grid. """
         # Use regrid with self as target.
         c1, c2 = self.stock_c1_c2
-        testcube = regrid_conservative_via_sph(c1, c1)
+        testcube = self.regrid_call(c1, c1)
         self.assertEqual(testcube, c1)
 
     def test_global(self):
@@ -351,7 +347,7 @@ class TestConservativeRegrid(tests.IrisTest):
                              pole_latlon=(47.4, 25.7))
 
         # Perform regridding
-        c1toc2 = regrid_conservative_via_sph(c1, c2)
+        c1toc2 = self.regrid_call(c1, c2)
 
         # Check that before+after area-sums match fairly well
         c1_areasum = _cube_area_sum(c1)
@@ -377,7 +373,7 @@ class TestConservativeRegrid(tests.IrisTest):
         if global_cell_supported:
             context = _donothing_context_manager()
         with context:
-            c1_to_global = regrid_conservative_via_sph(
+            c1_to_global = self.regrid_call(
                 c1, (x_coord_2, y_coord_2))
             # Check the total area sum is still the same
             self.assertArrayAllClose(c1_to_global.data[0, 0], c1_areasum)
@@ -401,7 +397,7 @@ class TestConservativeRegrid(tests.IrisTest):
         y_c1x1 = iris.coords.DimCoord(ylims1[0], bounds=ylims1,
                                       long_name='latitude',
                                       coord_system=_plain_geodetic_cs)
-        c1x1 = regrid_conservative_via_sph(c1, (x_c1x1, y_c1x1))
+        c1x1 = self.regrid_call(c1, (x_c1x1, y_c1x1))
         c1x1_areasum = _cube_area_sum(c1x1)
         # Check the total area sum is still the same
         # NOTE: at present, this causes an error inside ESMF ...
@@ -423,7 +419,7 @@ class TestConservativeRegrid(tests.IrisTest):
                                       standard_name='latitude',
                                       units=iris.unit.Unit('degrees'),
                                       coord_system=_plain_geodetic_cs)
-        c1_to_c2x1 = regrid_conservative_via_sph(c1, (x_c2x1, y_c2x1))
+        c1_to_c2x1 = self.regrid_call(c1, (x_c2x1, y_c2x1))
 
         # Check the total area sum is still the same
         c1_to_c2x1_areasum = _cube_area_sum(c1_to_c2x1)
@@ -441,7 +437,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c1x1.data[0, 0] = np.mean(c1.data)
 
         # Regrid this back onto the original NxN grid
-        c1x1_to_c1 = regrid_conservative_via_sph(c1x1, c1)
+        c1x1_to_c1 = self.regrid_call(c1x1, c1)
         c1x1_to_c1_areasum = _cube_area_sum(c1x1_to_c1)
 
         # Check that area sum is ~unchanged, as expected
@@ -450,7 +446,7 @@ class TestConservativeRegrid(tests.IrisTest):
         # Check 1x1 -> 1x1
         # NOTE: can *only* get any result with a fully overlapping cell, so
         # just regrid onto self
-        c1x1toself = regrid_conservative_via_sph(c1x1, c1x1)
+        c1x1toself = self.regrid_call(c1x1, c1x1)
         c1x1toself_areasum = _cube_area_sum(c1x1toself)
         self.assertArrayAllClose(c1x1toself_areasum, c1_areasum, 0.0004)
         # NOTE: perhaps surprisingly, this has a similar level of error.
@@ -484,14 +480,14 @@ class TestConservativeRegrid(tests.IrisTest):
                              pole_latlon=(47.4, 25.7))
 
         # Perform regridding
-        c1toc2 = regrid_conservative_via_sph(c1, c2)
+        c1toc2 = self.regrid_call(c1, c2)
 
         # Now redo with dst longitudes rotated, so 'seam' is somewhere else.
         x2_shift_steps = int(shape2[0] / 3)
         xlims2_shifted = np.array(xlims_2) + 360.0 * x2_shift_steps / shape2[0]
         c2_shifted = _make_test_cube(shape2, xlims2_shifted, ylims_2,
                                      pole_latlon=(47.4, 25.7))
-        c1toc2_shifted = regrid_conservative_via_sph(c1, c2_shifted)
+        c1toc2_shifted = self.regrid_call(c1, c2_shifted)
 
         # Show that results are the same, when output rolled by same amount
         rolled_data = np.roll(c1toc2_shifted.data, x2_shift_steps, axis=1)
@@ -503,7 +499,7 @@ class TestConservativeRegrid(tests.IrisTest):
         xlims1_shifted = [x - x_shift_degrees for x in xlims1]
         c1_shifted = _make_test_cube(shape1, xlims1_shifted, ylims1)
         c1_shifted.data[:] = np.roll(basedata, x1_shift_steps, axis=1)
-        c1shifted_toc2 = regrid_conservative_via_sph(c1_shifted, c2)
+        c1shifted_toc2 = self.regrid_call(c1_shifted, c2)
         self.assertEqual(c1shifted_toc2, c1toc2)
 
     def test_polar_areas(self):
@@ -527,7 +523,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2 = _make_test_cube(shape2, xlims2, ylims2)
         c2.data[:] = 0.0
 
-        c1to2 = regrid_conservative_via_sph(c1, c2)
+        c1to2 = self.regrid_call(c1, c2)
 
         # check for expected pattern
         d_expect = np.array([[0.0, 0.0, 0.0, 0.0],
@@ -543,7 +539,7 @@ class TestConservativeRegrid(tests.IrisTest):
         #
         # transform back again ...
         #
-        c1to2to1 = regrid_conservative_via_sph(c1to2, c1)
+        c1to2to1 = self.regrid_call(c1to2, c1)
 
         # check values
         d_expect = np.array([[0.0, 0.0, 0.0, 0.0, 0.0],
@@ -572,7 +568,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2.coord('latitude').coord_system = None
 
         with self.assertRaises(ValueError):
-            c1to2 = regrid_conservative_via_sph(c1, c2)
+            c1to2 = self.regrid_call(c1, c2)
 
     def test_fail_different_cs(self):
         """
@@ -587,13 +583,13 @@ class TestConservativeRegrid(tests.IrisTest):
         c1 = _make_test_cube(shape1, xlims1, ylims1,
                              pole_latlon=(45.0, 35.0))
         c2 = _make_test_cube(shape2, xlims2, ylims2)
-        regrid_conservative_via_sph(c1, c2)
+        self.regrid_call(c1, c2)
 
         # Replace the coord_system one of the source coords + check this fails.
         c1.coord('grid_longitude').coord_system = \
             c2.coord('longitude').coord_system
         with self.assertRaises(ValueError):
-            regrid_conservative_via_sph(c1, c2)
+            self.regrid_call(c1, c2)
 
         # Repeat with target coordinate fiddled.
         c1 = _make_test_cube(shape1, xlims1, ylims1,
@@ -602,7 +598,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2.coord('latitude').coord_system = \
             c1.coord('grid_latitude').coord_system
         with self.assertRaises(ValueError):
-            regrid_conservative_via_sph(c1, c2)
+            self.regrid_call(c1, c2)
 
     def test_rotated(self):
         """
@@ -646,7 +642,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2.data = np.ma.array(c2.data, mask=True)
 
         # perform regrid
-        c1to2 = regrid_conservative_via_sph(c1, c2)
+        c1to2 = self.regrid_call(c1, c2)
 
         # check we have zeros (or nearly) all around the edge..
         c1toc2_zeros = np.ma.array(c1to2.data)
@@ -673,7 +669,7 @@ class TestConservativeRegrid(tests.IrisTest):
             dtype=np.float)
         c2_areasum = _cube_area_sum(c2)
 
-        c2toc1 = regrid_conservative_via_sph(c2, c1)
+        c2toc1 = self.regrid_call(c2, c1)
 
         # check we have zeros (or nearly) all around the edge..
         c2toc1_zeros = np.ma.array(c2toc1.data)
@@ -734,7 +730,7 @@ class TestConservativeRegrid(tests.IrisTest):
             c2.data = np.ma.array(c2.data, mask=True)
 
             # perform regrid + snapshot test results
-            c1toc2 = regrid_conservative_via_sph(c1, c2)
+            c1toc2 = self.regrid_call(c1, c2)
 
             # check masking of result is as expected
             # (generated by inspecting plot of how src+dst grids overlap)
@@ -771,5 +767,3 @@ class TestConservativeRegrid(tests.IrisTest):
                 self.assertArrayAllClose(c1_areasum, c1to2_areasum, rtol=0.003)
 
 
-if __name__ == '__main__':
-    tests.main()
