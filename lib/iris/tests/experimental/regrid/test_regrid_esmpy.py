@@ -32,8 +32,10 @@ except ImportError:
     skip_esmf = unittest.skip(
         reason='Requires ESMF module, which is not available.')
 
+import iris.tests.experimental.regrid.generic_conservative_regrid_tests as regrid_tests
+
 @skip_esmf
-class TestConservativeRegridEsmf(test_esmf.TestConservativeRegrid, 
+class TestConservativeRegridEsmf(regrid_tests.GenericConservativeRegridTester,
                                  tests.IrisTest):    
     # Override init to set up the 'switched' parts of the operation.
     def __init__(self, *args, **kwargs):

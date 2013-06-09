@@ -118,13 +118,13 @@ def _donothing_context_manager():
     yield
 
 
-class TestConservativeRegrid(object):
+class GenericConservativeRegridTester(object):
     """
-    Generic test for conservative regrid calls.
+    Generic testcase for conservative regrid calls.
     
     Used to test both the ESMPy and spherical_geometry approaches.
     Usage:
-    * Define class that inherits from both this *and* iris.tests.IrisTest.
+    * Define a class that inherits from both this *and* iris.tests.IrisTest.
     * Provide properties 'self.regrid_call' and 'self.testee_id'.
 
     """

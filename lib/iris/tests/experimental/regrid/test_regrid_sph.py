@@ -24,8 +24,10 @@ import iris.tests as tests
 
 import iris.experimental.regrid_conservative_sphtrig
 
-class TestConservativeRegridSph(test_esmf.TestConservativeRegrid, 
-                                 tests.IrisTest):    
+import iris.tests.experimental.regrid.generic_conservative_regrid_tests as regrid_tests
+
+class TestConservativeRegridSph(regrid_tests.GenericConservativeRegridTester, 
+                                tests.IrisTest):    
     # Override init to set up the 'switched' parts of the operation.
     def __init__(self, *args, **kwargs):
         # Define an id to guide testee-specific test behaviour
