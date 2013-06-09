@@ -245,7 +245,8 @@ class SphAcwConvexPolygon(object):
         edge0 = SphGcSeg(centre_point, points[0])
         # Calculate angles from reference edge to all points
         angles = [edge0.angle_to_point(p) for p in points]
-        # Sort all points into this order
+        # Sort points into this order, with original [0] at start
+        angles = [(angle + 360.0) % 360.0 for angle in angles]
         points_and_angles = zip(points, angles)
         points_and_angles_sorted = sorted(points_and_angles,
                                           key=lambda p_and_a: p_and_a[1])
