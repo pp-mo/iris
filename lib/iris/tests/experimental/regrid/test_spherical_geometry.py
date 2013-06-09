@@ -384,29 +384,25 @@ class TestSphGcSeg(tests.IrisTest):
         self.assertIsNone(seg1.intersection_points_with_other(seg2))
 
 
-def poly_order_from_0(poly, pts):
-    n_pts = len(pts)
-    assert len(poly.points) == n_pts
-    order = [pts.index(p) for p in poly.points]
-    assert all([i >= 0 for i in order])
-    i0 = order.index(0)
-    return [order[(i + i0) % n_pts] for i in range(n_pts)]
-
-
 class TestSphPolygon(tests.IrisTest):
+    def _assert_poly_points_are(self, poly, pts, order=None):
+        n_pts = len(pts)
+        assert len(poly.points) == n_pts
+        if order is not None:
+            assert len(order) == n_pts
+            pts = [pts[i] for i in order]
+        self.assertEqual(poly.points, pts)
+
     def test_polygon_create(self):
         pts = spts([(0, 0), (0, 50), (50, 50)])
-        correct_order = [0, 1, 2]
         poly = sph.SphAcwConvexPolygon(pts)
-        order = poly_order_from_0(poly, pts)
-        self.assertEqual(order, correct_order)
+        self._assert_poly_points_are(poly, pts)
 
         # make it reversed : this forces it to correct the order
         pts = pts[::-1]
         correct_order = [0, 2, 1]
         poly = sph.SphAcwConvexPolygon(pts)
-        order = poly_order_from_0(poly, pts)
-        self.assertEqual(order, correct_order)
+        self._assert_poly_points_are(poly, pts, correct_order)
 
         # check fails on two points
         points = [(0, 0), (0, 50)]
@@ -415,24 +411,20 @@ class TestSphPolygon(tests.IrisTest):
 
         # make a square-ish one
         pts = spts([(0, 0), (0, 50), (40, 50), (60, -10)])
-        correct_order = [0, 1, 2, 3]
         poly = sph.SphAcwConvexPolygon(pts)
-        order = poly_order_from_0(poly, pts)
-        self.assertEqual(order, correct_order)
+        self._assert_poly_points_are(poly, pts)
 
         # check it is ok to have the odd point out of order
         pts = spts([(0, 0), (0, 50), (40, 50), (60, -10), (15, 55)])
         correct_order = [0, 1, 4, 2, 3] 
         poly = sph.SphAcwConvexPolygon(pts)
-        order = poly_order_from_0(poly, pts)
-        self.assertEqual(order, correct_order)
+        self._assert_poly_points_are(poly, pts, correct_order)
 
         # check still ok if the first two points will no longer be adjacent
         pts = spts([(0, 0), (0, 50), (40, 50), (70, -10), (-20, 30)])
         correct_order = [0, 4, 1, 2, 3]
         poly = sph.SphAcwConvexPolygon(pts)
-        order = poly_order_from_0(poly, pts)
-        self.assertEqual(order, correct_order)
+        self._assert_poly_points_are(poly, pts, correct_order)
 
         # testcase for unsuitable points (non-convex)
         # Whereas this is ok..
@@ -446,6 +438,14 @@ class TestSphPolygon(tests.IrisTest):
     def test_polygon_create_any_order(self):
         # check correct creation independent of points order
         # This tests the mechanics of (_is/(_make)_anticlockwise_convex
+        def poly_order_from_0(poly, pts):
+            # Return polygon points list rotated so pts[0] is first
+            n_pts = len(pts)
+            assert len(poly.points) == n_pts
+            order = [pts.index(p) for p in poly.points]
+            assert all([i >= 0 for i in order])
+            i0 = order.index(0)
+            return [order[(i + i0) % n_pts] for i in range(n_pts)]
 
         # Define 5 polygon test vertices - including some co-linear.
         pts = spts([[0.0, 0.0],
