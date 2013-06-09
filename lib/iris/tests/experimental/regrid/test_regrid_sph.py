@@ -35,7 +35,7 @@ class TestConservativeRegridSph(regrid_tests.GenericConservativeRegridTester,
         # Define the testee regrid call which all the tests call
         self.regrid_call = \
             iris.experimental.regrid_conservative_sphtrig.regrid_conservative_via_sph
-        super(self, TestConservativeRegridEsmf).__init__(*args, **kwargs)
+        super(TestConservativeRegridSph, self).__init__(*args, **kwargs)
 
 
 if __name__ == '__main__':

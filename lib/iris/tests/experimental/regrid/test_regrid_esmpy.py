@@ -22,6 +22,9 @@ Conservative regrid tests for ESMPy operation.
 # before importing anything else.
 import iris.tests as tests
 
+import os
+import os.path
+
 # Import ESMF if installed, else fail quietly + disable all the tests.
 try:
     import ESMF
@@ -35,7 +38,7 @@ except ImportError:
 import iris.tests.experimental.regrid.generic_conservative_regrid_tests as regrid_tests
 
 @skip_esmf
-class TestConservativeRegridEsmf(regrid_tests.GenericConservativeRegridTester,
+class TestConservativeRegridEsmpy(regrid_tests.GenericConservativeRegridTester,
                                  tests.IrisTest):    
     # Override init to set up the 'switched' parts of the operation.
     def __init__(self, *args, **kwargs):
@@ -44,21 +47,21 @@ class TestConservativeRegridEsmf(regrid_tests.GenericConservativeRegridTester,
         # Define the testee regrid call which all the tests call
         self.regrid_call = \
             iris.experimental.regrid_conservative.regrid_conservative_via_esmpy
-        super(self, TestConservativeRegridEsmf).__init__(*args, **kwargs)
+        super(TestConservativeRegridEsmpy, self).__init__(*args, **kwargs)
 
     # Define esmpy-specific one-time setup + teardown operations.
     @classmethod
     def setUpClass(cls):
         # Pre-initialise ESMF, just to avoid warnings about no logfile.
         # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
-        self._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
+        cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
         ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
 
     @classmethod
     def tearDownClass(cls):
         # remove the logfile if we can, just to be tidy
-        if os.path.exists(self._emsf_logfile_path):
-            os.remove(self._emsf_logfile_path)
+        if os.path.exists(cls._emsf_logfile_path):
+            os.remove(cls._emsf_logfile_path)
 
 
 if __name__ == '__main__':

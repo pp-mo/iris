@@ -367,11 +367,13 @@ class GenericConservativeRegridTester(object):
         y_coord_2 = iris.coords.DimCoord([0.0], bounds=[-90.0, 90.0],
                                          coord_system=_plain_geodetic_cs)
 
-        # NOTE: at present, this causes an error inside ESMF ...
-        context = self.assertRaises(NameError)
-        global_cell_supported = False
-        if global_cell_supported:
-            context = _donothing_context_manager()
+        # NOTE: at present, this causes an error inside both ...
+        context = _donothing_context_manager()
+        if self.testee_id == 'esmpy':
+            context = self.assertRaises(NameError)
+        elif self.testee_id == 'sph_trig':
+            from iris.experimental.spherical_geometry import ZeroPointLatlonError
+            context = self.assertRaises(ZeroPointLatlonError)
         with context:
             c1_to_global = self.regrid_call(
                 c1, (x_coord_2, y_coord_2))
