@@ -744,5 +744,5 @@ class TestPolySpeed(FakeIrisTest):
  
 
 if __name__ == '__main__':
-#    unittest.main()
-    TestSphPolygon()('test_speedrun')
+    # unittest.main()
+    TestPolySpeed('test_speedrun')()
