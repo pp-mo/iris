@@ -66,6 +66,39 @@ class FakeIrisTest(unittest.TestCase):
         """
         np.testing.assert_allclose(a, b, rtol=rtol, atol=atol, **kwargs)
 
+#
+# New stuff
+#
+def _polygon_array_from_coord_arrays(ax, ay):
+    """
+    Make an array of sph.SphAcwConvexPolygon objects representing cells.
+
+    Args:
+
+    * ax, ay (2d arrays of dimensions NX*NY):
+        point positions (in degrees) of the corners of quadrilateral cells.
+
+    Returns:
+       np.array of (NX-1)*(NY-1) polygon objects representing the cells.
+
+    """
+    # Create a Grid object describing the coordinate cells.
+    dims = (ax.shape[0]-1, ax.shape[1]-1)
+
+    # Get all cell corner coordinates as true-lat-lons
+    lon_bounds, lat_bounds = ax, ay
+
+    # Create sph Polygons for each one.
+    cells = np.empty(dims, dtype=object)
+    for ix in xrange(dims[0]):
+        for iy in xrange(dims[1]):
+            points = [(lat_bounds[ix, iy], lon_bounds[ix, iy]),
+                      (lat_bounds[ix+1, iy], lon_bounds[ix+1, iy]),
+                      (lat_bounds[ix+1, iy+1], lon_bounds[ix+1, iy+1]),
+                      (lat_bounds[ix, iy+1], lon_bounds[ix, iy+1])]
+            cells[ix, iy] = sph.SphAcwConvexPolygon(points, in_degrees=True)
+
+    return cells
 
 
 #
@@ -661,73 +694,55 @@ class TestSphPolygon(FakeIrisTest):
         self.assertTrue(poly_has_point_near(poly3, (-15, 5), tol_d))
 
 
+class TestPolySpeed(FakeIrisTest):
+    def test_speedrun(self):
+#        import matplotlib.pyplot as plt
+        nx1, ny1 = (12, 9)
+        nx2, ny2 = (10, 7)
+    #    nx1, ny1 = (4, 3)
+    #    nx2, ny2 = (5, 4)
+        x1, y1 = np.meshgrid(np.linspace(0, 12, nx1, endpoint=True),
+                             np.linspace(0, 12, ny1, endpoint=True))
+        p0x, p0y = (1.5, -0.7)
+        ths = np.deg2rad(np.linspace(-12.7, 85.0, nx2, endpoint=True))
+        rds = np.linspace(1.2, 9.7, ny2, endpoint=True)
+        x2 = p0x + np.array([[r*np.sin(t) for t in ths] for r in rds])
+        y2 = p0y + np.array([[r*np.cos(t) for t in ths] for r in rds])
+#        for iy in xrange(ny2):
+#            for ix in xrange(nx2-1):
+#                plt.plot([x2[iy, ix], x2[iy, ix+1]],
+#                         [y2[iy, ix], y2[iy, ix+1]])
+#        for ix in xrange(nx2):
+#            for iy in xrange(ny2-1):
+#                plt.plot([x2[iy, ix], x2[iy+1, ix]],
+#                         [y2[iy, ix], y2[iy+1, ix]])
+#        plt.plot(x1, y1, '.', markersize=12)
 
-def _polygon_array_from_coord_arrays(ax, ay):
-    """
-    Make an array of sph.SphAcwConvexPolygon objects representing cells.
-
-    Args:
-
-    * ax, ay (2d arrays of dimensions NX*NY):
-        point positions (in degrees) of the corners of quadrilateral cells.
-
-    Returns:
-       np.array of (NX-1)*(NY-1) polygon objects representing the cells.
-
-    """
-    # Create a Grid object describing the coordinate cells.
-    dims = (ax.shape[0]-1, ax.shape[1]-1)
-
-    # Get all cell corner coordinates as true-lat-lons
-    lon_bounds, lat_bounds = ax, ay
-
-    # Create sph Polygons for each one.
-    cells = np.empty(dims, dtype=object)
-    for ix in xrange(dims[0]):
-        for iy in xrange(dims[1]):
-            points = [(lat_bounds[ix, iy], lon_bounds[ix, iy]),
-                      (lat_bounds[ix+1, iy], lon_bounds[ix+1, iy]),
-                      (lat_bounds[ix+1, iy+1], lon_bounds[ix+1, iy+1]),
-                      (lat_bounds[ix, iy+1], lon_bounds[ix, iy+1])]
-            cells[ix, iy] = sph.SphAcwConvexPolygon(points, in_degrees=True)
-
-    return cells
-
-
-def _speedrun_sphtrig():
-    import matplotlib.pyplot as plt
-    nx1, ny1 = (12, 9)
-    nx2, ny2 = (10, 7)
-#    nx1, ny1 = (4, 3)
-#    nx2, ny2 = (5, 4)
-    x1, y1 = np.meshgrid(np.linspace(0, 12, nx1, endpoint=True),
-                         np.linspace(0, 12, ny1, endpoint=True))
-    p0x, p0y = (1.5, -0.7)
-    ths = np.deg2rad(np.linspace(-12.7, 85.0, nx2, endpoint=True))
-    rds = np.linspace(1.2, 9.7, ny2, endpoint=True)
-    x2 = p0x + np.array([[r*np.sin(t) for t in ths] for r in rds])
-    y2 = p0y + np.array([[r*np.cos(t) for t in ths] for r in rds])
-    for iy in xrange(ny2):
-        for ix in xrange(nx2-1):
-            plt.plot([x2[iy, ix], x2[iy, ix+1]],
-                     [y2[iy, ix], y2[iy, ix+1]])
-    for ix in xrange(nx2):
-        for iy in xrange(ny2-1):
-            plt.plot([x2[iy, ix], x2[iy+1, ix]],
-                     [y2[iy, ix], y2[iy+1, ix]])
-    plt.plot(x1, y1, '.', markersize=12)
-
-    # Note: above X and Y coords are lon+lat *angles* here.  Doesn't matter.
-    a_cells = _polygon_array_from_coord_arrays(x1, y1).flatten()
-    b_cells = _polygon_array_from_coord_arrays(x2, y2).flatten()
-    na, nb = len(a_cells), len(b_cells)
-    areas = np.zeros((na, nb))
-    for ia, a_cell in enumerate(a_cells):
-        for ib, b_cell in enumerate(b_cells):
-            poly = a_cell.intersection_with_polygon(b_cell)
-            if poly is not None:
-                areas[ia, ib] = poly.area()
-    return areas
+        # Note: above X and Y coords are lon+lat *angles* here.  Doesn't matter.
+        import datetime
+        t1 = datetime.datetime.now()
+        a_cells = _polygon_array_from_coord_arrays(x1, y1).flatten()
+        b_cells = _polygon_array_from_coord_arrays(x2, y2).flatten()
+        t2 = datetime.datetime.now()
+        print
+        print 'coords build time : ', (t2 - t1).total_seconds()
+        na, nb = len(a_cells), len(b_cells)
+        areas = np.zeros((na, nb))
+        t1 = datetime.datetime.now()
+        for ia, a_cell in enumerate(a_cells):
+            for ib, b_cell in enumerate(b_cells):
+                poly = a_cell.intersection_with_polygon(b_cell)
+                if poly is not None:
+                    areas[ia, ib] = poly.area()
+        t2 = datetime.datetime.now()
+        print 'main calc time : ', (t2 - t1).total_seconds()
+        print 'Calc size = ', areas.shape
+        nsize = areas.size
+        n_nz = np.count_nonzero(areas)
+        nz_percent = n_nz * 100.0 / nsize
+        print 'nonzero/total = {}/{}  = {}%'.format(n_nz, nsize, nz_percent)
+ 
 
 if __name__ == '__main__':
-    unittest.main()
+#    unittest.main()
+    TestSphPolygon()('test_speedrun')
