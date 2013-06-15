@@ -84,6 +84,9 @@ class SphPoint(object):
                    (ax * by - ay * bx))
         return sph_point(convert_xyz_to_latlon(x, y, z))
 
+    def distance_to(self, other):
+        return math.acos(self.dot_product(other))
+
     def __str__(self):
         def r2d(radians):
             return radians * 180.0 / math.pi
@@ -211,6 +214,7 @@ class SphAcwConvexPolygon(object):
         # Assign to our points, check length and uncache edges
         self.points = points
         self._edges = None
+        self._centre_and_max_radius = None
         self.n_points = len(points)
         if self.n_points < 3:
             raise TooFewPointsForPolygonError()
@@ -266,6 +270,17 @@ class SphAcwConvexPolygon(object):
                            for this_pt, next_pt in zip(points, next_points)]
         return self._edges
 
+    def centre_and_max_radius(self):
+        if self._centre_and_max_radius is None:
+            xyz_all = np.array([point.as_xyz() for point in self.points])
+            xyz_centre = np.mean(xyz_all, axis=0)
+            centre_point = SphPoint(*convert_xyz_to_latlon(*xyz_centre))
+            radius_cosines = [centre_point.dot_product(point)
+                              for point in self.points]
+            max_radius = math.acos(min(radius_cosines))
+            self._centre_and_max_radius = (centre_point, max_radius)
+        return self._centre_and_max_radius
+
     def contains_point(self, point, in_degrees=False):
         point = sph_point(point, in_degrees=in_degrees)
         return all(gc.has_point_on_left_side(point) >= 0.0
@@ -280,6 +295,12 @@ class SphAcwConvexPolygon(object):
         return angle_total
 
     def intersection_with_polygon(self, other):
+        # Do fast check to exclude ones which are well separated
+        centre_this, radius_this = self.centre_and_max_radius()
+        centre_other, radius_other = other.centre_and_max_radius()
+        spacing = centre_this.distance_to(centre_other)
+        if spacing - radius_this - radius_other > 0:
+            return None
         # Add output candidates: points from A that are in B, and vice versa
         result_points = [p for p in self.points
                          if other.contains_point(p) and p not in other.points]
