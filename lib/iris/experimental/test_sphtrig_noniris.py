@@ -429,6 +429,45 @@ class TestSphGcSeg(FakeIrisTest):
         _test_relangle((80, 0), atol_degrees=55)
         _test_relangle((-65, 30), atol_degrees=25)
 
+    def test_seg_pseudoangle_to_point(self):
+        seg = sph.SphGcSeg(spt((0, 0)), spt((0, 10)))
+
+        a = seg.pseudoangle_to_point(spt((0, 70)))
+        self.assertAlmostEqual(a, 0.0)
+
+        a = seg.pseudoangle_to_point(spt((90, 0)))
+        self.assertAlmostEqual(a, 1.0)
+
+        a = seg.pseudoangle_to_point(spt((-90, 0)))
+        self.assertAlmostEqual(a, -1.0)
+
+        # check colinear 'behind' start point
+        a = seg.pseudoangle_to_point(spt((0, -20)))
+        self.assertAlmostEqual(a, 2.0)
+
+        # check same as far end
+        a = seg.pseudoangle_to_point(spt((0, 10)))
+        self.assertAlmostEqual(a, 0.0)
+
+        # check same as near end
+        a = seg.pseudoangle_to_point(spt((0, 0)))
+        self.assertAlmostEqual(a, 0.0)
+
+        show_relangle_debug = True
+        if show_relangle_debug:
+            print
+        
+        for a_test in np.linspace(188.0, 202.0, 9, endpoint=True):
+            x = math.cos(d2r(a_test))
+            y = math.sin(d2r(a_test))
+            p3 = spt((y, x))
+            ang = r2d(seg.angle_to_point(p3))
+            psa = seg.pseudoangle_to_point(p3)
+            psc = (psa + 4.0) % 4.0
+            if show_relangle_debug:
+                print '@t={:5.1f} ang={:5.1f} psa={:9.5f} psc={:9.5f}'.format(
+                    a_test, ang, psa, psc)
+
     def test_seg_intersection(self):
         seg1 = sph.SphGcSeg(spt((0, 30)), spt((0, 50)))
         seg2 = sph.SphGcSeg(spt((0, 30)), spt((60, 30)))

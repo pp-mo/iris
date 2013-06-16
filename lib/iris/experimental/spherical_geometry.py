@@ -168,6 +168,14 @@ class SphGcSeg(object):
             result = -result
         return result
 
+    def pseudoangle_to_point(self, point):
+        # Angle from AB to AP
+        result = 1.0 - self._cos_angle_to_point(point)
+        if abs(result) > COS_ANGLE_ZERO_MAGNITUDE \
+                and self.has_point_on_left_side(point) < 0.0:
+            result = -result
+        return result
+
     def intersection_points_with_other(self, other):
         # Return the (two) intersection points with the other segment.
         # N.B. returns None if the two are parallel
@@ -248,9 +256,9 @@ class SphAcwConvexPolygon(object):
         # Make a reference edge from the centre to points[0]
         edge0 = SphGcSeg(centre_point, points[0])
         # Calculate angles from reference edge to all points
-        angles = [edge0.angle_to_point(p) for p in points]
+        angles = [edge0.pseudoangle_to_point(p) for p in points]
         # Sort points into this order, with original [0] at start
-        angles = [(angle + 360.0) % 360.0 for angle in angles]
+        angles = [(angle + 4.0) % 4.0 for angle in angles]
         points_and_angles = zip(points, angles)
         points_and_angles_sorted = sorted(points_and_angles,
                                           key=lambda p_and_a: p_and_a[1])
