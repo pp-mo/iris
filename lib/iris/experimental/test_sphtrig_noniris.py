@@ -453,20 +453,26 @@ class TestSphGcSeg(FakeIrisTest):
         a = seg.pseudoangle_to_point(spt((0, 0)))
         self.assertAlmostEqual(a, 0.0)
 
-        show_relangle_debug = True
+        show_relangle_debug = False
         if show_relangle_debug:
             print
-        
-        for a_test in np.linspace(188.0, 202.0, 9, endpoint=True):
+        n_tests = 15
+        results = np.empty((n_tests))
+        for i_test, a_test in enumerate(np.linspace(-179.99, 179.99, n_tests, endpoint=True)):
             x = math.cos(d2r(a_test))
             y = math.sin(d2r(a_test))
             p3 = spt((y, x))
             ang = r2d(seg.angle_to_point(p3))
+            segang = int(((ang + 360.0) % 360) / 90.0)
             psa = seg.pseudoangle_to_point(p3)
             psc = (psa + 4.0) % 4.0
+            segpsa = int(psc)
             if show_relangle_debug:
-                print '@t={:5.1f} ang={:5.1f} psa={:9.5f} psc={:9.5f}'.format(
-                    a_test, ang, psa, psc)
+                print '@t={:5.1f} ang={:5.1f} psa={:9.5f} psc={:9.5f} segang/segpsa={:1d}/{:1d} '.format(
+                    a_test, ang, psa, psc, segang, segpsa)
+            self.assertEqual(segpsa, segang)
+            results[i_test] = psa
+        self.assertTrue(monotonic(np.array(results)))
 
     def test_seg_intersection(self):
         seg1 = sph.SphGcSeg(spt((0, 30)), spt((0, 50)))

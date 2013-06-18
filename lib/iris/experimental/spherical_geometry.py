@@ -26,6 +26,7 @@ class ZeroPointLatlonError(ValueError):
         super(ZeroPointLatlonError, self).__init__(*args, **kwargs)
 
 POINT_ZERO_MAGNITUDE = 1e-15
+ANGLE_ZERO_MAGNITUDE = 1e-8
 COS_ANGLE_ZERO_MAGNITUDE = 1e-8
 
 def convert_xyz_to_latlon(x, y, z):
@@ -120,7 +121,6 @@ class SphGcSeg(object):
         self.point_a = sph_point(point_a)
         self.point_b = sph_point(point_b)
         self.pole = self.point_b.cross_product(self.point_a)
-        self.colinear_tolerance = COS_ANGLE_ZERO_MAGNITUDE
 
     def reverse(self):
         return SphGcSeg(self.point_b, self.point_a)
@@ -129,14 +129,14 @@ class SphGcSeg(object):
         """
         Returns >0 (left), <1 (right) or =0.0 (close to the line).
 
-        'self.colinear_tolerance' defines a tolerance zone near the line
+        'COS_ANGLE_ZERO_MAGNITUDE' defines a tolerance zone near the line
         (i.e. 'nearly colinear'), where 0.0 is always returned.
         So the caller can use, for example. '>' or '>=' as required, which will
         automatically ignore 'small' values of the wrong sign.
 
         """
         dot = self.pole.dot_product(point)
-        if abs(dot) < self.colinear_tolerance:
+        if abs(dot) < COS_ANGLE_ZERO_MAGNITUDE:
             return 0.0
         return -dot
 
@@ -163,7 +163,7 @@ class SphGcSeg(object):
     def angle_to_point(self, point):
         # Angle from AB to AP
         result = math.acos(self._cos_angle_to_point(point))
-        if abs(result) > COS_ANGLE_ZERO_MAGNITUDE \
+        if abs(result) > ANGLE_ZERO_MAGNITUDE \
                 and self.has_point_on_left_side(point) < 0.0:
             result = -result
         return result
