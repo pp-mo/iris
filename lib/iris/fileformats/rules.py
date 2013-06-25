@@ -331,9 +331,6 @@ class Rule(object):
         self._conditions = conditions
         self._actions = actions
         self._exec_actions = []
-        self._action_caches = {}
-            # Action result memos, indexed by action-number
-            # e.g _action_caches[i][(field.attrib1, field.attrib2)] = result
 
         self.id = str(hash((tuple(self._conditions), tuple(self._actions))))
 
@@ -348,6 +345,9 @@ class Rule(object):
             if not action:
                 action = 'None'
             self._create_action_method(i, action)
+
+        # Reset any actions caches
+        self.reset_action_caches()
 
     def _create_conditions_method(self):
         # Bundle all the conditions into one big string.
@@ -378,7 +378,7 @@ class Rule(object):
 
     def get_action_result(self, i, field, cube):
         # This is overloaded by FunctionRule
-        return exec_action(self, i, field, cube)
+        return self.exec_action(i, field, cube)
     
     def reset_action_caches(self):
         # Used by FunctionRules, otherwise no action
@@ -450,7 +450,7 @@ class Rule(object):
 
         return factories
 
-ENABLE_RULE_RESULT_CACHING = False
+ENABLE_RULE_RESULT_CACHING = True
 _DEBUG_RULE_CACHING = False
 
 class FunctionRule(Rule):
@@ -464,9 +464,9 @@ class FunctionRule(Rule):
         exec 'self._exec_actions.append(self._exec_action_%d)' % i
 
     def reset_action_caches(self):
-        # Create a fresh cache for all our actions
-        for (i, action) in enumerate(self._actions):
-            self._action_caches[i] = {}
+        # Make an empty cache for each action, i.e. self._action_caches[i] = {}
+        n_actions = len(self._actions)
+        self._action_caches = {i_action:{} for i_action in range(n_actions)}
 
     def get_action_result(self, i, field, cube):
         # Overloaded form that caches results (aka memoising)
@@ -483,7 +483,9 @@ class FunctionRule(Rule):
         action_cache = self._action_caches[i]
         action_keynames = action_cache.get('__field_keynames', [])
         # NOTE: at first, this tuple will be empty
-        result_keys = tuple([(keyname, getattr(field, keyname))
+        result_keys = tuple([(keyname,
+                              field.element_value_as_hashable(
+                                  getattr(field, keyname)))
                              for keyname in action_keynames])
         if result_keys in action_cache:
             # seen this one before !
@@ -542,12 +544,22 @@ class FunctionRule(Rule):
                                                            used_keys))
         result_keys = tuple([(keyname, element_values[keyname])
                              for keyname in used_keys])
+
         # cache this result, and return it
         if _DEBUG_RULE_CACHING:
             print '  Stored new result:'
             print '    action: {}:'.format(self._actions[i])
             print '    keys: {}'.format(element_values)
             print '    result: {!r}:'.format(result)
+
+        try:
+            h = hash(result_keys)
+        except TypeError:
+            print '!!!  Unhashable action key ?  !!!'
+            print '    action: {}:'.format(self._actions[i])
+            print '    keys: {}'.format(element_values)
+            print '    result: {!r}:'.format(result)
+            raise Exception()
         action_cache[result_keys] = result
         return result
 

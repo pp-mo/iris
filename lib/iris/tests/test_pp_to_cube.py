@@ -33,6 +33,7 @@ class TestPPLoadCustom(tests.IrisTest):
     def setUp(self):
         iris.fileformats.pp._ensure_load_rules_loaded()
         self.load_rules = iris.fileformats.pp._load_rules
+        self.load_rules.reset_action_caches()
         self.subcubes = iris.cube.CubeList()
         filename = tests.get_data_path(('PP', 'aPPglob1', 'global.pp'))
         self.template = iris.fileformats.pp.load(filename).next()

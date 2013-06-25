@@ -809,6 +809,17 @@ class PPField(object):
         """
         self._element_access_log = None
 
+    @staticmethod
+    def element_value_as_hashable(value):
+        if not isinstance(value, np.ndarray):
+            return value
+        # 'Else' will allow a 1-D array, but nothing more complex
+        if value.ndim != 1:
+            raise Exception(
+                'pp element Array is not 1d, shape={}'.format(
+                    value.ndim))
+        return tuple(value)
+
     def __getattribute__(self, attname):
         """
         Intercept low-level attribute access, for logging.
@@ -822,7 +833,8 @@ class PPField(object):
             logto = self._element_access_log
             if logto is not None and attname in self.__slots__:
 #                print 'logging: .{} --> {}'.format(attname, result)
-                logto.append((attname, result))
+                logto.append((attname, 
+                              self.element_value_as_hashable(result)))
         return result
 
     @contextlib.contextmanager
