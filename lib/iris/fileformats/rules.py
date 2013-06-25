@@ -294,6 +294,19 @@ def calculate_forecast_period(time, forecast_reference_time):
     return forecast_period
 
 
+class GetattrCaptureWrapper(object):
+    def __init__(self, target):
+        self.target = target
+        self.target_fetches = {}
+    def __getattr__(self, attname):
+        result = getattr(self.target, attname)
+        if attname in self.target_fetches:
+            assert result == self.target_fetches[attname]
+        else:
+            self.target_fetches[attname] = result
+        return result
+
+
 class Rule(object):
     """
     A collection of condition expressions and their associated action expressions.
@@ -318,6 +331,9 @@ class Rule(object):
         self._conditions = conditions
         self._actions = actions
         self._exec_actions = []
+        self._action_caches = {}
+            # Action result memos, indexed by action-number
+            # e.g _action_caches[i][(field.attrib1, field.attrib2)] = result
 
         self.id = str(hash((tuple(self._conditions), tuple(self._actions))))
 
@@ -350,10 +366,24 @@ class Rule(object):
     def _create_action_method(self, i, action):
         pass
     
-    @abc.abstractmethod
-    def _process_action_result(self, obj, cube):
-        pass    
+    def exec_action(self, i, field, cube):
+        # Define the variables which the eval command should be able to see
+        f = field
+        pp = field
+        grib = field
+        cm = cube
+        # Execute the actual action code + return the result
+        obj = self._exec_actions[i](field, f, pp, grib, cm)
+        return obj
+
+    def get_action_result(self, i, field, cube):
+        # This is overloaded by FunctionRule
+        return exec_action(self, i, field, cube)
     
+    def reset_action_caches(self):
+        # Used by FunctionRules, otherwise no action
+        pass
+        
     def __repr__(self):
         string = "IF\n"
         string += '\n'.join(self._conditions)
@@ -380,7 +410,7 @@ class Rule(object):
     def _matches_field(self, field):
         """Simple wrapper onto evaluates_true in the case where cube is None."""
         return self.evaluates_true(None, field)
-        
+
     def run_actions(self, cube, field):
         """
         Adds to the given cube based on the return values of all the actions.
@@ -398,29 +428,25 @@ class Rule(object):
             globals().update(iris.unit.__dict__)
             _import_pending = False
         
-        # Define the variables which the eval command should be able to see
-        f = field
-        pp = field
-        grib = field
-        cm = cube
         
         factories = []
         for i, action in enumerate(self._actions):
-            try:
+#            try:
                 # Run this action.
-                obj = self._exec_actions[i](field, f, pp, grib, cm)
+#                obj = self._exec_actions[i](field, f, pp, grib, cm)
+                obj = self.get_action_result(i, field, cube)
                 # Process the return value (if any), e.g a CM object or None.
                 action_factory = self._process_action_result(obj, cube)
                 if action_factory:
                     factories.append(action_factory)
 
-            except iris.exceptions.CoordinateNotFoundError, err:
-                print >> sys.stderr, 'Failed (msg:%(error)s) to find coordinate, perhaps consider running last: %(command)s' % {'command':action, 'error': err}
-            except AttributeError, err:
-                print >> sys.stderr, 'Failed to get value (%(error)s) to execute: %(command)s' % {'command':action, 'error': err}
-            except Exception, err:
-                print >> sys.stderr, 'Failed (msg:%(error)s) to run:\n    %(command)s\nFrom the rule:\n%(me)r' % {'me':self, 'command':action, 'error': err}
-                raise err
+#            except iris.exceptions.CoordinateNotFoundError, err:
+#                print >> sys.stderr, 'Failed (msg:%(error)s) to find coordinate, perhaps consider running last: %(command)s' % {'command':action, 'error': err}
+#            except AttributeError, err:
+#                print >> sys.stderr, 'Failed to get value (%(error)s) to execute: %(command)s' % {'command':action, 'error': err}
+#            except Exception, err:
+#                print >> sys.stderr, 'Failed (msg:%(error)s) to run:\n    %(command)s\nFrom the rule:\n%(me)r' % {'me':self, 'command':action, 'error': err}
+#                raise err
 
         return factories
 
@@ -434,6 +460,49 @@ class FunctionRule(Rule):
         exec 'self._exec_action_%d = types.MethodType(_exec_action_%d, self, type(self))' % (i, i)
         # Add to our list of actions.
         exec 'self._exec_actions.append(self._exec_action_%d)' % i
+
+    def reset_action_caches(self):
+        # Create a fresh cache for all our actions
+        for (i, action) in enumerate(self._actions):
+            self._action_caches[i] = {}
+
+    def get_action_result(self, i, field, cube):
+        # Overloaded form that caches results (aka memoising)
+        action_cache = self._action_caches[i]
+        action_keynames = action_cache.get('__field_keynames', [])
+        # NOTE: at first, this tuple will be empty
+        result_keys = tuple([(keyname, getattr(field, keyname))
+                             for keyname in action_keynames])
+        if result_keys in action_cache:
+            # seen this one before !
+            return action_cache[result_keys]
+
+        # 'Else': perform the action + cache result for future reference
+        # Run the action via a wrapper to capture the field attributes accessed
+        field_wrapper = GetattrCaptureWrapper(field)
+        cube_wrapper = GetattrCaptureWrapper(cube)
+        result = self.exec_action(i, field_wrapper, cube_wrapper)
+        if cube_wrapper.target_fetches:
+            # The action reads from the cube
+            # We can't handle that = result may change, so don't cache it
+            return result
+        # Work out or check the field attributes referred to
+        used_keys = sorted(field_wrapper.target_fetches.keys())
+        if action_keynames == []:
+            # This is the first...
+            action_cache['__field_keynames'] = used_keys
+        else:
+            if used_keys != action_keynames:
+                raise Exception('Rule action arguments not consistent.'
+                                '\n previously used field attributes : {}'
+                                '\n now using : {}'.format(action_keynames,
+                                                           used_keys))
+        result_keys = tuple([(keyname,
+                              field_wrapper.target_fetches[keyname])
+                             for keyname in used_keys])
+        # cache this result, and return it
+        action_cache[result_keys] = result
+        return result
 
     def _process_action_result(self, obj, cube):
         """Process the result of an action."""
@@ -569,6 +638,11 @@ class RulesContainer(object):
             self._rules.append(self.rule_type(conditions, actions))
         file.close()
             
+    def reset_action_caches(self):
+        # Create a fresh cache for all our actions
+        for i, rule in enumerate(self._rules):
+            rule.reset_action_caches()
+
     def result(self, field):
         """
         Return the :class:`iris.cube.Cube` resulting from running this
@@ -790,6 +864,8 @@ def load_cubes(filenames, user_callback, loader):
 
     if isinstance(filenames, basestring):
         filenames = [filenames]
+
+    loader.load_rules.reset_action_caches()
 
     for filename in filenames:
         for field in loader.field_generator(filename, **loader.field_generator_kwargs):
