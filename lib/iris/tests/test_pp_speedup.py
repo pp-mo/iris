@@ -33,11 +33,22 @@ TEST_ONEFIELD_FILEPATH = TEST_SPEED_DATADIR + '/onecube.pp'
 
 def testit():
 #    test_filepath = TEST_LARGER_PARTDATA_FILEPATH
-    test_filepath = TEST_PARTDATA_FILEPATH
+#    test_filepath = TEST_PARTDATA_FILEPATH
+    test_filepath = TEST_ONEFIELD_FILEPATH
 
     print 'Pre-loading...'
     cube = iris.load_cube(test_filepath, 'eastward_wind')
     print cube
+
+    test_filepath = TEST_PARTDATA_FILEPATH
+#    print
+#    print 'Raw load with timing (caching enabled)...'
+#    iris.fileformats.rules.ENABLE_RULE_RESULT_CACHING = True
+#    with TimedBlock() as block_timer:
+#        cube = iris.load_raw(test_filepath, 'eastward_wind')
+#    t_with = block_timer.seconds()
+#    print '  load time:', t_with
+#    print
 
     n_retries = 5
     t_with_all = []
@@ -45,14 +56,14 @@ def testit():
     for i_retry in range(n_retries):
         print
         print 'Raw load with timing (enabled)...'
-        iris.fileformats.rules.ENABLE_ADDCOORD_SHORTCUT = True
+        iris.fileformats.rules.ENABLE_RULE_RESULT_CACHING = True
         with TimedBlock() as block_timer:
             cube = iris.load_raw(test_filepath, 'eastward_wind')
         t_with = block_timer.seconds()
         print '  load time:', t_with
         print
         print 'Re-load with timing (DISABLED)...'
-        iris.fileformats.rules.ENABLE_ADDCOORD_SHORTCUT = False
+        iris.fileformats.rules.ENABLE_RULE_RESULT_CACHING = False
         with TimedBlock() as block_timer:
             cube = iris.load_raw(test_filepath, 'eastward_wind')
         t_without = block_timer.seconds()

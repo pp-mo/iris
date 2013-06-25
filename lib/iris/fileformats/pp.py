@@ -21,6 +21,7 @@ Provides UK Met Office Post Process (PP) format specific capabilities.
 
 import abc
 import collections
+import contextlib
 from copy import deepcopy
 import itertools
 import operator
@@ -748,6 +749,10 @@ def _read_data(pp_file, lbpack, data_len, data_shape, data_type, mdi):
 _SPECIAL_HEADERS = ('lbtim', 'lbcode', 'lbpack', 'lbproc',
                     'data', 'data_manager', 'stash', 't1', 't2')
 
+_SPECIAL_ELEMENT_NAMES = ['_' + name
+                          for name in _SPECIAL_HEADERS] \
+                         + ['_element_access_log', '__slots__']
+
 def _header_defn(release_number):
     """
     Returns the zero-indexed header definition for a particular release of a PPField.
@@ -769,8 +774,7 @@ def _pp_attribute_names(header_defn):
     normal_headers = list(name for name, positions in header_defn if name not in _SPECIAL_HEADERS)
     special_headers = list('_' + name for name in _SPECIAL_HEADERS)
     extra_data = EXTRA_DATA.values()
-    return normal_headers + special_headers + extra_data
-
+    return normal_headers + special_headers + extra_data + ['_element_access_log']
 
 class PPField(object):
     """
@@ -803,7 +807,41 @@ class PPField(object):
             For PP field loading see :func:`load`.
         
         """
-    
+        self._element_access_log = None
+
+    def __getattribute__(self, attname):
+        """
+        Intercept low-level attribute access, for logging.
+
+        Enabled by self.capture_basic_accesses (see below).
+        Used by rules management to capture the field basic elements referenced
+        by a rule action (for memoizing action results).
+        """
+        result = super(PPField, self).__getattribute__(attname)
+        if attname not in _SPECIAL_ELEMENT_NAMES:
+            logto = self._element_access_log
+            if logto is not None and attname in self.__slots__:
+#                print 'logging: .{} --> {}'.format(attname, result)
+                logto.append((attname, result))
+        return result
+
+    @contextlib.contextmanager
+    def capture_basic_accesses(self):
+        """
+        Return a context manager to log element accesses.
+
+        Used by rules to cache (memoize) certain results.
+        Usage as follows:
+            with field.capture_basic_accesses() as logger:
+                operate_function(field)
+            for attname, value in logger.fetches:
+                assert getattr(field, attname) == value
+        """
+        logged_accesses = []
+        self._element_access_log = logged_accesses
+        yield logged_accesses
+        self._element_access_log = None
+
     @abc.abstractproperty
     def t1(self):
         pass

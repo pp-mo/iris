@@ -399,11 +399,11 @@ class Rule(object):
         grib = field
         cm = cube
         
-        try:
-            result = self._exec_conditions(field, f, pp, grib, cm)
-        except Exception, err:
-            print >> sys.stderr, 'Condition failed to run conditions: %s : %s' % (self._conditions, err)
-            raise err
+#        try:
+        result = self._exec_conditions(field, f, pp, grib, cm)
+#        except Exception, err:
+#            print >> sys.stderr, 'Condition failed to run conditions: %s : %s' % (self._conditions, err)
+#            raise err
                                
         return result
 
@@ -450,6 +450,8 @@ class Rule(object):
 
         return factories
 
+ENABLE_RULE_RESULT_CACHING = False
+_DEBUG_RULE_CACHING = False
 
 class FunctionRule(Rule):
     """A Rule with values returned by its actions."""
@@ -468,6 +470,16 @@ class FunctionRule(Rule):
 
     def get_action_result(self, i, field, cube):
         # Overloaded form that caches results (aka memoising)
+        if not ENABLE_RULE_RESULT_CACHING \
+                or not hasattr(field, 'capture_basic_accesses'):
+            # Disable, or field type does not provide access monitoring
+            return self.exec_action(i, field, cube)
+        # 'Else': manage results caching
+
+        if _DEBUG_RULE_CACHING:
+            print
+            print 'Caching action..'
+        # Look for existing stored result
         action_cache = self._action_caches[i]
         action_keynames = action_cache.get('__field_keynames', [])
         # NOTE: at first, this tuple will be empty
@@ -475,21 +487,52 @@ class FunctionRule(Rule):
                              for keyname in action_keynames])
         if result_keys in action_cache:
             # seen this one before !
-            return action_cache[result_keys]
-
-        # 'Else': perform the action + cache result for future reference
-        # Run the action via a wrapper to capture the field attributes accessed
-        field_wrapper = GetattrCaptureWrapper(field)
-        cube_wrapper = GetattrCaptureWrapper(cube)
-        result = self.exec_action(i, field_wrapper, cube_wrapper)
-        if cube_wrapper.target_fetches:
-            # The action reads from the cube
-            # We can't handle that = result may change, so don't cache it
+            result = action_cache[result_keys]
+            if _DEBUG_RULE_CACHING:
+                print '  Returned cached:'
+                print '    action {}:'.format(self._actions[i])
+                print '    keys: {}'.format(result_keys)
+                print '    result: {!r}:'.format(result)
             return result
+        # 'Else': perform the action + cache result for future reference
+
+        # Create a wrapper to check the action does not access the cube data
+        cube_wrapper = GetattrCaptureWrapper(cube)
+
+        # Run the action code while logging field accesses
+        with field.capture_basic_accesses() as field_accesses:
+            result = self.exec_action(i, field, cube_wrapper)
+
+
+        # Abort if the action read anything from the cube.
+        if cube_wrapper.target_fetches:
+            # The action read something from the cube.
+            # We can't handle that, as result may change, so don't cache it
+#            if _DEBUG_RULE_CACHING:
+            print '  Skipped for cube-access:'
+            print '    action: {}:'.format(self._actions[i])
+            print '    result: {!r}:'.format(result)
+            print 
+            return result
+
+        # Construct dictionary of values, and check no changing ones
+        element_values = {}
+        for attname, value in field_accesses:
+            if attname in element_values:
+                if value != element_values[attname]:
+                    all_vals = [val for name, val in field_accesses
+                                if name == attname]
+                    raise Exception('Multiple accesses for field item {}. '
+                                    ' various values = {}'.format(attname,
+                                                                  all_vals))
+            else:
+                element_values[attname] = value
+
+
         # Work out or check the field attributes referred to
-        used_keys = sorted(field_wrapper.target_fetches.keys())
+        used_keys = sorted(element_values.keys())
         if action_keynames == []:
-            # This is the first...
+            # This is the first occasion, which defines the keys expected ...
             action_cache['__field_keynames'] = used_keys
         else:
             if used_keys != action_keynames:
@@ -497,10 +540,14 @@ class FunctionRule(Rule):
                                 '\n previously used field attributes : {}'
                                 '\n now using : {}'.format(action_keynames,
                                                            used_keys))
-        result_keys = tuple([(keyname,
-                              field_wrapper.target_fetches[keyname])
+        result_keys = tuple([(keyname, element_values[keyname])
                              for keyname in used_keys])
         # cache this result, and return it
+        if _DEBUG_RULE_CACHING:
+            print '  Stored new result:'
+            print '    action: {}:'.format(self._actions[i])
+            print '    keys: {}'.format(element_values)
+            print '    result: {!r}:'.format(result)
         action_cache[result_keys] = result
         return result
 
