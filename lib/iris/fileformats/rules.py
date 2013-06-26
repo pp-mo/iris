@@ -484,7 +484,7 @@ class FunctionRule(Rule):
         action_keynames = action_cache.get('__field_keynames', [])
         # NOTE: at first, this tuple will be empty
         result_keys = tuple([(keyname,
-                              field.element_value_as_hashable(
+                              iris.fileformats.pp.element_value_as_hashable(
                                   getattr(field, keyname)))
                              for keyname in action_keynames])
         if result_keys in action_cache:
@@ -505,6 +505,17 @@ class FunctionRule(Rule):
         with field.capture_basic_accesses() as field_accesses:
             result = self.exec_action(i, field, cube_wrapper)
 
+#        if not field_accesses:
+#            # problem here, retry this one...
+#            iris.fileformats.pp.DEBUG_ACCESS_CAPTURE = True
+#            global _DEBUG_RULE_CACHING
+#            _DEBUG_RULE_CACHING = True
+#            print 'action performs no target access ?'
+#            print 'action = ', self._actions[i]
+#            with field.capture_basic_accesses() as field_accesses:
+#                result = self.exec_action(i, field, cube_wrapper)
+#            print 'accesses = ', field_accesses
+#            raise Exception('action has no visible field access.')
 
         # Abort if the action read anything from the cube.
         if cube_wrapper.target_fetches:
@@ -552,14 +563,18 @@ class FunctionRule(Rule):
             print '    keys: {}'.format(element_values)
             print '    result: {!r}:'.format(result)
 
-        try:
-            h = hash(result_keys)
-        except TypeError:
-            print '!!!  Unhashable action key ?  !!!'
-            print '    action: {}:'.format(self._actions[i])
-            print '    keys: {}'.format(element_values)
-            print '    result: {!r}:'.format(result)
-            raise Exception()
+        for key in result_keys:
+            try:
+                h = hash(key)
+            except TypeError:
+                print '!!!  Unhashable action key ?  !!!'
+                print '    action: {}:'.format(self._actions[i])
+                print '    key: <{}>{!r}'.format(type(key), key)
+                if hasattr(key, '__getitem__'):
+                    for i_item, item in enumerate(key):
+                        print '   elem#{}: <{}>{!r}'.format(
+                            i_item, type(item), item)
+                raise Exception()
         action_cache[result_keys] = result
         return result
 
@@ -640,6 +655,7 @@ class ProcedureRule(Rule):
         if condition:
             warnings.warn(warning)
 
+_PROBLEM_RULE_SEEN = True
 
 class RulesContainer(object):
     """
@@ -764,7 +780,25 @@ class RulesContainer(object):
         for rule in self._rules:
             if rule.evaluates_true(cube, field):
                 matching_rules.append(rule)
+#                global _PROBLEM_RULE_SEEN
+#                if _PROBLEM_RULE_SEEN or len(matching_rules) != 5:
                 rule_factories = rule.run_actions(cube, field)
+#                else:
+#                    _PROBLEM_RULE_SEEN = True
+#                    print 'Problem rule hit here ... : ', rule
+#                    iris.fileformats.pp.DEBUG_ACCESS_CAPTURE = True
+#                    _DEBUG_RULE_CACHING = True
+#                    rule_factories = rule.run_actions(cube, field)
+#                    print 'Done...'
+#                    iris.fileformats.pp.DEBUG_ACCESS_CAPTURE = False
+#                    _DEBUG_RULE_CACHING = False
+#                    print 'rule actions dump ...'
+#                    for i_action, action in enumerate(rule._actions):
+#                        print 'action#{:d}: {}'.format(i_action, action)
+#                        if hasattr(rule, '_action_caches'):
+#                            print '  cache.. : ',rule._action_caches[i_action]
+#                        print
+##                    exit(0)
                 if rule_factories:
                     factories.extend(rule_factories)
         return RuleResult(cube, matching_rules, factories)
@@ -926,8 +960,11 @@ def load_cubes(filenames, user_callback, loader):
 
     loader.load_rules.reset_action_caches()
 
+#    i_field = 0
     for filename in filenames:
         for field in loader.field_generator(filename, **loader.field_generator_kwargs):
+#            print 'Field #{:d}'.format(i_field)
+#            i_field += 1
             # Convert the field to a Cube, logging the rules that were used
             rules_result = loader.load_rules.result(field)
             cube = rules_result.cube
@@ -942,6 +979,27 @@ def load_cubes(filenames, user_callback, loader):
             rules = loader.cross_ref_rules.matching_rules(field)
             for rule in rules:
                 reference, = rule.run_actions(cube, field)
+#                print 'reference result : '
+#                print reference
+#                print cube
+#                print 'matching LOAD rules dump ...'
+#                for i_rule, rule in enumerate(rules_result.matching_rules):
+#                    print '---- load-rule#{:d}----'.format(i_rule)
+#                    print rule
+#                    for i_action, action in enumerate(rule._actions):
+#                        print 'action#{:d}: {}'.format(i_action, action)
+#                        if hasattr(rule, '_action_caches'):
+#                            print '  cache.. : ',rule._action_caches[i_action]
+#                        print
+#                print 'matching XREF rules dump ...'
+#                for i_rule, rule in enumerate(rules):
+#                    print '---- xref-rule#{:d}----'.format(i_rule)
+#                    print rule
+#                    for i_action, action in enumerate(rule._actions):
+#                        print 'action#{:d}: {}', i_action, action
+#                        if hasattr(rule, '_action_caches'):
+#                            print '  cache.. : ',rule._action_caches[i_action]
+#                        print
                 name = reference.name
                 # Register this cube as a source cube for the named
                 # reference.

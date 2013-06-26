@@ -749,9 +749,15 @@ def _read_data(pp_file, lbpack, data_len, data_shape, data_type, mdi):
 _SPECIAL_HEADERS = ('lbtim', 'lbcode', 'lbpack', 'lbproc',
                     'data', 'data_manager', 'stash', 't1', 't2')
 
-_SPECIAL_ELEMENT_NAMES = ['_' + name
-                          for name in _SPECIAL_HEADERS] \
-                         + ['_element_access_log', '__slots__']
+#_NOCACHE_ELEMENT_NAMES = ['_' + name
+#                          for name in _SPECIAL_HEADERS] \
+#                         + ['_element_access_log', '__slots__']
+
+_NOCACHE_ELEMENT_NAMES = ['t1', 't2', 'stash',
+                          '_element_access_log', '__slots__'] + \
+                          ['_' + name for name in _SPECIAL_HEADERS]
+
+DEBUG_ACCESS_CAPTURE = False
 
 def _header_defn(release_number):
     """
@@ -775,6 +781,20 @@ def _pp_attribute_names(header_defn):
     special_headers = list('_' + name for name in _SPECIAL_HEADERS)
     extra_data = EXTRA_DATA.values()
     return normal_headers + special_headers + extra_data + ['_element_access_log']
+
+
+def element_value_as_hashable(value):
+    if not isinstance(value, np.ndarray):
+        return value
+    # 'Else' will allow a 1-D array, but nothing more complex
+    if value.ndim != 1:
+        raise Exception(
+            'pp element Array is not 1d, shape={}'.format(
+                value.ndim))
+    return tuple(value)
+
+_ATTDEBUG_PREFIX = ''
+_ATTDEBUG_INDENT = '  '
 
 class PPField(object):
     """
@@ -809,17 +829,6 @@ class PPField(object):
         """
         self._element_access_log = None
 
-    @staticmethod
-    def element_value_as_hashable(value):
-        if not isinstance(value, np.ndarray):
-            return value
-        # 'Else' will allow a 1-D array, but nothing more complex
-        if value.ndim != 1:
-            raise Exception(
-                'pp element Array is not 1d, shape={}'.format(
-                    value.ndim))
-        return tuple(value)
-
     def __getattribute__(self, attname):
         """
         Intercept low-level attribute access, for logging.
@@ -828,13 +837,29 @@ class PPField(object):
         Used by rules management to capture the field basic elements referenced
         by a rule action (for memoizing action results).
         """
+        if DEBUG_ACCESS_CAPTURE:
+            global _ATTDEBUG_PREFIX
+            indent = _ATTDEBUG_PREFIX
+            _ATTDEBUG_PREFIX += _ATTDEBUG_INDENT
+            print indent+'get: .{}'.format(attname)
         result = super(PPField, self).__getattribute__(attname)
-        if attname not in _SPECIAL_ELEMENT_NAMES:
+        if attname not in _NOCACHE_ELEMENT_NAMES:
             logto = self._element_access_log
-            if logto is not None and attname in self.__slots__:
-#                print 'logging: .{} --> {}'.format(attname, result)
-                logto.append((attname, 
-                              self.element_value_as_hashable(result)))
+            if logto is not None: #and attname in self.__slots__:
+                if DEBUG_ACCESS_CAPTURE and logto is not None:
+                    print indent+'logging: .{} --> {}'.format(attname, result)
+                logto.append((attname,
+                              element_value_as_hashable(result)))
+            else:
+                if DEBUG_ACCESS_CAPTURE:
+                    if logto is not None:
+                        print indent+'unlogged: .{}'.format(attname)
+                    else:
+                        print indent+'(logging off): .{}'.format(attname)
+        elif DEBUG_ACCESS_CAPTURE:
+            print indent+'excluded: .{} --> {}'.format(attname, result)
+        if DEBUG_ACCESS_CAPTURE:
+            _ATTDEBUG_PREFIX = indent
         return result
 
     @contextlib.contextmanager
@@ -890,6 +915,9 @@ class PPField(object):
         """A stash property giving access to the associated STASH object, now supporting __eq__"""
         if not hasattr(self, '_stash'):
             self._stash = STASH(self.lbuser[6], self.lbuser[3] / 1000, self.lbuser[3] % 1000)
+        elif self._element_access_log is not None:
+            # Access primitive elements used, to enable action caching.
+            _ = self.lbuser
         return self._stash
 
     # lbtim
@@ -1279,6 +1307,9 @@ class PPField2(PPField):
     def _get_t1(self):
         if not hasattr(self, '_t1'):
             self._t1 = netcdftime.datetime(self.lbyr, self.lbmon, self.lbdat, self.lbhr, self.lbmin)
+        elif self._element_access_log:
+            # Record the primitive elements used in the calculation.
+            _ = (self.lbyr, self.lbmon, self.lbdat, self.lbhr, self.lbmin)
         return self._t1
     
     def _set_t1(self, dt):
@@ -1297,6 +1328,9 @@ class PPField2(PPField):
     def _get_t2(self):
         if not hasattr(self, '_t2'):
             self._t2 = netcdftime.datetime(self.lbyrd, self.lbmond, self.lbdatd, self.lbhrd, self.lbmind)
+        elif self._element_access_log:
+            # Record the primitive elements used in the calculation.
+            _ = (self.lbyrd, self.lbmond, self.lbdatd, self.lbhrd, self.lbmind)
         return self._t2
 
     def _set_t2(self, dt):
@@ -1324,6 +1358,9 @@ class PPField3(PPField):
     def _get_t1(self):
         if not hasattr(self, '_t1'):
             self._t1 = netcdftime.datetime(self.lbyr, self.lbmon, self.lbdat, self.lbhr, self.lbmin, self.lbsec)
+        elif self._element_access_log:
+            # Record the primitive elements used in the calculation.
+            _ = (self.lbyr, self.lbmon, self.lbdat, self.lbhr, self.lbmin, self.lbsec)
         return self._t1
     
     def _set_t1(self, dt):
@@ -1342,6 +1379,9 @@ class PPField3(PPField):
     def _get_t2(self):
         if not hasattr(self, '_t2'):
             self._t2 = netcdftime.datetime(self.lbyrd, self.lbmond, self.lbdatd, self.lbhrd, self.lbmind, self.lbsecd)
+        elif self._element_access_log:
+            # Record the primitive elements used in the calculation.
+            _ = (self.lbyrd, self.lbmond, self.lbdatd, self.lbhrd, self.lbmind, self.lbsecd)
         return self._t2
 
     def _set_t2(self, dt):

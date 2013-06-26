@@ -20,6 +20,7 @@
 import iris.tests as tests
 
 import os
+import unittest
 
 import iris
 import iris.fileformats.pp
@@ -28,6 +29,10 @@ import iris.util
 import iris.tests.stock
 
 
+skip_fornow = unittest.skip('Just for now.')
+
+
+@skip_fornow
 @iris.tests.skip_data
 class TestPPLoadCustom(tests.IrisTest):
     def setUp(self):
@@ -88,6 +93,7 @@ class TestPPLoadCustom(tests.IrisTest):
         self.assertCML(rules_result.cube, ('pp_rules', 'invalid_units.cml'))
 
 
+@skip_fornow
 class TestReferences(tests.IrisTest):
     def setUp(self):
         target = iris.tests.stock.simple_2d()
@@ -124,6 +130,7 @@ class TestReferences(tests.IrisTest):
         self.assertEqual(new_ref, self.ref)
 
 
+@skip_fornow
 @iris.tests.skip_data
 class TestPPLoading(tests.IrisTest):
     def test_simple(self):
@@ -131,6 +138,18 @@ class TestPPLoading(tests.IrisTest):
         self.assertCML(cube, ('cube_io', 'pp', 'load', 'global.cml'))
 
 
+#EXTRA
+class TestPPLoadLbproc(tests.IrisTest):
+    def test_lbproc(self):
+        data_path = tests.get_data_path(('PP', 'meanMaxMin', '200806081200__qwpb.T24.pp'))
+        # Set up standard name and T+24 constraint
+        constraint = iris.Constraint('air_temperature', forecast_period=24)
+        cubes = iris.load(data_path, constraint)
+        cubes = iris.cube.CubeList([cubes[0], cubes[3], cubes[1], cubes[2], cubes[4]]) 
+        self.assertCML(cubes, ('pp_rules', 'lbproc_mean_max_min.cml'))
+
+
+@skip_fornow
 @iris.tests.skip_data
 class TestPPLoadRules(tests.IrisTest):
     def test_pp_load_rules(self):
@@ -262,6 +281,7 @@ class TestPPLoadRules(tests.IrisTest):
             os.remove(temp_filename)
 
 
+@skip_fornow
 @iris.tests.skip_data
 class TestStdName(tests.IrisTest):
     def test_no_std_name(self):
