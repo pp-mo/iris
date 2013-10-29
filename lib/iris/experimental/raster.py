@@ -24,9 +24,13 @@ TODO: If this module graduates from experimental the (optional) GDAL
       dependency should be added to INSTALL
 
 """
+
+import itertools
 import numpy as np
 from osgeo import gdal, osr
+import shapefile
 
+import cartopy.crs as ccrs
 import iris
 import iris.coord_systems
 import iris.unit
@@ -181,3 +185,53 @@ def export_geotiff(cube, fname):
     y_max = np.max(coord_y.bounds)
     _gdal_write_array(x_min, x_step, y_max, y_step, coord_system, data, fname,
                       'GTiff')
+
+def export_shapefile(cube, output_name):
+    """
+    Output a 2D cube as points in a shapefile.
+
+    Args:
+    * cube (:class:`iris.cube.Cube`):
+    The cube to be exported.  Must be 2D with dimension coordinates on X and Y
+    axes, in a specified, common coordinate system.
+    * output_name (string):
+    A filepath basis to write to.  The actual filenames will be based on this,
+    with various extensions as needed.
+
+    .. note::
+
+        Shapefile projections are not supported.  Instead, all locations are
+        converted to longitude and latitude points, and a .prj file is
+        generated which specifies the coordinate system as lat-lon on WGS84.
+
+    """
+    if cube.ndim != 2:
+        raise ValueError("The cube must be two dimensional.")
+
+    coord_x = cube.coord(axis='X', dim_coords=True)
+    coord_y = cube.coord(axis='Y', dim_coords=True)
+
+    if coord_x is None or coord_y is None or \
+       coord_x.coord_system != coord_y.coord_system or \
+       coord_x.coord_system is None:
+        raise ValueError('The X and Y coordinates must both have the same, '
+                         'specifed CoordSystem.')
+
+    crs_data = coord_x.coord_system.as_cartopy_crs()
+    crs_latlon = ccrs.Geodetic()
+    x_array, y_array = np.meshgrid(coord_x.points, coord_y.points)
+    ll_values = crs_latlon.transform_points(crs_data, x_array, y_array)
+    lons_array = ll_values[..., 0]
+    lats_array = ll_values[..., 1]
+    data = cube.data
+    if cube.coord_dims(coord_x)[0] < cube.coord_dims(coord_y)[0]:
+        data = data.T
+    points_data = itertools.izip(lons_array.flat, lats_array.flat, data.flat)
+
+    writer = shapefile.Writer(shapeType=shapefile.POINT)
+    writer.field('data_value')
+    for x, y, value  in points_data:
+        writer.point(x, y)
+        writer.record(value)
+    writer.save(output_name)
+
