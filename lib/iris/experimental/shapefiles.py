@@ -24,7 +24,7 @@ import cartopy.crs as ccrs
 import iris
 
 
-def export_shapefile(cube, output_name):
+def export_shapefiles(cube, output_name):
     """
     Output a 2D cube as points in a shapefile.
 
