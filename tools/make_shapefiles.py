@@ -18,61 +18,61 @@
 """A script to save a single 2D input field as shapefiles."""
 
 import argparse
-import glob
 import os.path
 
 
 parser = argparse.ArgumentParser(
-    description='Save 2d fields as shapefiles.',
-    epilog=('NOTE: "in_path" may contain wildcards.  In that case, '
-            '"out_path" may only be a directory path.'))
-parser.add_argument('in_path',
-                   help='Path to source file')
-parser.add_argument('out_path', nargs='?', default=None,
-                   help='Path to destination files')
+    description='Save 2d fields as shapefiles.')
+parser.add_argument('in_paths', nargs='+',
+                    help='Paths to source files')
+parser.add_argument('-o', '--out-path', default=None,
+                    help='Alternative filename or directory path for output.')
 parser.add_argument('-y', '--dryrun', action='store_true',
-                   help="Don't perform actual action")
+                    help="Don't perform actual action")
 parser.add_argument('-v', '--verbose', action='store_true',
-                   help="Print extra detail")
+                    help="Print extra detail")
 parser.add_argument('-d', '--debug', action='store_true',
-                   help="Enable debug output")
+                    help="Enable debug output")
 
 args = parser.parse_args()
 
-do_test_only = args.dryrun
+do_dryrun = args.dryrun
 do_debug = args.debug
 do_verbose = args.verbose or do_debug
 if do_debug:
     print 'Args : ', args
 
-in_path, out_path = args.in_path, args.out_path
-if out_path is None:
-    out_path = in_path
+if do_dryrun and do_verbose:
+    print '(Dry run : no actual saves will be performed.)'
 
+in_paths, out_path = args.in_paths, args.out_path
 
 # Fetch extra imports (avoids delay in error responses)
 import iris
 from iris.experimental.shapefiles import export_shapefiles
 
-given_wildcards = in_path.find('*') >= 0 or in_path.find('?') >= 0
-in_filepaths = glob.glob(in_path)
-if not in_filepaths:
-    print 'No input file(s) found for : "{}"'.format(in_path)
+outpath_is_dir = out_path and os.path.isdir(out_path)
+if len(in_paths) > 1 and out_path and not outpath_is_dir:
+    print 'Output path is not directory -- cannot use with multiple inputs'
     exit(1)
 
-for in_filepath in in_filepaths:
-    if given_wildcards:
-        out_filepath = os.path.join(out_path,
-                                    os.path.basename(in_filepath))
-    else:
-        out_filepath = out_path
+for in_filepath in in_paths:
+    out_filepath = in_filepath
+    if out_path:
+        if outpath_is_dir:
+            # Given path is directory
+            out_filepath = os.path.join(out_path,
+                                        os.path.basename(in_filepath))
+        else:
+            # Output path is a complete filename
+            out_filepath = out_path
     if do_verbose:
-        print 'Loading ..', in_filepath
-    if not do_test_only:
+        print 'Loading : "{}" ..'.format(in_filepath)
+    if not do_dryrun:
         cube = iris.load_cube(in_filepath)
     if do_verbose:
-        print '.. Saving ..', out_filepath
-    if not do_test_only:
+        print '.. Saving "{}"'.format(out_filepath)
+    if not do_dryrun:
         export_shapefiles(cube, out_filepath)
-    if do_verbose:
-        print '.. Done.'
+if do_verbose:
+    print 'All Done.'

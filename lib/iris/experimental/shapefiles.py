@@ -80,7 +80,7 @@ def export_shapefiles(cube, output_name):
 
     # Also create a project file.
     # For this we must mimic the path-management of shapefile.Writer.save
-    # so details are cribbed from their.
+    # so the method is cribbed from there.
     standard_latlon_projection_string = (
         'GEOGCS["WGS 84",'
         'DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
