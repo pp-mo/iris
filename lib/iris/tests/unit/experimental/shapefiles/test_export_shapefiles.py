@@ -29,17 +29,25 @@ import iris
 from iris.experimental.shapefiles import export_shapefiles
 import iris.tests.stock as istk
 
+do_make_real_files = True
 
 class Test_export_shapefiles(tests.IrisTest):
-    def test_basic_unrotated(self):
-        # Get a small sample cube on a simple latlon projection
+    def setUp(self):
+        # Make a small sample cube.
         cube = istk.simple_pp()
-        # Take just a small section of the cube
         cube = cube[::10, ::10]
         cube = cube[1:5, 1:4]
+        self.simple_latlon_cube = cube
 
-#        test_filepath = '/net/home/h05/itpp/Iris/sprints/20131028_new-agile_and_shapefiles/scit322_shapefiles_geotiff/tmp_out/test'
-#        export_shapefile(cube, test_filepath)
+    def test_basic_unrotated(self):
+        # Save a simple 2d cube
+        cube = self.simple_latlon_cube
+
+        if do_make_real_files:
+            out_filepath = ('/net/home/h05/itpp/Iris/sprints/'
+                            '20131028_new-agile_and_shapefiles/'
+                            'scit322_shapefiles_geotiff/tmp_out/test_plain')
+            export_shapefiles(cube, out_filepath)
 
         mock_shapefile_module = mock.Mock(spec=['Writer', 'POINT'])
         mock_shapefile_writer = mock.Mock(
@@ -47,9 +55,13 @@ class Test_export_shapefiles(tests.IrisTest):
         mock_shapefile_module.Writer = mock.Mock(
             return_value=mock_shapefile_writer)
         test_filepath = 'an/arbitrary/file_path'
+        mock_file_open_method = mock.mock_open()
         with mock.patch('iris.experimental.shapefiles.shapefile',
                         mock_shapefile_module):
-            export_shapefiles(cube, test_filepath)
+            with mock.patch('iris.experimental.shapefiles.open',
+                            mock_file_open_method,
+                            create=True):
+                export_shapefiles(cube, test_filepath)
 
         # Behavioural testing ...
         # Module has been called just once, to make a 'Writer'
@@ -64,18 +76,18 @@ class Test_export_shapefiles(tests.IrisTest):
         # last writer call had filepath as single argument
         self.assertEqual(mock_shapefile_writer.mock_calls[-1][1],
                          (test_filepath,))
-        # pull out x values from all calls to writer.point
+
+        # pull out x/y/data values from the calls to writer.point
         x_vals = [mock_call[1][0]
                   for mock_call in mock_shapefile_writer.mock_calls
                   if mock_call[0] == 'point']
-        # pull out y values from all calls to writer.point
         y_vals = [mock_call[1][1]
                   for mock_call in mock_shapefile_writer.mock_calls
                   if mock_call[0] == 'point']
-        # pull out data values from all calls to writer.record
         data_vals = [mock_call[1][0]
                      for mock_call in mock_shapefile_writer.mock_calls
                      if mock_call[0] == 'record']
+
         # Check values as expected
         self.assertArrayAllClose(np.array(x_vals)[[0, 4, 8]],
                                  cube.coord('longitude').points)
@@ -83,6 +95,17 @@ class Test_export_shapefiles(tests.IrisTest):
                                  cube.coord('latitude').points)
         self.assertArrayAllClose(data_vals, cube.data.flat)
 
+        # Check that a projection file was opened.
+        self.assertEqual(mock_file_open_method.mock_calls[0][1][0],
+                         test_filepath + '.prj')
+        # Check __enter__ and __exit__ were called, and suitable text written.
+        open_file_mock = mock_file_open_method()
+        self.assertEqual(len(open_file_mock.__enter__.mock_calls), 1)
+        self.assertEqual(open_file_mock.write.mock_calls[0][1][0][:7],
+                         'GEOGCS[')
+        self.assertEqual(len(open_file_mock.__exit__.mock_calls), 1)
+
+#        # Plot results
 #        iplt.pcolormesh(cube)
 #        plt.gca().coastlines()
 #        print
@@ -98,6 +121,7 @@ class Test_export_shapefiles(tests.IrisTest):
 #            )
 #        print cube.data
 #        plt.show()
+
 
 if __name__ == "__main__":
     tests.main()

@@ -18,6 +18,7 @@
 
 import itertools
 import numpy as np
+import os.path
 import shapefile
 
 import cartopy.crs as ccrs
@@ -29,12 +30,16 @@ def export_shapefiles(cube, output_name):
     Output a 2D cube as points in a shapefile.
 
     Args:
+
     * cube (:class:`iris.cube.Cube`):
     The cube to be exported.  Must be 2D with dimension coordinates on X and Y
     axes, in a specified, common coordinate system.
+
     * output_name (string):
     A filepath basis to write to.  The actual filenames will be based on this,
-    with various extensions as needed.
+    with various extensions as appropriate, as provided by
+    :meth:`shapefile.Writer.save`.  A standard projection file is also
+    generated.
 
     .. note::
 
@@ -72,3 +77,15 @@ def export_shapefiles(cube, output_name):
         writer.point(x, y)
         writer.record(value)
     writer.save(output_name)
+    
+    # Also create a project file.
+    # For this we must mimic the path-management of shapefile.Writer.save
+    # so details are cribbed from their.
+    standard_latlon_projection_string = (
+        'GEOGCS["WGS 84",'
+        'DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
+        'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
+    target = output_name
+    target = os.path.splitext(target)[0] + '.prj'
+    with open(target, 'w') as proj_file:
+        proj_file.write(standard_latlon_projection_string)
