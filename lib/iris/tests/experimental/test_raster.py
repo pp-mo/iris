@@ -27,7 +27,8 @@ import PIL.Image
 
 import cartopy.crs as ccrs
 import iris
-from iris.experimental.raster import export_geotiff, export_shapefile
+from iris.experimental.raster import export_geotiff
+from iris.experimental.shapefiles import export_shapefile
 import iris.tests.stock as istk
 
 
@@ -132,13 +133,13 @@ class Test_export_shapefile(tests.IrisTest):
         mock_shapefile_module.Writer = mock.Mock(
             return_value=mock_shapefile_writer)
         test_filepath = 'an/arbitrary/file_path'
-        with mock.patch('iris.experimental.raster.shapefile',
+        with mock.patch('iris.experimental.shapefiles.shapefile',
                         mock_shapefile_module):
             export_shapefile(cube, test_filepath)
 
         # Behavioural testing ...
         # Module has been called just once, to make a 'Writer'
-        self.assertTrue(len(mock_shapefile_module.mock_calls), 1)
+        self.assertEqual(len(mock_shapefile_module.mock_calls), 1)
         self.assertEqual(mock_shapefile_module.mock_calls[0][0], 'Writer')
         # writer.field has been called once with record keys = ['data_value']
         self.assertEqual(len(mock_shapefile_writer.field.mock_calls), 1)
