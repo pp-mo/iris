@@ -77,7 +77,7 @@ def export_shapefiles(cube, output_name):
         writer.point(x, y)
         writer.record(value)
     writer.save(output_name)
-    
+
     # Also create a project file.
     # For this we must mimic the path-management of shapefile.Writer.save
     # so details are cribbed from their.
