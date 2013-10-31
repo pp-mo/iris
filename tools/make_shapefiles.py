@@ -43,7 +43,10 @@ in_paths, out_path = args.in_paths, args.out_path
 
 # Fetch extra imports (avoids delay in error responses)
 import iris
-from iris.experimental.shapefiles import export_shapefiles
+# Import main function unless already defined
+# NOTE: enables script to work with shapefiles module pasted in same file.
+if not 'export_shapefiles' in dir():
+    from iris.experimental.shapefiles import export_shapefiles
 
 outpath_is_dir = out_path and os.path.isdir(out_path)
 if len(in_paths) > 1 and out_path and not outpath_is_dir:
