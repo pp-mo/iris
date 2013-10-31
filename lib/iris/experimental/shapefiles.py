@@ -25,7 +25,17 @@ import cartopy.crs as ccrs
 import iris
 
 
-def export_shapefiles(cube, output_name):
+CRS_PLAIN_LATLON = ccrs.Geodetic()
+
+PROJECTION_STRING_ARCGIS_GEOG_WGS84 = (
+    'GEOGCS["GCS_WGS_1984",'
+    'DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],'
+    'PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433]]')
+
+
+def export_shapefiles(cube, output_name,
+                      shapefile_crs=CRS_PLAIN_LATLON,
+                      prj_file_content=PROJECTION_STRING_ARCGIS_GEOG_WGS84):
     """
     Output a 2D cube as points in a shapefile.
 
@@ -41,11 +51,19 @@ def export_shapefiles(cube, output_name):
     :meth:`shapefile.Writer.save`.  A standard projection file is also
     generated.
 
+    Kwargs:
+
+    * shapefile_crs (:class:`iris.coord_systems.CoordSystem'):
+    Coordinate system that the output is saved in.  (Default is PlateCarree).
+
+    * prj_file_content (string):
+    Content of .prj file, to match 'shapefile_crs'.  Default matches the ArcGIS
+    default projection.  Set to None to suppress any .prj file generation.
+
     .. note::
 
-        Shapefile projections are not supported.  Instead, all locations are
-        converted to longitude and latitude points, and a .prj file is
-        generated which specifies the coordinate system as lat-lon on WGS84.
+        All location points are reprojected into the specified 'shapefile_crs',
+        and a .prj file is generated containing 'prj_file_content'.
 
     """
     if cube.ndim != 2:
@@ -61,9 +79,8 @@ def export_shapefiles(cube, output_name):
                          'specifed CoordSystem.')
 
     crs_data = coord_x.coord_system.as_cartopy_crs()
-    crs_latlon = ccrs.Geodetic()
     x_array, y_array = np.meshgrid(coord_x.points, coord_y.points)
-    ll_values = crs_latlon.transform_points(crs_data, x_array, y_array)
+    ll_values = shapefile_crs.transform_points(crs_data, x_array, y_array)
     lons_array = ll_values[..., 0]
     lats_array = ll_values[..., 1]
     data = cube.data
@@ -78,14 +95,11 @@ def export_shapefiles(cube, output_name):
         writer.record(value)
     writer.save(output_name)
 
-    # Also create a project file.
-    # For this we must mimic the path-management of shapefile.Writer.save
-    # so the method is cribbed from there.
-    standard_latlon_projection_string = (
-        'GEOGCS["WGS 84",'
-        'DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],'
-        'PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433]]')
-    target = output_name
-    target = os.path.splitext(target)[0] + '.prj'
-    with open(target, 'w') as proj_file:
-        proj_file.write(standard_latlon_projection_string)
+    if prj_file_content:
+        # Also create a project file.
+        # For this we must mimic the path-management of shapefile.Writer.save
+        # so the method is cribbed from there.
+        target = output_name
+        target = os.path.splitext(target)[0] + '.prj'
+        with open(target, 'w') as proj_file:
+            proj_file.write(prj_file_content)
