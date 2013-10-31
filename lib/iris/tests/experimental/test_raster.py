@@ -15,16 +15,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 import iris.tests as tests
+import iris.experimental.raster
 
 import numpy as np
 import PIL.Image
 
-import iris
-from iris.experimental.raster import export_geotiff
 
-
-@tests.skip_data
-class Test_export_geotiff(tests.GraphicsTest):
+@iris.tests.skip_data
+class TestGeoTiffExport(tests.GraphicsTest):
     def check_tiff_header(self, geotiff_fh, reference_filename):
         """
         Checks the given tiff file handle's metadata matches the
@@ -42,7 +40,7 @@ class Test_export_geotiff(tests.GraphicsTest):
 
     def check_tiff(self, cube, tif_header):
         with self.temp_filename('.tif') as temp_filename:
-            export_geotiff(cube, temp_filename)
+            iris.experimental.raster.export_geotiff(cube, temp_filename)
 
             # Check the metadata is correct.
             with open(temp_filename) as fh:

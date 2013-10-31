@@ -24,13 +24,9 @@ TODO: If this module graduates from experimental the (optional) GDAL
       dependency should be added to INSTALL
 
 """
-
-import itertools
 import numpy as np
 from osgeo import gdal, osr
-import shapefile
 
-import cartopy.crs as ccrs
 import iris
 import iris.coord_systems
 import iris.unit
