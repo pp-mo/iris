@@ -20,30 +20,24 @@
 import argparse
 import os.path
 
-
 parser = argparse.ArgumentParser(
     description='Save 2d fields as shapefiles.')
 parser.add_argument('in_paths', nargs='+',
-                    help='Paths to source files')
+                    help='paths to source files')
 parser.add_argument('-o', '--out-path', default=None,
-                    help='Alternative filename or directory path for output.')
+                    help='alternative filename or directory path for output')
 parser.add_argument('-y', '--dryrun', action='store_true',
-                    help="Don't perform actual action")
+                    help="don't perform actual actions")
 parser.add_argument('-v', '--verbose', action='store_true',
-                    help="Print extra detail")
-parser.add_argument('-d', '--debug', action='store_true',
-                    help="Enable debug output")
+                    help="print extra messages")
 
 args = parser.parse_args()
 
 do_dryrun = args.dryrun
-do_debug = args.debug
-do_verbose = args.verbose or do_debug
-if do_debug:
-    print 'Args : ', args
+do_verbose = args.verbose
 
 if do_dryrun and do_verbose:
-    print '(Dry run : no actual saves will be performed.)'
+    print '(Dry run : no actual operations will be performed.)'
 
 in_paths, out_path = args.in_paths, args.out_path
 
@@ -53,7 +47,8 @@ from iris.experimental.shapefiles import export_shapefiles
 
 outpath_is_dir = out_path and os.path.isdir(out_path)
 if len(in_paths) > 1 and out_path and not outpath_is_dir:
-    print 'Output path is not directory -- cannot use with multiple inputs'
+    print ('Output path is not a directory, as '
+           'required for use with multiple inputs.')
     exit(1)
 
 for in_filepath in in_paths:
@@ -74,5 +69,6 @@ for in_filepath in in_paths:
         print '.. Saving "{}"'.format(out_filepath)
     if not do_dryrun:
         export_shapefiles(cube, out_filepath)
+
 if do_verbose:
     print 'All Done.'
