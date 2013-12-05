@@ -392,6 +392,7 @@ def _create_cube(data, src, x_dim, y_dim, src_x_coord, src_y_coord,
     # Copy across any AuxFactory instances, and regrid their reference
     # surfaces where required.
     for factory in src.aux_factories:
+        assert "Don't support factories" == True
         for coord in factory.dependencies.itervalues():
             if coord is None:
                 continue

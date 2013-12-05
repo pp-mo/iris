@@ -1,0 +1,32 @@
+20131205 110523.856 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131205 110526.520 ERROR    PET0 ESMCI_Regrid_F.C:384 c_esmc_regrid_create() Internal error: Unknown error Condition {_srcmesh.spatial_dim() == _dstmesh.spatial_dim()} failed at /net/home/h05/itpp/builds_ESMF_ESMPy_620b10_04/esmf/src/Infrastructure/Mesh/src/ESMCI_GeomRendezvous.C, line:130
+20131205 110526.520 ERROR    PET0 ESMF_Regrid.F90:311 ESMF_RegridStore Internal error: Unknown error - Internal subroutine call returned Error
+20131205 110526.521 ERROR    PET0 ESMF_FieldRegrid.F90:948 ESMF_FieldRegridStoreNX Internal error: Unknown error - Internal subroutine call returned Error
+20131205 110526.521 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Internal error: Unknown error - Internal subroutine call returned Error
+20131205 110526.521 ERROR    PET0 Internal error: Unknown error Internal subroutine call returned Error
+20131205 110526.521 ERROR    PET0 Internal error: Unknown error Internal subroutine call returned Error
+20131205 110608.253 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131205 110608.261 ERROR    PET0 ESMCI_Regrid_F.C:384 c_esmc_regrid_create() Internal error: Unknown error Condition {_srcmesh.spatial_dim() == _dstmesh.spatial_dim()} failed at /net/home/h05/itpp/builds_ESMF_ESMPy_620b10_04/esmf/src/Infrastructure/Mesh/src/ESMCI_GeomRendezvous.C, line:130
+20131205 110608.261 ERROR    PET0 ESMF_Regrid.F90:311 ESMF_RegridStore Internal error: Unknown error - Internal subroutine call returned Error
+20131205 110608.261 ERROR    PET0 ESMF_FieldRegrid.F90:948 ESMF_FieldRegridStoreNX Internal error: Unknown error - Internal subroutine call returned Error
+20131205 110608.261 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Internal error: Unknown error - Internal subroutine call returned Error
+20131205 110608.261 ERROR    PET0 Internal error: Unknown error Internal subroutine call returned Error
+20131205 110608.261 ERROR    PET0 Internal error: Unknown error Internal subroutine call returned Error
+20131205 110651.335 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:902 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~ Concave Element Detected ~~~~~~~~~~~~~~~~~
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:904 cnsrv_check_for_mesh_errors()   concave elem. id=1015596
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:905 cnsrv_check_for_mesh_errors() 
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:906 cnsrv_check_for_mesh_errors()   concave elem. coords
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:907 cnsrv_check_for_mesh_errors()   ---------------------------------------------------------
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:912 cnsrv_check_for_mesh_errors()     0  (179.743912,  45.901123)
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:912 cnsrv_check_for_mesh_errors()     1  (179.998917,  45.898499)
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:912 cnsrv_check_for_mesh_errors()     2  (-179.997101,  46.079975)
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:912 cnsrv_check_for_mesh_errors()     3  (179.747742,  46.082657)
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:914 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+20131205 110703.650 ERROR    PET0 Invalid argument - Src contains a concave cell
+20131205 110703.650 ERROR    PET0 ESMCI_Regrid_F.C:393 c_esmc_regrid_create() Invalid argument Internal subroutine call returned Error
+20131205 110703.650 ERROR    PET0 ESMF_Regrid.F90:311 ESMF_RegridStore Invalid argument - Internal subroutine call returned Error
+20131205 110703.650 ERROR    PET0 ESMF_FieldRegrid.F90:948 ESMF_FieldRegridStoreNX Invalid argument - Internal subroutine call returned Error
+20131205 110703.650 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Invalid argument - Internal subroutine call returned Error
+20131205 110703.650 ERROR    PET0 Invalid argument Internal subroutine call returned Error
+20131205 110703.650 ERROR    PET0 Invalid argument Internal subroutine call returned Error
