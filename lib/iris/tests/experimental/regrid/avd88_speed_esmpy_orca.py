@@ -56,6 +56,11 @@ if do_real_data:
 
     grid_cube = iris.load_cube('/data/cr2/hadpd/southern_oc_heat_fluxes/net_heat_flux_edwards_method_ann.pp')
 
+#
+# ?not working?
+# gives ESMF error
+# can't work out why not
+#
 #    do_little_part = False
 #    if do_little_part:
 #        source_cube = source_cube[40:43, 40:44]

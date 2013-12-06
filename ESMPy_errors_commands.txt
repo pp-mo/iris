@@ -1,0 +1,146 @@
+a = np.array([(179.743912,  45.901123),
+ (179.998917,  45.898499),
+ (-179.997101,  46.079975),
+ (179.747742,  46.082657)])
+
+20131206 141634.574 ERROR    PET0 ESMCI_Regrid_F.C:902 cnsrv_check_for_mesh_errors() 
+"Concave Element Detected"
+concave elem. coords
+-----------------------------
+0  (179.743912,  45.901123)
+1  (179.998917,  45.898499)
+2  (-179.997101,  46.079975)
+3  (179.747742,  46.082657)
+20131206 141634.574 ERROR    PET0 ESMCI_Regrid_F.C:914 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+20131206 141634.574 ERROR    PET0 Invalid argument - Src contains a concave cell
+
+
+
+
+
+
+    # FOR NOW - just throw those ones away...
+    if i_ok.size != n_points:
+        print '***** Cells across 180 seam : discarded {} of {} original points'.format(
+            n_points - n_validpoints, n_points)
+
+    # ALSO exclude any 
+    i_ok2 = np.where(
+        ((lon_bounds[:, 0] != lon_bounds[:, 1]) | (lat_bounds[:, 0] != lat_bounds[:, 1])) &
+        ((lon_bounds[:, 0] != lon_bounds[:, 2]) | (lat_bounds[:, 0] != lat_bounds[:, 2])) &
+        ((lon_bounds[:, 0] != lon_bounds[:, 3]) | (lat_bounds[:, 0] != lat_bounds[:, 3])) &
+        ((lon_bounds[:, 1] != lon_bounds[:, 2]) | (lat_bounds[:, 1] != lat_bounds[:, 2])) &
+        ((lon_bounds[:, 1] != lon_bounds[:, 3]) | (lat_bounds[:, 1] != lat_bounds[:, 3])) &
+        ((lon_bounds[:, 2] != lon_bounds[:, 3]) | (lat_bounds[:, 2] != lat_bounds[:, 3])))
+
+
+
+
+a = np.array([(179.062500,  -89.375000),
+  (-179.062500,  -89.375000),
+  (0.937500,  -89.375000),
+  (-0.937500,  -89.375000)])
+
+
+((lon_bounds[:, 0] != lon_bounds[:, 1]) |
+ (lon_bounds[:, 0] != lon_bounds[:, 2]) |
+ (lon_bounds[:, 0] != lon_bounds[:, 3]) |
+ (lon_bounds[:, 1] != lon_bounds[:, 2]) |
+ (lon_bounds[:, 1] != lon_bounds[:, 3]) |
+ (lon_bounds[:, 2] != lon_bounds[:, 3]))
+
+((lat_bounds[:, 0] != lat_bounds[:, 1]) |
+ (lat_bounds[:, 0] != lat_bounds[:, 2]) |
+ (lat_bounds[:, 0] != lat_bounds[:, 3]) |
+ (lat_bounds[:, 1] != lat_bounds[:, 2]) |
+ (lat_bounds[:, 1] != lat_bounds[:, 3]) |
+ (lat_bounds[:, 2] != lat_bounds[:, 3]))
+
+((lat_bounds[:, 0] != lat_bounds[:, 1]) |
+   (lat_bounds[:, 0] != lat_bounds[:, 2]) |
+   (lat_bounds[:, 0] != lat_bounds[:, 3]) |
+   (lat_bounds[:, 1] != lat_bounds[:, 2]) |
+   (lat_bounds[:, 1] != lat_bounds[:, 3]) |
+   (lat_bounds[:, 2] != lat_bounds[:, 3]))
+
+(((lon_bounds[:, 0] != lon_bounds[:, 1]) | (lat_bounds[:, 0] != lat_bounds[:, 1])) &
+          ((lon_bounds[:, 0] != lon_bounds[:, 2]) | (lat_bounds[:, 0] != lat_bounds[:, 2])) &
+          ((lon_bounds[:, 0] != lon_bounds[:, 3]) | (lat_bounds[:, 0] != lat_bounds[:, 3])) &
+          ((lon_bounds[:, 1] != lon_bounds[:, 2]) | (lat_bounds[:, 1] != lat_bounds[:, 2])) &
+          ((lon_bounds[:, 1] != lon_bounds[:, 3]) | (lat_bounds[:, 1] != lat_bounds[:, 3])) &
+          ((lon_bounds[:, 2] != lon_bounds[:, 3]) | (lat_bounds[:, 2] != lat_bounds[:, 3])))
+
+
+np.count_nonzero((np.abs(np.min(lat_bounds, -1) - -89.375) < 0.1) & (np.abs(np.max(lat_bounds, -1) - -89.375) < 0.1))
+
+np.count_nonzero((np.abs(np.max(lat_bounds, -1) - -89.375) < 0.1) & (np.abs(np.min(lat_bounds, -1) - -89.375) < 0.1))
+
+
+
+a = np.array([
+  (-107.002754,  65.734932),
+  (-107.002136,  65.734924),
+  (-107.001335,  65.766617),
+  (-107.001305,  65.766617),
+])
+a2 = zip(array([-107.00275421, -107.00213623, -107.00133514, -107.00130463]), array([ 65.73493195,  65.73492432,  65.76661682,  65.76661682]))
+
+
+#
+# Id of peculiar ones...
+#
+
+
+# (back story....)
+    np.count_nonzero((np.abs(lon_bounds - -107.002754) < 0.001) & (np.abs(lat_bounds - 65.734932) < 0.001))
+    8
+    np.count_nonzero((np.abs(lon_bounds - -107.002754) < 0.00001) & (np.abs(lat_bounds - 65.734932) < 0.00001))
+    4
+    np.count_nonzero((np.abs(lon_bounds - -107.002754) < 0.000001) & (np.abs(lat_bounds - 65.734932) < 0.000001))
+    4
+    i_poss = np.where((np.abs(lon_bounds - -107.002754) < 0.000001) & (np.abs(lat_bounds - 65.734932) < 0.000001))[0]
+    i_poss
+    [1457095 1457096 1458537 1458538]
+    lon_bounds[i_poss]
+    [[-107.01398468 -107.0094223  -107.00275421 -107.00388336]
+     [-107.0094223  -107.00662994 -107.00213623 -107.00275421]
+     [-107.00388336 -107.00275421 -107.00130463 -107.00131989]
+     [-107.00275421 -107.00213623 -107.00133514 -107.00130463]]
+    lat_bounds[i_poss]
+    [[ 65.70362091  65.70331573  65.73493195  65.7349472 ]
+     [ 65.70331573  65.70319366  65.73492432  65.73493195]
+     [ 65.7349472   65.73493195  65.76661682  65.76660919]
+     [ 65.73493195  65.73492432  65.76661682  65.76661682]]
+    lon_bounds.shape
+    (1472282, 4)
+
+    lon_bounds[1458538], lat_bounds[1458538]
+    (array([-107.00275421, -107.00213623, -107.00133514, -107.00130463]), array([ 65.73493195,  65.73492432,  65.76661682,  65.76661682]))
+    x_coord.bounds[1011, 676]
+    [-107.00275421 -107.00213623 -107.00133514 -107.00130463]
+    y_coord.bounds[1011, 676]
+    [ 65.73493195  65.73492432  65.76661682  65.76661682]
+    ny, nx
+    (1021, 1442)
+    np.unravel_index(1458538, (1021, 1442))
+    (1011, 676)
+
+
+x_coord.bounds[1011, 676]
+[-107.00275421 -107.00213623 -107.00133514 -107.00130463]
+
+y_coord.bounds[1011, 676]
+[ 65.73493195  65.73492432  65.76661682  65.76661682]
+
+#
+# combine these + plot
+#
+
+a = np.array([
+  [-107.00275421 -107.00213623 -107.00133514 -107.00130463],
+  [ 65.73493195  65.73492432  65.76661682  65.76661682]
+]
+plt.plot(a[:,0], a[:,1])
+plt.show()
+
+

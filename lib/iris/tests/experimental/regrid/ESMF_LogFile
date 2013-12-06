@@ -30,3 +30,57 @@
 20131205 110703.650 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Invalid argument - Internal subroutine call returned Error
 20131205 110703.650 ERROR    PET0 Invalid argument Internal subroutine call returned Error
 20131205 110703.650 ERROR    PET0 Invalid argument Internal subroutine call returned Error
+20131206 135502.641 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 135825.396 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 140047.751 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 140321.522 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 140408.531 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 141416.664 ERROR    PET0 ESMCI_Regrid_F.C:384 c_esmc_regrid_create() Internal error: Unknown error Condition {_srcmesh.spatial_dim() == _dstmesh.spatial_dim()} failed at /net/home/h05/itpp/builds_ESMF_ESMPy_620b10_04/esmf/src/Infrastructure/Mesh/src/ESMCI_GeomRendezvous.C, line:130
+20131206 141416.664 ERROR    PET0 ESMF_Regrid.F90:311 ESMF_RegridStore Internal error: Unknown error - Internal subroutine call returned Error
+20131206 141416.664 ERROR    PET0 ESMF_FieldRegrid.F90:948 ESMF_FieldRegridStoreNX Internal error: Unknown error - Internal subroutine call returned Error
+20131206 141416.664 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Internal error: Unknown error - Internal subroutine call returned Error
+20131206 141416.664 ERROR    PET0 Internal error: Unknown error Internal subroutine call returned Error
+20131206 141416.664 ERROR    PET0 Internal error: Unknown error Internal subroutine call returned Error
+20131206 152354.657 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 152951.752 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 153112.072 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 153631.753 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 154152.812 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 154358.973 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:874 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~ Degenerate Element Detected ~~~~~~~~~~~~~~~~~
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:876 cnsrv_check_for_mesh_errors()   degenerate elem. id=1
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:877 cnsrv_check_for_mesh_errors() 
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:878 cnsrv_check_for_mesh_errors()   degenerate elem. coords
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:879 cnsrv_check_for_mesh_errors()   ---------------------------------------------------------
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:884 cnsrv_check_for_mesh_errors()     0  (72.875000,  72.875000)
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:884 cnsrv_check_for_mesh_errors()     1  (73.125000,  73.125000)
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:884 cnsrv_check_for_mesh_errors()     2  (73.125000,  73.125000)
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:884 cnsrv_check_for_mesh_errors()     3  (72.875000,  72.875000)
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:886 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+20131206 154507.105 ERROR    PET0 Invalid argument - Src contains a cell that has corners close enough that the cell collapses to a line or point
+20131206 154507.105 ERROR    PET0 ESMCI_Regrid_F.C:393 c_esmc_regrid_create() Invalid argument Internal subroutine call returned Error
+20131206 154507.105 ERROR    PET0 ESMF_Regrid.F90:311 ESMF_RegridStore Invalid argument - Internal subroutine call returned Error
+20131206 154507.105 ERROR    PET0 ESMF_FieldRegrid.F90:948 ESMF_FieldRegridStoreNX Invalid argument - Internal subroutine call returned Error
+20131206 154507.105 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Invalid argument - Internal subroutine call returned Error
+20131206 154507.105 ERROR    PET0 Invalid argument Internal subroutine call returned Error
+20131206 154507.105 ERROR    PET0 Invalid argument Internal subroutine call returned Error
+20131206 160538.851 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 160646.554 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 162341.636 INFO     PET0 Running with ESMF Version 6.2.0 beta snapshot
+20131206 162507.317 ERROR    PET0 ESMCI_Regrid_F.C:998 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~~~~ Concave Element Detected ~~~~~~~~~~~~~~~~~~~~
+20131206 162507.317 ERROR    PET0 ESMCI_Regrid_F.C:1000 cnsrv_check_for_mesh_errors()   concave elem. id=1
+20131206 162507.317 ERROR    PET0 ESMCI_Regrid_F.C:1001 cnsrv_check_for_mesh_errors() 
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1002 cnsrv_check_for_mesh_errors()   concave elem. coords (lon [-180 to 180], lat [-90 to 90]) (x,y,z)
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1003 cnsrv_check_for_mesh_errors()   -----------------------------------------------------------------
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1012 cnsrv_check_for_mesh_errors()     0  (179.062500,  -89.375000)  (-0.010907, 0.000178, -0.999941)
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1012 cnsrv_check_for_mesh_errors()     1  (-179.062500,  -89.375000)  (-0.010907, -0.000178, -0.999941)
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1012 cnsrv_check_for_mesh_errors()     2  (0.937500,  -89.375000)  (0.010907, 0.000178, -0.999941)
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1012 cnsrv_check_for_mesh_errors()     3  (-0.937500,  -89.375000)  (0.010907, -0.000178, -0.999941)
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:1014 cnsrv_check_for_mesh_errors() ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+20131206 162507.318 ERROR    PET0 Invalid argument - Dst contains a concave cell
+20131206 162507.318 ERROR    PET0 ESMCI_Regrid_F.C:393 c_esmc_regrid_create() Invalid argument Internal subroutine call returned Error
+20131206 162507.318 ERROR    PET0 ESMF_Regrid.F90:311 ESMF_RegridStore Invalid argument - Internal subroutine call returned Error
+20131206 162507.318 ERROR    PET0 ESMF_FieldRegrid.F90:948 ESMF_FieldRegridStoreNX Invalid argument - Internal subroutine call returned Error
+20131206 162507.318 ERROR    PET0 ESMF_Field_C.F90:1156 f_esmf_regridstore Invalid argument - Internal subroutine call returned Error
+20131206 162507.318 ERROR    PET0 Invalid argument Internal subroutine call returned Error
+20131206 162507.318 ERROR    PET0 Invalid argument Internal subroutine call returned Error

@@ -164,28 +164,124 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 
 #    x_bounds, y_bounds = np.meshgrid(x_coord.contiguous_bounds(),
 #                                     y_coord.contiguous_bounds())
-    shape = x_coord.shape
-    ny, nx = shape
+    ny, nx = x_coord.shape
+    n_points = nx * ny
+
     # NOTE: bounds are bigger than the points by +1 in both dims
-    x_bounds = np.zeros((shape[0] + 1, shape[1] + 1),
-                        dtype=x_coord.dtype)
-    y_bounds = x_bounds.copy()
 
-    # "assume" contiguous bounds + take those which make a full set
-    x_bounds[:-1, :-1] = x_coord.bounds[:, :, 0]
-    x_bounds[:-1, -1] = x_coord.bounds[:, -1, 1]
-    x_bounds[-1, :-1] = x_coord.bounds[-1, :, 3]
-    x_bounds[-1, -1] = x_coord.bounds[-1, -1, 2]
-
-    y_bounds[:-1, :-1] = y_coord.bounds[:, :, 0]
-    y_bounds[:-1, -1] = y_coord.bounds[:, -1, 1]
-    y_bounds[-1, :-1] = y_coord.bounds[-1, :, 3]
-    y_bounds[-1, -1] = y_coord.bounds[-1, -1, 2]
+#    # "assume" contiguous bounds + take those which make a full set
+#    x_bounds[:-1, :-1] = x_coord.bounds[:, :, 0]
+#    x_bounds[:-1, -1] = x_coord.bounds[:, -1, 1]
+#    x_bounds[-1, :-1] = x_coord.bounds[-1, :, 3]
+#    x_bounds[-1, -1] = x_coord.bounds[-1, -1, 2]
+#
+#    y_bounds[:-1, :-1] = y_coord.bounds[:, :, 0]
+#    y_bounds[:-1, -1] = y_coord.bounds[:, -1, 1]
+#    y_bounds[-1, :-1] = y_coord.bounds[-1, :, 3]
+#    y_bounds[-1, -1] = y_coord.bounds[-1, -1, 2]
 
     # check we got this right ??
 
     grid_crs = x_coord.coord_system.as_cartopy_crs()
-    lon_bounds, lat_bounds = _convert_latlons(grid_crs, x_bounds, y_bounds)
+    lon_bounds, lat_bounds = _convert_latlons(grid_crs,
+                                              x_coord.bounds.flat[:],
+                                              y_coord.bounds.flat[:])
+
+    lon_bounds = lon_bounds.reshape((n_points, 4))
+    lat_bounds = lat_bounds.reshape((n_points, 4))
+
+    # FOR NOW: remove the ones we can't handle because they wrap around the
+    # seam irregularly
+    # E.G. (from error log file) :
+    #    "Concave Element Detected"
+    #    concave elem. coords
+    #    -----------------------------
+    #    0  (179.743912,  45.901123)
+    #    1  (179.998917,  45.898499)
+    #    2  (-179.997101,  46.079975)
+    #    3  (179.747742,  46.082657)
+
+    i_ok1 = np.where((np.min(lon_bounds, axis=-1) > -175.0)
+                     | (np.max(lon_bounds, axis=-1) < 175.0))[0]
+
+
+    if i_ok1.size != n_points:
+        print '***** Cells across 180 seam : discarded {:8d} of {} original points'.format(
+            n_points - i_ok1.size, n_points)
+
+    # Check for degenerates : FIRST TIME in original points
+    i_ok2 = np.where(
+        # All 4 points must be different
+        ((lon_bounds[:, 0] != lon_bounds[:, 1]) | (lat_bounds[:, 0] != lat_bounds[:, 1])) &
+        ((lon_bounds[:, 0] != lon_bounds[:, 2]) | (lat_bounds[:, 0] != lat_bounds[:, 2])) &
+        ((lon_bounds[:, 0] != lon_bounds[:, 3]) | (lat_bounds[:, 0] != lat_bounds[:, 3])) &
+        ((lon_bounds[:, 1] != lon_bounds[:, 2]) | (lat_bounds[:, 1] != lat_bounds[:, 2])) &
+        ((lon_bounds[:, 1] != lon_bounds[:, 3]) | (lat_bounds[:, 1] != lat_bounds[:, 3])) &
+        ((lon_bounds[:, 2] != lon_bounds[:, 3]) | (lat_bounds[:, 2] != lat_bounds[:, 3]))
+        )[0]
+#         &
+#        # 4 lons cannot all be the same
+#        ((lon_bounds[:, 0] != lon_bounds[:, 1]) |
+#         (lon_bounds[:, 0] != lon_bounds[:, 2]) |
+#         (lon_bounds[:, 0] != lon_bounds[:, 3]) |
+#         (lon_bounds[:, 1] != lon_bounds[:, 2]) |
+#         (lon_bounds[:, 1] != lon_bounds[:, 3]) |
+#         (lon_bounds[:, 2] != lon_bounds[:, 3])) &
+#        # 4 lats cannot all be the same
+#        ((lat_bounds[:, 0] != lat_bounds[:, 1]) |
+#         (lat_bounds[:, 0] != lat_bounds[:, 2]) |
+#         (lat_bounds[:, 0] != lat_bounds[:, 3]) |
+#         (lat_bounds[:, 1] != lat_bounds[:, 2]) |
+#         (lat_bounds[:, 1] != lat_bounds[:, 3]) |
+#         (lat_bounds[:, 2] != lat_bounds[:, 3])) )[0]
+
+#    i_ok2x = i_ok2
+#    i_ok2 = [
+#        ((lon_bounds[i, 0] != lon_bounds[i, 1]) | (lat_bounds[i, 0] != lat_bounds[i, 1])) &
+#        ((lon_bounds[i, 0] != lon_bounds[i, 2]) | (lat_bounds[i, 0] != lat_bounds[i, 2])) &
+#        ((lon_bounds[i, 0] != lon_bounds[i, 3]) | (lat_bounds[i, 0] != lat_bounds[i, 3])) &
+#        ((lon_bounds[i, 1] != lon_bounds[i, 2]) | (lat_bounds[i, 1] != lat_bounds[i, 2])) &
+#        ((lon_bounds[i, 1] != lon_bounds[i, 3]) | (lat_bounds[i, 1] != lat_bounds[i, 3])) &
+#        ((lon_bounds[i, 2] != lon_bounds[i, 3]) | (lat_bounds[i, 2] != lat_bounds[i, 3]))
+##         &
+##        # 4 lons cannot all be the same
+##        ((lon_bounds[i, 0] != lon_bounds[i, 1]) |
+##         (lon_bounds[i, 0] != lon_bounds[i, 2]) |
+##         (lon_bounds[i, 0] != lon_bounds[i, 3]) |
+##         (lon_bounds[i, 1] != lon_bounds[i, 2]) |
+##         (lon_bounds[i, 1] != lon_bounds[i, 3]) |
+##         (lon_bounds[i, 2] != lon_bounds[i, 3])) &
+##        # 4 lats cannot all be the same
+##        ((lat_bounds[i, 0] != lat_bounds[i, 1]) |
+##         (lat_bounds[i, 0] != lat_bounds[i, 2]) |
+##         (lat_bounds[i, 0] != lat_bounds[i, 3]) |
+##         (lat_bounds[i, 1] != lat_bounds[i, 2]) |
+##         (lat_bounds[i, 1] != lat_bounds[i, 3]) |
+##         (lat_bounds[i, 2] != lat_bounds[i, 3]))
+#        for i in range(n_points)]
+
+    i_ok = np.array(sorted(set(i_ok1) & set(i_ok2)))
+    n_validpoints = i_ok.size
+
+    if i_ok2.size != n_points:
+        print '***** Degenerate cells : {:8d} of {} original points'.format(
+            n_points - i_ok2.size, n_points)
+        print '*****        .. of which {:8d} were also seam-cells ?'.format(
+            (n_points - i_ok1.size) + (n_points - i_ok2.size) - (n_points - n_validpoints))
+
+    lon_bounds = lon_bounds[i_ok]
+    lat_bounds = lat_bounds[i_ok]
+
+    # Make an index of the valid-node numbers from the original points
+    # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
+    node_numbers_from_points = np.zeros(n_points * 4, dtype=np.int32)
+    node_numbers_from_points.reshape((n_points, 4))
+    # fill blank slots with -1 (an invalid index value)
+    node_numbers_from_points[:] = -1
+    # define valid slots
+    valid_node_inds = i_ok * 4
+    for i_pt in range(4):
+        node_numbers_from_points[i_pt + 4 * i_ok] = i_pt + 4 * np.arange(n_validpoints, dtype=np.int32)
 
 
     # create a Mesh object
@@ -225,33 +321,39 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     # Create 'nodes' which represent the cell bounds points
     #
     # Create a map of 'id' number (integers) for all the bounds points
-    n_nodes = x_bounds.size
-    node_ids = np.arange(n_nodes, dtype=np.int32).reshape(x_bounds.shape)
+    # NOTE: these are the VALID points only...
+    n_nodes = lon_bounds.size
+    node_ids = np.arange(n_nodes, dtype=np.int32)
     # Create a map of all-zeros for the 'node owners' field
     node_owners = np.zeros(n_nodes)
     # Concatenate all the bounds position coords
-    node_coords = np.concatenate((x_bounds[..., None],
-                                  y_bounds[..., None]),
-                                 axis=-1)
+    combined_node_coords = np.concatenate((lon_bounds[..., None],
+                                           lat_bounds[..., None]),
+                                          axis=-1).flat[:]
     mesh.add_nodes(nodeCount=n_nodes,
                    nodeIds=node_ids.flat[:],
-                   nodeCoords=node_coords.flat[:],
+                   nodeCoords=combined_node_coords,
                    nodeOwners=node_owners)
 
     #
     # Create 'elements', which represent the cells themselves
     #
     # order elements in our own way = (y, x) ordered
-    n_elems = x_coord.points.size
-    elem_ids = np.arange(n_elems, dtype=np.int32).reshape(x_coord.shape)
+    n_elems = n_validpoints
+    elem_ids = np.arange(n_elems, dtype=np.int32)
+
     # all are 'QUAD' type - i.e. have 4 corners in 2D
     elem_types = np.ones(n_elems, dtype=np.int32) * ESMF.MeshElemType.QUAD
+
     # define the connects...
-    elem_connects = np.zeros((ny, nx, 4), dtype=np.int32)
-    elem_connects[..., 0] = node_ids[:-1, :-1]
-    elem_connects[..., 1] = node_ids[:-1, 1:]
-    elem_connects[..., 2] = node_ids[1:, 1:]
-    elem_connects[..., 3] = node_ids[1:, :-1]
+    bounds_indices = np.arange(n_points * 4, dtype=np.int32)
+    bounds_indices = bounds_indices.reshape((n_points, 4))
+    # remove the invalid ones
+    bounds_indices = bounds_indices[i_ok]
+    # replace these indices with equivalent valid indices
+    elem_connects = node_numbers_from_points[bounds_indices]
+    # these should all be *valid* ones
+    assert not np.any(elem_connects < 0)
 
     # Add a mask item to the Mesh, if requested
     if mask is not None:
@@ -270,7 +372,7 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 
     # assign data content, if provided
     if data is not None:
-        field.data[:] = data.flat[:]
+        field.data[:] = data.reshape(n_points)[i_ok]
 
     return field
 
