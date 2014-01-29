@@ -24,10 +24,10 @@ import mock
 import numpy as np
 
 from iris import FUTURE
-from iris.analysis import WeightedAggregator, Aggregator
+from iris.analysis import WeightedAggregator, Aggregator, MEAN, MIN
 from iris.cube import Cube
 from iris.coords import AuxCoord, DimCoord
-
+from iris.exceptions import CoordinateNotFoundError, CoordinateCollapseError
 
 class Test___init___data(tests.IrisTest):
     def test_ndarray(self):
@@ -68,6 +68,56 @@ class Test_xml(tests.IrisTest):
         data[1, 2] = np.ma.masked
         cube = Cube(data)
         self.assertCML(cube)
+
+
+class Test_collapsed__dims_and_coords(tests.IrisTest):
+    def setUp(self):
+        self.data3d = np.arange(24).reshape((2,3,4))
+        cube = Cube(self.data3d)
+        for i_dim, name in enumerate(('z', 'y', 'x')):
+            npts = cube.shape[i_dim]
+            coord = DimCoord(np.arange(npts), long_name=name)
+            cube.add_dim_coord(coord, i_dim)
+        self.cube3d = cube
+        self.data2d = np.arange(6).reshape((3,2))
+        cube = Cube(self.data2d)
+        for i_dim, name in enumerate(('YY', 'XX')):
+            npts = cube.shape[i_dim]
+            coord = DimCoord(np.arange(npts), long_name=name)
+            cube.add_dim_coord(coord, i_dim)
+        self.cube2d = cube
+
+    def test_dim0(self):
+        cube_collapsed = self.cube2d.collapsed('YY', MEAN)
+        self.assertEqual(len(cube_collapsed.coords(dim_coords=True)), 1)
+        coord = cube_collapsed.coord(dim_coords=True)
+        self.assertEqual(coord, self.cube2d.coord('XX'))
+        self.assertEqual(cube_collapsed.coord_dims(coord), (0,))
+        self.assertArrayAlmostEqual(cube_collapsed.data, [2, 3])
+
+    def test_dim1(self):
+        cube_collapsed = self.cube2d.collapsed('XX', MIN)
+        self.assertEqual(len(cube_collapsed.coords(dim_coords=True)), 1)
+        coord = cube_collapsed.coord(dim_coords=True)
+        self.assertEqual(coord, self.cube2d.coord('YY'))
+        self.assertEqual(cube_collapsed.coord_dims(coord), (0,))
+        self.assertArrayAlmostEqual(cube_collapsed.data, [0, 2, 4])
+
+    def test_dim02(self):
+        cube_collapsed = self.cube3d.collapsed(('z', 'x'), MEAN)
+        self.assertEqual(len(cube_collapsed.coords(dim_coords=True)), 1)
+        coord = cube_collapsed.coord(dim_coords=True)
+        self.assertEqual(coord, self.cube3d.coord('y'))
+        self.assertEqual(cube_collapsed.coord_dims(coord), (0,))
+        self.assertArrayAlmostEqual(cube_collapsed.data, [7.5, 11.5, 15.5])
+
+    def test_bad_coords(self):
+        with self.assertRaises(CoordinateNotFoundError):
+            self.cube2d.collapsed('qqq', MEAN)
+
+    def test_no_coords(self):
+        with self.assertRaises(CoordinateCollapseError):
+            self.cube2d.collapsed((), MEAN)
 
 
 class Test_collapsed__warning(tests.IrisTest):
