@@ -38,6 +38,7 @@ import numpy.ma as ma
 import scipy.interpolate
 import scipy.stats.mstats
 
+import biggus
 import iris.coords
 
 
@@ -325,10 +326,15 @@ def coord_comparison(*cubes):
     return result
 
 
+class LazyAggregatorError(Exception):
+    pass
+
+
 class Aggregator(object):
     """Convenience class that supports common aggregation functionality."""
 
-    def __init__(self, cell_method, call_func, units_func=None, **kwargs):
+    def __init__(self, cell_method, call_func, units_func=None,
+                 lazy_func=None, **kwargs):
         """
         Create an aggregator for the given call_func.
 
@@ -337,12 +343,16 @@ class Aggregator(object):
         * cell_method (string):
             Cell method string that supports string format substitution.
         * call_func (callable):
-            Data aggregation function.
+            Data aggregation function. Call signature: (data, axis, **kwargs).
 
         Kwargs:
 
         * units_func (callable):
             Units conversion function.
+        * lazy_func (callable):
+            An alternative to 'call_func' implementing a lazy aggregation.
+            (Note:  need not support all features of the main operation, but
+            should raise an error in unhandled cases.)
         * kwargs:
             Passed through to call_func.
 
@@ -353,8 +363,60 @@ class Aggregator(object):
         self.call_func = call_func
         #: Unit conversion function.
         self.units_func = units_func
+        #: Lazy aggregation function.
+        self.lazy_func = lazy_func
 
         self._kwargs = kwargs
+
+    def _LazyError(self, explain_text=None):
+            text = 'lazy operation failed in "{}" aggregator'.format(
+                self.cell_method)
+            if explain_text:
+                text += ': ' + explain_text
+            explain_text += '.'
+            return LazyAggregatorError(text)
+
+    def lazy_aggregate(self, data, axis, **kwargs):
+        """
+        Peform aggregation over the data with a lazy operation, analagous to
+        the 'aggregate' result.
+
+        Keyword arguments are passed through to the data aggregation function
+        (for example, the "percent" keyword for a percentile aggregator).
+        This function is usually used in conjunction with update_metadata(),
+        which should be passed the same keyword arguments.
+
+        Args:
+
+        * data (array):
+            Data array.
+
+        * axis (int or list of int):
+            The dimensions to aggregate over -- note that this is defined
+            differently to the 'aggregate' method 'axis' argument, which only
+            accepts a single dimension index.
+
+        Kwargs:
+
+        * mdtol (float):
+            Tolerance of missing data. The value returned will be masked if
+            the fraction of data to missing data is less than or equal to
+            mdtol.  mdtol=0 means no missing data is tolerated while mdtol=1
+            will return the resulting value from the aggregation function.
+            Default mdtol=1.
+
+        * kwargs:
+            All keyword arguments apart from those specified above, are
+            passed through to the data aggregation function.
+
+        Returns:
+            The aggregated data.
+
+        """
+        if not self.lazy_func:
+            raise self._LazyError('lazy operation not supported.')
+        result = self.lazy_func(data, axis, **kwargs)
+        return result
 
     def aggregate(self, data, axis, **kwargs):
         """
@@ -364,6 +426,14 @@ class Aggregator(object):
         (for example, the "percent" keyword for a percentile aggregator).
         This function is usually used in conjunction with update_metadata(),
         which should be passed the same keyword arguments.
+
+        Args:
+
+        * data (array):
+            Data array.
+
+        * axis (int):
+            Axis to aggregate over.
 
         Kwargs:
 
@@ -452,7 +522,10 @@ class Aggregator(object):
             Result from :func:`iris.analysis.Aggregator.aggregate`
 
         """
-        collapsed_cube.data = iris.util.ensure_array(data_result)
+        if isinstance(data_result, biggus.Array):
+            collapsed_cube._my_data = data_result
+        else:
+            collapsed_cube.data = iris.util.ensure_array(data_result)
         return collapsed_cube
 
 
@@ -728,8 +801,28 @@ For example, to compute zonal maximums::
 
 """
 
+def _lazy_operation(biggus_function, agg_name):
+    # Wrap a biggus function (named) with some extra functionality.
+    def _fn(array, axes, **kwargs):
+        # Perform a lazy calculation, but specialise any error responses
+        # and, for now, pass "axes" as single value if there is only one.
+        axes = list(iter(axes))
+        if len(axes) == 1:
+            axes, = axes
+        try:
+            result = biggus_function(array, axis=axes, **kwargs)
+        except Exception as biggus_error:
+            # Would prefer Exception subclass, but biggus is using assert.
+            text = 'lazy operation failed in {} aggregator: {!r}'.format(
+                agg_name, biggus_error)
+            raise LazyAggregatorError(text)
+        return result
 
-MEAN = WeightedAggregator('mean', ma.average)
+    return _fn
+
+
+_lazy_mean = _lazy_operation(biggus.mean, agg_name='mean')
+MEAN = WeightedAggregator('mean', ma.average, lazy_func=_lazy_mean)
 """
 The mean, as computed by :func:`numpy.ma.average`.
 
@@ -752,6 +845,11 @@ For example::
 
     cube_out, weights_out = cube_in.collapsed(coord_names, iris.analysis.MEAN,
     weights=weights_in, returned=True)
+
+.. note:
+    Lazy operation is supported, via :func:`biggus.mean`.
+    This is invoked by, for example,
+    :meth:```iris.cube.Cube.collapsed```(... MEAN, lazy=True).
 
 """
 
@@ -921,7 +1019,9 @@ For example to compute a weighted rolling sum
 """
 
 
-VARIANCE = Aggregator('variance', ma.var, lambda units: units * units, ddof=1)
+_lazy_variance = _lazy_operation(biggus.var, 'variance')
+VARIANCE = Aggregator('variance', ma.var, lambda units: units * units,
+                      lazy_func=_lazy_variance, ddof=1)
 """
 The variance, as computed by :func:`numpy.ma.var`.
 
@@ -938,6 +1038,11 @@ Additional kwargs available:
 For example, to obtain the biased variance::
 
     result = cube.collapsed(coord_to_collapse, iris.analysis.VARIANCE, ddof=0)
+
+.. note:
+    Lazy operation is supported, via :func:`biggus.var`.
+    This is invoked by, for example,
+    :meth:```iris.cube.Cube.collapsed```(... VARIANCE, lazy=True).
 
 """
 

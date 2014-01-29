@@ -23,8 +23,11 @@ import iris.tests as tests
 import mock
 import numpy as np
 
+import biggus
 from iris import FUTURE
-from iris.analysis import WeightedAggregator, Aggregator, MEAN, MIN
+from iris.analysis import WeightedAggregator, Aggregator
+from iris.analysis import MEAN, MIN
+from iris.analysis import LazyAggregatorError
 from iris.cube import Cube
 from iris.coords import AuxCoord, DimCoord
 from iris.exceptions import CoordinateNotFoundError, CoordinateCollapseError
@@ -118,6 +121,78 @@ class Test_collapsed__dims_and_coords(tests.IrisTest):
     def test_no_coords(self):
         with self.assertRaises(CoordinateCollapseError):
             self.cube2d.collapsed((), MEAN)
+
+
+class Test_collapsed__lazy(tests.IrisTest):
+    def setUp(self):
+        self.data = np.arange(6.0).reshape((2,3))
+        self.lazydata = biggus.NumpyArrayAdapter(self.data)
+        cube = Cube(self.lazydata)
+        for i_dim, name in enumerate(('y', 'x')):
+            npts = cube.shape[i_dim]
+            coord = DimCoord(np.arange(npts), long_name=name)
+            cube.add_dim_coord(coord, i_dim)
+        self.cube = cube
+
+    def test_dim0_nonlazy(self):
+        cube_collapsed = self.cube.collapsed('y', MEAN)
+        self.assertEqual(len(cube_collapsed.coords(dim_coords=True)), 1)
+        coord = cube_collapsed.coord(dim_coords=True)
+        self.assertEqual(coord, self.cube.coord('x'))
+        self.assertEqual(cube_collapsed.coord_dims(coord), (0,))
+        self.assertArrayAlmostEqual(cube_collapsed.data, [1.5, 2.5, 3.5])
+
+    def test_dim0_lazy(self):
+        cube_collapsed = self.cube.collapsed('y', MEAN, lazy=True)
+        self.assertIsInstance(cube_collapsed._my_data, biggus.Array)
+        self.assertEqual(len(cube_collapsed.coords(dim_coords=True)), 1)
+        coord = cube_collapsed.coord(dim_coords=True)
+        self.assertEqual(coord, self.cube.coord('x'))
+        self.assertEqual(cube_collapsed.coord_dims(coord), (0,))
+        self.assertIsInstance(cube_collapsed._my_data, biggus.Array)
+        self.assertArrayAlmostEqual(cube_collapsed.data, [1.5, 2.5, 3.5])
+        self.assertFalse(isinstance(cube_collapsed._my_data, biggus.Array))
+
+    def _check_error_contains(self, error, words):
+        msg = error.message
+        for word in words:
+            self.assertTrue(word in msg,
+                            '{} does not occur in error message: {}'.format(
+                                word, msg))
+
+    def test_fail_dim1(self):
+        # Check that MEAN produces a suitable error message for dim != 0.
+        # N.B. non-lazy op can do this
+        with self.assertRaises(LazyAggregatorError) as err:
+            cube_collapsed = self.cube.collapsed('x', MEAN, lazy=True)
+        self._check_error_contains(err.exception, ('lazy', 'mean'))
+
+    def test_fail_multidims(self):
+        # Check that MEAN produces a suitable error message for multiple dims.
+        # N.B. non-lazy op can do this
+        with self.assertRaises(LazyAggregatorError) as err:
+            cube_collapsed = self.cube.collapsed(('x', 'y'), MEAN, lazy=True)
+        self._check_error_contains(err.exception, ('lazy', 'mean'))
+
+    def test_fail_no_lazy(self):
+        dummy_agg = Aggregator('custom_op', lambda x: 1)
+        with self.assertRaises(LazyAggregatorError) as err:
+            cube_collapsed = self.cube.collapsed('x', dummy_agg, lazy=True)
+        self._check_error_contains(err.exception, ('lazy', 'custom_op',
+                                                   'not supported'))
+
+    def test_fail_lazy_error(self):
+        # Check that where operation raises an error, this is wrapped.
+        class MyLazyError(Exception):
+            pass
+ 
+        def _bad_lazy_agg(data, axis, **kwargs):
+            raise MyLazyError('dummy-agg failed')
+
+        dummy_agg = Aggregator('custom_op', lambda x: 1,
+                               lazy_func=_bad_lazy_agg)
+        with self.assertRaises(MyLazyError) as err:
+            cube_collapsed = self.cube.collapsed('x', dummy_agg, lazy=True)
 
 
 class Test_collapsed__warning(tests.IrisTest):
