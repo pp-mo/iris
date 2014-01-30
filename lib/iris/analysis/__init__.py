@@ -377,7 +377,7 @@ class Aggregator(object):
         Args:
 
         * data (array):
-            Data array.
+            A lazy array (:class:`biggus.Array`).
 
         * axis (int or list of int):
             The dimensions to aggregate over -- note that this is defined
@@ -404,7 +404,8 @@ class Aggregator(object):
             passed through to the data aggregation function.
 
         Returns:
-            The aggregated data.
+            A lazy array representing the aggregation operation
+            (:class:`biggus.Array`).
 
         """
         if not self.lazy_func:
