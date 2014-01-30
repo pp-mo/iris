@@ -90,3 +90,7 @@ class IgnoreCubeException(IrisError):
 
     """
     pass
+
+
+class LazyAggregatorError(Exception):
+    pass

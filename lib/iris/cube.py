@@ -2334,12 +2334,12 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         Kwargs:
 
         * lazy (bool):
-            When set, operation expects and will return a cube with a lazy
+            When set, the operation expects and will return a cube with a lazy
             data array.  This is only supported for certain operations using
-            certain types of aggregator -- see documentaion of 
+            certain types of aggregator -- see documentation of
             :class:`iris.analysis.Aggregator`.
 
-            .. note:
+            .. warning::
 
                 This keyword may in future be replaced by a different method of
                 controlling the lazy/concrete operations.
@@ -2484,8 +2484,8 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             data_result = unrolled_data
         else:
             # Perform the aggregation over the cube data
-            # First reshape the data so that the dimensions being aggregated over
-            # are grouped 'at the end'.
+            # First reshape the data so that the dimensions being aggregated
+            # over are grouped 'at the end' (i.e. axis=-1).
             dims_to_collapse = sorted(dims_to_collapse)
 
             end_size = reduce(operator.mul, (self.shape[dim] for dim in
