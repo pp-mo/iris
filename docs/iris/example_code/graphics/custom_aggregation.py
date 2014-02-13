@@ -2,19 +2,19 @@
 Calculating a custom statistic
 ==============================
 
-This example shows how to define and use a "custom aggregator", that provides
-an additional statistical function for use with cube aggregation functions such
-as 'collapsed', 'aggregated_by' or 'rolling window'.
+This example shows how to define and use a custom
+:class:`iris.analysis.Aggregator`, that provides a new statistical operator for
+use with cube aggregation functions such as :meth:`~iris.cube.Cube.collapsed`,
+:meth:`~iris.cube.Cube.aggregated_by` or
+:meth:`~iris.cube.Cube.rolling_window`.
 
 In this case, we have a 240-year sequence of yearly average surface temperature
 over North America, and we want to calculate in how many years these exceed a
 certain temperature over a spell of 5 years or more.
 
 """
-
-# Import modules used.
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 import iris
 from iris.analysis import Aggregator
@@ -22,10 +22,10 @@ import iris.quickplot as qplt
 from iris.util import rolling_window
 
 
-# Define a function to perform the custom aggregation operation (statistic)
+# Define a function to perform the custom statistical operation.
 # Note: in order to meet the requirements of iris.analysis.Aggregator, it must
 # do the calculation over an arbitrary (given) data axis.
-def count_points_above_x_for_n_times(data, threshold, axis, spell_length):
+def count_spells(data, threshold, axis, spell_length):
     """
     Function to calculate the number of points in a sequence where the value
     has exceeded a threshold value for at least a certain number of timepoints.
@@ -70,8 +70,9 @@ def main():
 
     # Make an aggregator from the user function.
     SPELL_COUNT = Aggregator('spell_count',
-                             count_points_above_x_for_n_times,
+                             count_spells,
                              units_func=lambda units: 1)
+
     # Define the parameters of the test.
     threshold_temperature = 280.0
     spell_years = 5
@@ -80,11 +81,10 @@ def main():
     warm_periods = cube.collapsed('time', SPELL_COUNT,
                                   threshold=threshold_temperature,
                                   spell_length=spell_years)
-    warm_periods.rename('Warm 5-year spells in 240 years')
+    warm_periods.rename('Number of 5-year warm spells in 240 years')
 
-    # Plot an 'interesting part of the results.
-    plot_data = warm_periods[10:40, 0:40]
-    qplt.contourf(plot_data, alpha=0.7)
+    # Plot the results.
+    qplt.contourf(warm_periods, alpha=0.7)
     plt.gca().coastlines()
     plt.show()
 

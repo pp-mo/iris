@@ -26,9 +26,9 @@ with extest_util.add_examples_to_path():
     import custom_aggregation
 
 
-class TestAtlanticProfiles(tests.GraphicsTest):
+class TestCustomAggregation(tests.GraphicsTest):
     """Test the atlantic_profiles example code."""
-    def test_atlantic_profiles(self):
+    def test_custom_aggregation(self):
         with extest_util.show_replaced_by_check_graphic(self):
             custom_aggregation.main()
 
