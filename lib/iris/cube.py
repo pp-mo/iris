@@ -2794,11 +2794,11 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             dims = untouched_dims + dims_to_collapse
             unrolled_data = np.transpose(self.data, dims).reshape(new_shape)
 
-            # Perform the same operation on the weights if applicable
-            if kwargs.get("weights") is not None:
-                weights = kwargs["weights"].view()
-                kwargs["weights"] = np.transpose(weights,
-                                                 dims).reshape(new_shape)
+#            # Perform the same operation on the weights if applicable
+#            if kwargs.get("weights") is not None:
+#                weights = kwargs["weights"].view()
+#                kwargs["weights"] = np.transpose(weights,
+#                                                 dims).reshape(new_shape)
 
             # Treat any declared "auxiliary data keys" similarly to 'weights'.
             # EXCEPT: we allow coords, and will broadcast to the right shape.

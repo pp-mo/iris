@@ -613,6 +613,10 @@ class WeightedAggregator(Aggregator):
 
         #: A list of keywords that trigger weighted behaviour.
         self._weighting_keywords = ["returned", "weights"]
+        # Record that 'weights' is data-sized (i.e. a weight for every point)
+        # N.B. rolling_window **must ignore this concept** (!)
+        if 'weights' not in self.aux_data_keys:
+            self.aux_data_keys.append('weights')
 
     def uses_weighting(self, **kwargs):
         """
