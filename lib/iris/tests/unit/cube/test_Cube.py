@@ -135,6 +135,7 @@ class Test_collapsed__warning(tests.IrisTest):
         # Returns a mock aggregator with a mocked method (uses_weighting)
         # which returns the given True/False condition.
         aggregator = mock.Mock(spec=WeightedAggregator)
+        aggregator.aux_data_keys = []
         aggregator.cell_method = None
         aggregator.uses_weighting = mock.Mock(return_value=uses_weighting)
 
@@ -155,6 +156,7 @@ class Test_collapsed__warning(tests.IrisTest):
     def test_lat_lon_noweighted_aggregator(self):
         # Collapse latitude coordinate with unweighted aggregator.
         aggregator = mock.Mock(spec=Aggregator)
+        aggregator.aux_data_keys = []
         aggregator.cell_method = None
         coords = ['latitude', 'longitude']
 
