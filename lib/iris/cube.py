@@ -2800,6 +2800,28 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                 kwargs["weights"] = np.transpose(weights,
                                                  dims).reshape(new_shape)
 
+            # Treat any declared "auxiliary data keys" similarly to 'weights'.
+            # EXCEPT: we allow coords, and will broadcast to the right shape.
+            # TODO: several holes here.  It's proof-of-concept at present.
+            #  * should not use private maths function for broadcasting (!)
+            #  * needs more care in using coords -- units compatibility ??
+            for aux_key in aggregator.aux_data_keys:
+                aux_data = kwargs.get(aux_key, None)
+                if aux_data is not None:
+                    if isinstance(aux_data, basestring):
+                        # convert a name to a Coord
+                        aux_data = self.coord(aux_data)
+                    if isinstance(aux_data, iris.coords.Coord):
+                        # Convert a coord to an array
+                        aux_data = \
+                            iris.analysis.maths._broadcast_cube_coord_data(
+                                self, aux_data, 'addition')
+                    # expand/replicate to cube shape + put back into the key
+                    aux_data, _ = np.broadcast_arrays(aux_data, self.data)
+                    aux_data = aux_data.view()
+                    aux_data = np.transpose(aux_data, dims).reshape(new_shape)
+                    kwargs[aux_key] = aux_data
+
             data_result = aggregator.aggregate(unrolled_data,
                                                axis=-1,
                                                **kwargs)

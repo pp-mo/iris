@@ -350,7 +350,7 @@ class Aggregator(object):
     """
 
     def __init__(self, cell_method, call_func, units_func=None,
-                 lazy_func=None, **kwargs):
+                 lazy_func=None, aux_data_keys=None, **kwargs):
         """
         Create an aggregator for the given :data:`call_func`.
 
@@ -374,6 +374,10 @@ class Aggregator(object):
             If provided, called to convert a cube's units.
             Returns an :class:`iris.units.Unit`, or a
             value that can be made into one.
+
+        * aux_data_keys (iterable of string):
+            Names of keywords that, if present, contain additional values for
+            each point of 'data' (and therefore of the same shape).
 
         * lazy_func (callable):
             An alternative to :data:`call_func` implementing a lazy
@@ -401,6 +405,13 @@ class Aggregator(object):
         self.call_func = call_func
         #: Unit conversion function.
         self.units_func = units_func
+        #: Auxiliary data keywords.
+        self.aux_data_keys = aux_data_keys
+        # (Normalise to a tuple of strings.)
+        if self.aux_data_keys is None:
+            self.aux_data_keys = []
+        elif isinstance(self.aux_data_keys, basestring):
+            self.aux_data_keys = [self.aux_data_keys]
         #: Lazy aggregation function.
         self.lazy_func = lazy_func
 
