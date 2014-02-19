@@ -24,8 +24,7 @@ import matplotlib.pyplot as plt
 crs_latlon = ccrs.PlateCarree()
 
 
-def make_plot(projection_name,
-              projection_crs, x_min, x_max, y_min, y_max):
+def make_plot(projection_name, projection_crs):
 
     # Create a matplotlib Figure.
     fig = plt.figure()
@@ -36,11 +35,11 @@ def make_plot(projection_name,
     # in different coordinate systems.
     ax = plt.axes(projection=projection_crs)
 
-    # Set the matplotlib displayed region (in display projection coordinates).
-    ax.set_xlim((x_min, x_max))
-    ax.set_ylim((y_min, y_max))
+    # Set display limits to include a set region of latitude * longitude.
+    # (Note: Cartopy-specific).
+    ax.set_extent((-80.0, 20.0, 10.0, 80.0), crs=crs_latlon)
 
-    # Add coastlines and meridians/parallels (Cartopy-only methods).
+    # Add coastlines and meridians/parallels (Cartopy-specific).
     ax.coastlines(linewidth=0.75, color='navy')
     ax.gridlines(crs=crs_latlon, linestyle='-')
 
@@ -107,11 +106,9 @@ def make_plot(projection_name,
 
 
 def main():
-    # Demonstrate with suitable settings for 2 different display projections.
-    make_plot('Equidistant Cylindrical', ccrs.PlateCarree(),
-              x_min=-80.0, x_max=20.0, y_min=20.0, y_max=80.0)
-    make_plot('North Polar Stereographic', ccrs.NorthPolarStereo(),
-              x_min=-7.4e6, x_max=4.2e6, y_min=-7.7e6, y_max=-0.5e6)
+    # Demonstrate with two different display projections.
+    make_plot('Equidistant Cylindrical', ccrs.PlateCarree())
+    make_plot('North Polar Stereographic', ccrs.NorthPolarStereo())
 
 
 if __name__ == '__main__':
