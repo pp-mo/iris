@@ -189,6 +189,10 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     lon_bounds = lon_bounds[i_ok]
     lat_bounds = lat_bounds[i_ok]
 
+    if not np.all(angle_calcs.valid_bounds_shapes(lon_bounds, lat_bounds)):
+        # whoops !
+        assert 0
+
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
     node_numbers_from_points = np.zeros(n_points * 4, dtype=np.int32)

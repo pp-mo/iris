@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def angles_abc_xys(a, b, c):
+def _calc_angles_abc(a, b, c):
     """
     Calculate internal angles "abc" from 3 arrays of 2d point locations.
 
@@ -29,7 +29,17 @@ def angles_abc_xys(a, b, c):
     ang_diff = np.where(ang_diff < np.pi, ang_diff, ang_diff - 2*np.pi)
     ang_diff = np.where(ang_diff > -np.pi, ang_diff, ang_diff + 2*np.pi)
     # subtract from 180 to get interior angle
-    return np.pi - ang_diff
+    result = np.pi - ang_diff
+    # ALSO explicitly invalidate any angles where two of the points coincide.
+    # TODO: this really needs a valid magnitude concept, not a magic number (!)
+    eps = 1e-5
+    # Flag input locations where any of the 3 points are indistinguishable.
+    sames = ((np.max(np.abs(a - b), axis=-1) < eps) |
+             (np.max(np.abs(b - c), axis=-1) < eps) |
+             (np.max(np.abs(c - a), axis=-1) < eps))
+    # Invalidate those locations by returning an out-of-range value.
+    result[sames] = 2.0 * np.pi
+    return result
 
 
 def valid_bounds_shapes(lon_bounds, lat_bounds):
@@ -59,9 +69,9 @@ def valid_bounds_shapes(lon_bounds, lat_bounds):
         # Check that an internal angle is >= 0 and < 180.
         return (0.0 <= ang) & (ang < np.pi)
 
-    a012 = angles_abc_xys(points[0], points[1], points[2])
-    a123 = angles_abc_xys(points[1], points[2], points[3])
-    a230 = angles_abc_xys(points[2], points[3], points[0])
+    a012 = _calc_angles_abc(points[0], points[1], points[2])
+    a123 = _calc_angles_abc(points[1], points[2], points[3])
+    a230 = _calc_angles_abc(points[2], points[3], points[0])
     valids = deg_in_180(a012) & deg_in_180(a123) & deg_in_180(a230)
     return valids
 
@@ -82,3 +92,6 @@ def fix_longitude_bounds(lons):
     assert lons.shape[-1] == 4
     lons = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1])
 
+#lons = np.array([[ 180.,    180.25,  180.25,  180.  ], [0, 1, 1, 0]])
+#lats = np.array([[-77.03860474, -77.03860474, -76.98234558, -76.98234558], [0, 0, 1, 1]])
+#valid_bounds_shapes(lons, lats)
