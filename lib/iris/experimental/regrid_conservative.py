@@ -28,6 +28,7 @@ import cartopy.crs as ccrs
 import iris
 import iris.experimental.regrid as i_regrid
 
+import iris.experimental._angle_calcs as angle_calcs
 
 #: A static Cartopy Geodetic() instance for transforming to true-lat-lons.
 _CRS_TRUELATLON = ccrs.Geodetic()
@@ -167,21 +168,6 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     ny, nx = x_coord.shape
     n_points = nx * ny
 
-    # NOTE: bounds are bigger than the points by +1 in both dims
-
-#    # "assume" contiguous bounds + take those which make a full set
-#    x_bounds[:-1, :-1] = x_coord.bounds[:, :, 0]
-#    x_bounds[:-1, -1] = x_coord.bounds[:, -1, 1]
-#    x_bounds[-1, :-1] = x_coord.bounds[-1, :, 3]
-#    x_bounds[-1, -1] = x_coord.bounds[-1, -1, 2]
-#
-#    y_bounds[:-1, :-1] = y_coord.bounds[:, :, 0]
-#    y_bounds[:-1, -1] = y_coord.bounds[:, -1, 1]
-#    y_bounds[-1, :-1] = y_coord.bounds[-1, :, 3]
-#    y_bounds[-1, -1] = y_coord.bounds[-1, -1, 2]
-
-    # check we got this right ??
-
     grid_crs = x_coord.coord_system.as_cartopy_crs()
     lon_bounds, lat_bounds = _convert_latlons(grid_crs,
                                               x_coord.bounds.flat[:],
@@ -190,84 +176,15 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     lon_bounds = lon_bounds.reshape((n_points, 4))
     lat_bounds = lat_bounds.reshape((n_points, 4))
 
-    # FOR NOW: remove the ones we can't handle because they wrap around the
-    # seam irregularly
-    # E.G. (from error log file) :
-    #    "Concave Element Detected"
-    #    concave elem. coords
-    #    -----------------------------
-    #    0  (179.743912,  45.901123)
-    #    1  (179.998917,  45.898499)
-    #    2  (-179.997101,  46.079975)
-    #    3  (179.747742,  46.082657)
+    # Fix lon_bounds to avoid +/-180 crossing within each cell boundary.
+    angle_calcs.fix_longitude_bounds(lon_bounds)
 
-    i_ok1 = np.where((np.min(lon_bounds, axis=-1) > -175.0)
-                     | (np.max(lon_bounds, axis=-1) < 175.0))[0]
+    # Calculate which cells are 'valid' (in ESMF terms, at least).
+    i_ok = angle_calcs.valid_bounds_shapes(lon_bounds, lat_bounds)
 
-
-    if i_ok1.size != n_points:
-        print '***** Cells across 180 seam : discarded {:8d} of {} original points'.format(
-            n_points - i_ok1.size, n_points)
-
-    # Check for degenerates : FIRST TIME in original points
-    i_ok2 = np.where(
-        # All 4 points must be different
-        ((lon_bounds[:, 0] != lon_bounds[:, 1]) | (lat_bounds[:, 0] != lat_bounds[:, 1])) &
-        ((lon_bounds[:, 0] != lon_bounds[:, 2]) | (lat_bounds[:, 0] != lat_bounds[:, 2])) &
-        ((lon_bounds[:, 0] != lon_bounds[:, 3]) | (lat_bounds[:, 0] != lat_bounds[:, 3])) &
-        ((lon_bounds[:, 1] != lon_bounds[:, 2]) | (lat_bounds[:, 1] != lat_bounds[:, 2])) &
-        ((lon_bounds[:, 1] != lon_bounds[:, 3]) | (lat_bounds[:, 1] != lat_bounds[:, 3])) &
-        ((lon_bounds[:, 2] != lon_bounds[:, 3]) | (lat_bounds[:, 2] != lat_bounds[:, 3]))
-        )[0]
-#         &
-#        # 4 lons cannot all be the same
-#        ((lon_bounds[:, 0] != lon_bounds[:, 1]) |
-#         (lon_bounds[:, 0] != lon_bounds[:, 2]) |
-#         (lon_bounds[:, 0] != lon_bounds[:, 3]) |
-#         (lon_bounds[:, 1] != lon_bounds[:, 2]) |
-#         (lon_bounds[:, 1] != lon_bounds[:, 3]) |
-#         (lon_bounds[:, 2] != lon_bounds[:, 3])) &
-#        # 4 lats cannot all be the same
-#        ((lat_bounds[:, 0] != lat_bounds[:, 1]) |
-#         (lat_bounds[:, 0] != lat_bounds[:, 2]) |
-#         (lat_bounds[:, 0] != lat_bounds[:, 3]) |
-#         (lat_bounds[:, 1] != lat_bounds[:, 2]) |
-#         (lat_bounds[:, 1] != lat_bounds[:, 3]) |
-#         (lat_bounds[:, 2] != lat_bounds[:, 3])) )[0]
-
-#    i_ok2x = i_ok2
-#    i_ok2 = [
-#        ((lon_bounds[i, 0] != lon_bounds[i, 1]) | (lat_bounds[i, 0] != lat_bounds[i, 1])) &
-#        ((lon_bounds[i, 0] != lon_bounds[i, 2]) | (lat_bounds[i, 0] != lat_bounds[i, 2])) &
-#        ((lon_bounds[i, 0] != lon_bounds[i, 3]) | (lat_bounds[i, 0] != lat_bounds[i, 3])) &
-#        ((lon_bounds[i, 1] != lon_bounds[i, 2]) | (lat_bounds[i, 1] != lat_bounds[i, 2])) &
-#        ((lon_bounds[i, 1] != lon_bounds[i, 3]) | (lat_bounds[i, 1] != lat_bounds[i, 3])) &
-#        ((lon_bounds[i, 2] != lon_bounds[i, 3]) | (lat_bounds[i, 2] != lat_bounds[i, 3]))
-##         &
-##        # 4 lons cannot all be the same
-##        ((lon_bounds[i, 0] != lon_bounds[i, 1]) |
-##         (lon_bounds[i, 0] != lon_bounds[i, 2]) |
-##         (lon_bounds[i, 0] != lon_bounds[i, 3]) |
-##         (lon_bounds[i, 1] != lon_bounds[i, 2]) |
-##         (lon_bounds[i, 1] != lon_bounds[i, 3]) |
-##         (lon_bounds[i, 2] != lon_bounds[i, 3])) &
-##        # 4 lats cannot all be the same
-##        ((lat_bounds[i, 0] != lat_bounds[i, 1]) |
-##         (lat_bounds[i, 0] != lat_bounds[i, 2]) |
-##         (lat_bounds[i, 0] != lat_bounds[i, 3]) |
-##         (lat_bounds[i, 1] != lat_bounds[i, 2]) |
-##         (lat_bounds[i, 1] != lat_bounds[i, 3]) |
-##         (lat_bounds[i, 2] != lat_bounds[i, 3]))
-#        for i in range(n_points)]
-
-    i_ok = np.array(sorted(set(i_ok1) & set(i_ok2)))
+    # Convert to a valid-indices array (for now -- for older code approach).
+    i_ok = np.array(np.where(i_ok)[0])
     n_validpoints = i_ok.size
-
-    if i_ok2.size != n_points:
-        print '***** Degenerate cells : {:8d} of {} original points'.format(
-            n_points - i_ok2.size, n_points)
-        print '*****        .. of which {:8d} were also seam-cells ?'.format(
-            (n_points - i_ok1.size) + (n_points - i_ok2.size) - (n_points - n_validpoints))
 
     lon_bounds = lon_bounds[i_ok]
     lat_bounds = lat_bounds[i_ok]
