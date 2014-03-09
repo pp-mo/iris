@@ -250,7 +250,7 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
                                            lat_bounds[..., None]),
                                           axis=-1).flat[:]
 
-    n_extras = 11
+    n_extras = 0
     if n_extras:
         #
         # Invent extra mesh nodes + elements, that will be ok, to test the debug mechanism
