@@ -189,9 +189,7 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     lon_bounds = lon_bounds[i_ok]
     lat_bounds = lat_bounds[i_ok]
 
-    if not np.all(angle_calcs.valid_bounds_shapes(lon_bounds, lat_bounds)):
-        # whoops !
-        assert 0
+    assert np.all(angle_calcs.valid_bounds_shapes(lon_bounds, lat_bounds))
 
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
@@ -251,10 +249,31 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     combined_node_coords = np.concatenate((lon_bounds[..., None],
                                            lat_bounds[..., None]),
                                           axis=-1).flat[:]
+
+    n_extras = 11
+    if n_extras:
+        #
+        # Invent extra mesh nodes + elements, that will be ok, to test the debug mechanism
+        #
+        lon_extras = np.arange(n_extras).reshape(n_extras,1)*10.0 + \
+            [[21.1, 21.5, 21.5, 21.1]]
+        lat_extras = np.arange(n_extras).reshape(n_extras,1)*15.0 + \
+            [[51.1, 51.1, 51.5, 51.5]]
+        extra_coords = np.concatenate((lon_extras[..., None],
+                                       lat_extras[..., None]),
+                                      axis=-1).flat[:]
+        combined_node_coords = np.concatenate((extra_coords, combined_node_coords))
+        extra_node_ids = np.array(np.arange(n_extras*4) + 5000000,
+                                  np.int32)
+        node_ids = np.concatenate((extra_node_ids, node_ids))
+        n_nodes += n_extras*4
+        node_owners = np.zeros(n_nodes)
+
     mesh.add_nodes(nodeCount=n_nodes,
                    nodeIds=node_ids.flat[:],
                    nodeCoords=combined_node_coords,
                    nodeOwners=node_owners)
+
 
     #
     # Create 'elements', which represent the cells themselves
@@ -273,14 +292,21 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     bounds_indices = bounds_indices[i_ok]
     # replace these indices with equivalent valid indices
     elem_connects = node_numbers_from_points[bounds_indices]
+    if n_extras:
+        n_elems += n_extras
+        elem_ids = np.arange(n_elems, dtype=np.int32)
+        elem_types = np.ones(n_elems, dtype=np.int32) * ESMF.MeshElemType.QUAD
+        elem_connects = np.concatenate((np.arange(n_extras*4, dtype=np.int32),
+                                        elem_connects.flat[:] + n_extras*4))
     # these should all be *valid* ones
     assert not np.any(elem_connects < 0)
 
     # Add a mask item to the Mesh, if requested
     if mask is not None:
-        mask = np.where(mask, 1, 0)
-        mask = np.array(mask, dtype=np.int32)
-        mask = mask.flat[:]
+        mask = None
+#        mask = np.where(mask, 1, 0)
+#        mask = np.array(mask, dtype=np.int32)
+#        mask = mask.flat[:]
 
     mesh.add_elements(elementCount=n_elems,
                       elementIds=elem_ids.flat[:],
@@ -293,6 +319,8 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 
     # assign data content, if provided
     if data is not None:
+        if n_extras:
+            data = np.concatenate((np.zeros(n_extras), data.flat[:]))
         field.data[:] = data.reshape(n_points)[i_ok]
 
     return field

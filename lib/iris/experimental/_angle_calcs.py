@@ -65,9 +65,14 @@ def valid_bounds_shapes(lon_bounds, lat_bounds):
                              axis=-1)
               for i_point in range(4)]
 
+    # Define a tolerance to exclude angles too close to 0 or 180.
+    # TODO: this really needs a valid magnitude concept, not a magic number (!)
+    eps = np.deg2rad(0.01)
+    eps_from_180 = np.pi - eps
+
+    # Check that all internal angles are >0 and <180.
     def deg_in_180(ang):
-        # Check that an internal angle is >= 0 and < 180.
-        return (0.0 <= ang) & (ang < np.pi)
+        return (eps < ang) & (ang < eps_from_180)
 
     a012 = _calc_angles_abc(points[0], points[1], points[2])
     a123 = _calc_angles_abc(points[1], points[2], points[3])
