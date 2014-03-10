@@ -7,9 +7,10 @@ def _calc_angles_abc(a, b, c):
 
     Args:
 
-    * a, b, c (float array-like, last dimension == 2):
-        Arrays of point coordinates.  [..., 0] and [..., 1] are X and Y values.
-        All must have same shape.
+    * a, b, c (float array-like):
+        Arrays of point coordinates.
+        All must have same shape, with shape[-1] == 2.
+        [..., 0] and [..., 1] are X and Y values.
 
     Returns:
         An array of floats without the last (XY) dimension.
@@ -42,7 +43,7 @@ def _calc_angles_abc(a, b, c):
     return result
 
 
-def valid_bounds_shapes(lon_bounds, lat_bounds):
+def valid_bounds_shapes(x_bounds, y_bounds):
     """
     Calculate which 2d bounds values represent "valid" shapes (in ESMF terms).
 
@@ -50,18 +51,18 @@ def valid_bounds_shapes(lon_bounds, lat_bounds):
 
     Args:
 
-    * lon_bounds, lat_bounds (float arrays):
-        Numpy arrays of longitude and latitudes, in degrees.
+    * x_bounds, y_bounds (float arrays):
+        Numpy arrays of X and Y coordinates.
         Both must have same shape.
 
     Returns:
         a boolean array (same shape as arguments).
 
     """
-    assert lon_bounds.shape == lat_bounds.shape
-    assert lon_bounds.shape[-1] == 4
-    points = [np.concatenate((lon_bounds[..., i_point:i_point+1],
-                              lat_bounds[..., i_point:i_point+1]),
+    assert x_bounds.shape == y_bounds.shape
+    assert x_bounds.shape[-1] == 4
+    points = [np.concatenate((x_bounds[..., i_point:i_point+1],
+                              y_bounds[..., i_point:i_point+1]),
                              axis=-1)
               for i_point in range(4)]
 
@@ -96,7 +97,3 @@ def fix_longitude_bounds(lons):
     # with bounds[0] in each case.
     assert lons.shape[-1] == 4
     lons = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1].copy())
-
-#lons = np.array([[ 180.,    180.25,  180.25,  180.  ], [0, 1, 1, 0]])
-#lats = np.array([[-77.03860474, -77.03860474, -76.98234558, -76.98234558], [0, 0, 1, 1]])
-#valid_bounds_shapes(lons, lats)
