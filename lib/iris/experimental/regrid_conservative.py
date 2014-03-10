@@ -82,6 +82,8 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
                                      y_coord.contiguous_bounds())
     grid_crs = x_coord.coord_system.as_cartopy_crs()
     lon_bounds, lat_bounds = _convert_latlons(grid_crs, x_bounds, y_bounds)
+    clip = 89.8
+    lat_bounds = np.clip(lat_bounds, -clip, clip)
 
     # Add grid 'coord' element for corners, and fill with corner values.
     grid.add_coords(staggerlocs=[ESMF.StaggerLoc.CORNER])
@@ -166,15 +168,15 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 #    x_bounds, y_bounds = np.meshgrid(x_coord.contiguous_bounds(),
 #                                     y_coord.contiguous_bounds())
     ny, nx = x_coord.shape
-    n_points = nx * ny
+    n_cells = nx * ny
 
     grid_crs = x_coord.coord_system.as_cartopy_crs()
     lon_bounds, lat_bounds = _convert_latlons(grid_crs,
                                               x_coord.bounds.flat[:],
                                               y_coord.bounds.flat[:])
 
-    lon_bounds = lon_bounds.reshape((n_points, 4))
-    lat_bounds = lat_bounds.reshape((n_points, 4))
+    lon_bounds = lon_bounds.reshape((n_cells, 4))
+    lat_bounds = lat_bounds.reshape((n_cells, 4))
 
     # Fix lon_bounds to avoid +/-180 crossing within each cell boundary.
     angle_calcs.fix_longitude_bounds(lon_bounds)
@@ -193,8 +195,10 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
-    node_numbers_from_points = np.zeros(n_points * 4, dtype=np.int32)
-    node_numbers_from_points.reshape((n_points, 4))
+    # BECAUSE so-called 'nodeIds' argument to Mesh.add_nodes is actually *NOT*
+    # node ids, but indices within the passed nodes array. *AND* all nodes
+    # defined must be used in some element, or it complains.  Yuck !!
+    node_numbers_from_points = np.zeros(n_cells * 4, dtype=np.int32)
     # fill blank slots with -1 (an invalid index value)
     node_numbers_from_points[:] = -1
     # define valid slots
@@ -286,8 +290,8 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     elem_types = np.ones(n_elems, dtype=np.int32) * ESMF.MeshElemType.QUAD
 
     # define the connects...
-    bounds_indices = np.arange(n_points * 4, dtype=np.int32)
-    bounds_indices = bounds_indices.reshape((n_points, 4))
+    bounds_indices = np.arange(n_cells * 4, dtype=np.int32)
+    bounds_indices = bounds_indices.reshape((n_cells, 4))
     # remove the invalid ones
     bounds_indices = bounds_indices[i_ok]
     # replace these indices with equivalent valid indices
@@ -321,7 +325,7 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     if data is not None:
         if n_extras:
             data = np.concatenate((np.zeros(n_extras), data.flat[:]))
-        field.data[:] = data.reshape(n_points)[i_ok]
+        field.data[:] = data.reshape(n_cells)[i_ok]
 
     return field
 

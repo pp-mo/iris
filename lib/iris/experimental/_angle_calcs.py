@@ -68,11 +68,12 @@ def valid_bounds_shapes(lon_bounds, lat_bounds):
     # Define a tolerance to exclude angles too close to 0 or 180.
     # TODO: this really needs a valid magnitude concept, not a magic number (!)
     eps = np.deg2rad(0.01)
+#    eps = 0.0
     eps_from_180 = np.pi - eps
 
     # Check that all internal angles are >0 and <180.
     def deg_in_180(ang):
-        return (eps < ang) & (ang < eps_from_180)
+        return (eps <= ang) & (ang < eps_from_180)
 
     a012 = _calc_angles_abc(points[0], points[1], points[2])
     a123 = _calc_angles_abc(points[1], points[2], points[3])
@@ -95,7 +96,7 @@ def fix_longitude_bounds(lons):
     # Each set of 4 bounds points is wrapped individually, to be compatible
     # with bounds[0] in each case.
     assert lons.shape[-1] == 4
-    lons = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1])
+    lons = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1].copy())
 
 #lons = np.array([[ 180.,    180.25,  180.25,  180.  ], [0, 1, 1, 0]])
 #lats = np.array([[-77.03860474, -77.03860474, -76.98234558, -76.98234558], [0, 0, 1, 1]])

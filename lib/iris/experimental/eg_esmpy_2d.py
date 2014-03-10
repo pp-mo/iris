@@ -22,4 +22,6 @@ ndhf.coord('longitude').coord_system = cs_pc
 ndhf.coord('latitude').coord_system = cs_pc
 assert ndhf.shape[0] == 1
 ndhf = ndhf[0]
+#ndhf = ndhf[10:410,10:410]
+ndhf = ndhf[100:104,100:104]
 ndhf_regridded = regrid_conservative_via_esmpy(ndhf, tgt_grid)
