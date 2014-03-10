@@ -49,95 +49,6 @@ def _convert_latlons(crs, x_array, y_array):
 
 
 def _make_esmpy_field(x_coord, y_coord, ref_name='field',
-                      data=None, mask=None):
-    """
-    Create an ESMPy ESMF.Field on given coordinates.
-
-    Create a ESMF.Grid from the coordinates, defining corners and centre
-    positions as lats+lons.
-    Add a grid mask if provided.
-    Create and return a Field mapped on this Grid, setting data if provided.
-
-    Args:
-
-    * x_coord, y_coord (:class:`iris.coords.Coord`):
-        One-dimensional coordinates of shape (nx,) and (ny,).
-        Their contiguous bounds define an ESMF.Grid of shape (nx, ny).
-
-    Kwargs:
-
-    * data (:class:`numpy.ndarray`, shape (nx,ny)):
-        Set the Field data content.
-    * mask (:class:`numpy.ndarray`, boolean, shape (nx,ny)):
-        Add a mask item to the grid, assigning it 0/1 where mask=False/True.
-
-    """
-    # Create a Grid object describing the coordinate cells.
-    dims = [len(coord.points) for coord in (x_coord, y_coord)]
-    dims = np.array(dims, dtype=np.int32)  # specific type required by ESMF.
-    grid = ESMF.Grid(dims)
-
-    # Get all cell corner coordinates as true-lat-lons
-    x_bounds, y_bounds = np.meshgrid(x_coord.contiguous_bounds(),
-                                     y_coord.contiguous_bounds())
-    grid_crs = x_coord.coord_system.as_cartopy_crs()
-    lon_bounds, lat_bounds = _convert_latlons(grid_crs, x_bounds, y_bounds)
-
-    # Add grid 'coord' element for corners, and fill with corner values.
-    grid.add_coords(staggerlocs=[ESMF.StaggerLoc.CORNER])
-    grid_corners_x = grid.get_coords(0, ESMF.StaggerLoc.CORNER)
-    grid_corners_x[:] = lon_bounds.T
-    grid_corners_y = grid.get_coords(1, ESMF.StaggerLoc.CORNER)
-    grid_corners_y[:] = lat_bounds.T
-
-    # calculate the cell centre-points
-    # NOTE: we don't care about Iris' idea of where the points 'really' are
-    # *but* ESMF requires the data in the CENTER for conservative regrid,
-    # according to the documentation :
-    #  - http://www.earthsystemmodeling.org/
-    #        esmf_releases/public/last/ESMF_refdoc.pdf
-    #  - section  22.2.3 : ESMF_REGRIDMETHOD
-    #
-    # We are currently determining cell centres in native coords, then
-    # converting these into true-lat-lons.
-    # It is confirmed by experiment that moving these centre location *does*
-    # changes the regrid results.
-    # TODO: work out why this is needed, and whether these centres are 'right'.
-
-    # Average cell corners in native coordinates, then translate to lats+lons
-    # (more costly, but presumably 'more correct' than averaging lats+lons).
-    x_centres = x_coord.contiguous_bounds()
-    x_centres = 0.5 * (x_centres[:-1] + x_centres[1:])
-    y_centres = y_coord.contiguous_bounds()
-    y_centres = 0.5 * (y_centres[:-1] + y_centres[1:])
-    x_points, y_points = np.meshgrid(x_centres, y_centres)
-    lon_points, lat_points = _convert_latlons(grid_crs, x_points, y_points)
-
-    # Add grid 'coord' element for centres + fill with centre-points values.
-    grid.add_coords(staggerlocs=[ESMF.StaggerLoc.CENTER])
-    grid_centers_x = grid.get_coords(0, ESMF.StaggerLoc.CENTER)
-    grid_centers_x[:] = lon_points.T
-    grid_centers_y = grid.get_coords(1, ESMF.StaggerLoc.CENTER)
-    grid_centers_y[:] = lat_points.T
-
-    # Add a mask item, if requested
-    if mask is not None:
-        grid.add_item(ESMF.GridItem.MASK,
-                      [ESMF.StaggerLoc.CENTER])
-        grid_mask = grid.get_item(ESMF.GridItem.MASK)
-        grid_mask[:] = np.where(mask, 1, 0)
-
-    # create a Field based on this grid
-    field = ESMF.Field(grid, ref_name)
-
-    # assign data content, if provided
-    if data is not None:
-        field.data[:] = data
-
-    return field
-
-
-def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
                      data=None, mask=None):
     """
     Create an ESMPy ESMF.Field on given coordinates, based on a ESMF.Mesh.
@@ -206,36 +117,6 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 
 
     # create a Mesh object
-#        # set up a simple mesh
-#        num_node = 16
-#        num_elem = 9
-#        nodeId = np.array([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16])
-#        nodeCoord = np.array([0.0,0.0, 1.5,0.0, 2.5,0.0, 4.0,0.0,
-#                              0.0,1.5, 1.5,1.5, 2.5,1.5, 4.0,1.5,
-#                              0.0,2.5, 1.5,2.5, 2.5,2.5, 4.0,2.5,
-#                              0.0,4.0, 1.5,4.0, 2.5,4.0, 4.0,4.0])
-#        nodeOwner = np.zeros(num_node, dtype=np.int32)
-#        elemId = np.array([1,2,3,4,5,6,7,8,9], dtype=np.int32)
-#        elemType = np.ones(num_elem, dtype=np.int32)
-#        elemType*=ESMF.MeshElemType.QUAD
-#        elemConn = np.array([0,1,5,4,
-#                              1,2,6,5,
-#                              2,3,7,6,
-#                              4,5,9,8,
-#                              5,6,10,9,
-#                              6,7,11,10,
-#                              8,9,13,12,
-#                              9,10,14,13,
-#                              10,11,15,14], dtype=np.int32)
-#        elemMask = np.array([0,0,0,0,1,0,0,0,0], dtype=np.int32)
-#        elemArea = np.array([5,5,5,5,5,5,5,5,5], dtype=np.float64)
-#        
-#        mesh = ESMF.Mesh(2,2)
-#        
-#        mesh.add_nodes(num_node, nodeId, nodeCoord, nodeOwner)
-#        
-#        mesh.add_elements(num_elem, elemId, elemType, elemConn, elemMask, elemArea)
-
     mesh = ESMF.Mesh(parametricDim=2, spatialDim=2)
 
     #
@@ -251,25 +132,6 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     combined_node_coords = np.concatenate((lon_bounds[..., None],
                                            lat_bounds[..., None]),
                                           axis=-1).flat[:]
-
-    n_extras = 0
-    if n_extras:
-        #
-        # Invent extra mesh nodes + elements, that will be ok, to test the debug mechanism
-        #
-        lon_extras = np.arange(n_extras).reshape(n_extras,1)*10.0 + \
-            [[21.1, 21.5, 21.5, 21.1]]
-        lat_extras = np.arange(n_extras).reshape(n_extras,1)*15.0 + \
-            [[51.1, 51.1, 51.5, 51.5]]
-        extra_coords = np.concatenate((lon_extras[..., None],
-                                       lat_extras[..., None]),
-                                      axis=-1).flat[:]
-        combined_node_coords = np.concatenate((extra_coords, combined_node_coords))
-        extra_node_ids = np.array(np.arange(n_extras*4) + 5000000,
-                                  np.int32)
-        node_ids = np.concatenate((extra_node_ids, node_ids))
-        n_nodes += n_extras*4
-        node_owners = np.zeros(n_nodes)
 
     mesh.add_nodes(nodeCount=n_nodes,
                    nodeIds=node_ids.flat[:],
@@ -294,12 +156,6 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
     bounds_indices = bounds_indices[i_ok]
     # replace these indices with equivalent valid indices
     elem_connects = node_numbers_from_points[bounds_indices]
-    if n_extras:
-        n_elems += n_extras
-        elem_ids = np.arange(n_elems, dtype=np.int32)
-        elem_types = np.ones(n_elems, dtype=np.int32) * ESMF.MeshElemType.QUAD
-        elem_connects = np.concatenate((np.arange(n_extras*4, dtype=np.int32),
-                                        elem_connects.flat[:] + n_extras*4))
     # these should all be *valid* ones
     assert not np.any(elem_connects < 0)
 
@@ -321,8 +177,6 @@ def _make_esmpy_meshtype_field(x_coord, y_coord, ref_name='field',
 
     # assign data content, if provided
     if data is not None:
-        if n_extras:
-            data = np.concatenate((np.zeros(n_extras), data.flat[:]))
         field.data[:] = data.reshape(n_cells)[i_ok]
 
     return field
@@ -439,19 +293,13 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
             srcdata_mask = None
 
         # Construct ESMF Field objects on source and destination grids.
-#        src_field = _make_esmpy_field(src_coords[0], src_coords[1],
-#                                      data=src_data_2d, mask=srcdata_mask)
-
-        src_field = _make_esmpy_meshtype_field(src_coords[0], src_coords[1],
+        src_field = _make_esmpy_field(src_coords[0], src_coords[1],
                                          data=src_data_2d, mask=srcdata_mask)
 
-#        dst_field = _make_esmpy_field(dst_coords[0], dst_coords[1])
-        dst_field = _make_esmpy_meshtype_field(dst_coords[0], dst_coords[1])
-#                                               data=grid_cube.data.transpose())
+        dst_field = _make_esmpy_field(dst_coords[0], dst_coords[1])
 
         # Make Field for destination coverage fraction (for missing data calc).
-#        coverage_field = ESMF.Field(dst_field.grid, 'validmask_dst')
-        coverage_field = _make_esmpy_meshtype_field(dst_coords[0],
+        coverage_field = _make_esmpy_field(dst_coords[0],
                                                     dst_coords[1])
 
         # Do the actual regrid with ESMF.
