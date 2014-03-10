@@ -82,8 +82,6 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
                                      y_coord.contiguous_bounds())
     grid_crs = x_coord.coord_system.as_cartopy_crs()
     lon_bounds, lat_bounds = _convert_latlons(grid_crs, x_bounds, y_bounds)
-    clip = 89.8
-    lat_bounds = np.clip(lat_bounds, -clip, clip)
 
     # Add grid 'coord' element for corners, and fill with corner values.
     grid.add_coords(staggerlocs=[ESMF.StaggerLoc.CORNER])
@@ -375,8 +373,9 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
 
     # Get source + target XY coordinate pairs and check they are suitable.
 #    src_coords = i_regrid._get_xy_dim_coords(source_cube)
+#    dst_coords = i_regrid._get_xy_dim_coords(grid_cube)
     src_coords = source_cube.coord(axis='x'), source_cube.coord(axis='y')
-    dst_coords = i_regrid._get_xy_dim_coords(grid_cube)
+    dst_coords = grid_cube.coord(axis='x'), grid_cube.coord(axis='y')
     src_cs = src_coords[0].coord_system
     grid_cs = dst_coords[0].coord_system
     if src_cs is None or grid_cs is None:
@@ -432,7 +431,7 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         # NB must transpose data, as we have (y, x) dims order
         #    (well usually, *not checked here*)
         # .. but ESMF uses (x, y)
-        src_data_2d = source_cube.data.transpose()
+        src_data_2d = source_cube.data.copy()
         # Work out whether we have missing data to define a source grid mask.
         if np.ma.is_masked(src_data_2d):
             srcdata_mask = np.ma.getmask(src_data_2d)
@@ -443,22 +442,26 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
 #        src_field = _make_esmpy_field(src_coords[0], src_coords[1],
 #                                      data=src_data_2d, mask=srcdata_mask)
 
-        src_grid = _make_esmpy_meshtype_field(src_coords[0], src_coords[1],
+        src_field = _make_esmpy_meshtype_field(src_coords[0], src_coords[1],
                                          data=src_data_2d, mask=srcdata_mask)
 
-        dst_field = _make_esmpy_field(dst_coords[0], dst_coords[1])
+#        dst_field = _make_esmpy_field(dst_coords[0], dst_coords[1])
+        dst_field = _make_esmpy_meshtype_field(dst_coords[0], dst_coords[1])
+#                                               data=grid_cube.data.transpose())
 
         # Make Field for destination coverage fraction (for missing data calc).
-        coverage_field = ESMF.Field(dst_field.grid, 'validmask_dst')
+#        coverage_field = ESMF.Field(dst_field.grid, 'validmask_dst')
+        coverage_field = _make_esmpy_meshtype_field(dst_coords[0],
+                                                    dst_coords[1])
 
         # Do the actual regrid with ESMF.
         mask_flag_values = np.array([1], dtype=np.int32)
-        regrid_method = ESMF.Regrid(src_grid, dst_field,
+        regrid_method = ESMF.Regrid(src_field, dst_field,
                                     src_mask_values=mask_flag_values,
                                     regrid_method=ESMF.RegridMethod.CONSERVE,
                                     unmapped_action=ESMF.UnmappedAction.IGNORE,
                                     dst_frac_field=coverage_field)
-        regrid_method(src_grid, dst_field)
+        regrid_method(src_field, dst_field)
         data = dst_field.data
 
         # Convert destination 'coverage fraction' into a missing-data mask.
@@ -467,10 +470,18 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         coverage_tolerance_threshold = 1.0 - 1.0e-8
         data.mask = coverage_field.data < coverage_tolerance_threshold
 
+        # Reconstruct proper shape (Iris-dims order)
+        ny, nx = dst_coords[0].points.shape
+        data = data.reshape((ny, nx))
+
+#
+# NOTE: this should really transpose to DESTINATION ORDER
+#  - in any case, that is unclear now target-dims are also 2d (!)
+#
 #        # Transpose ESMF result_cube dims (X,Y) back to the order of the source
 #        if (src_dims_xy[0] > src_dims_xy[1]):
 #            data = data.transpose()
-#
+
 #        # Paste regridded slice back into parent array
 #        fullcube_data[slice_indices_tuple] = data
         fullcube_data = data
@@ -479,19 +490,19 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
     if not np.ma.is_masked(fullcube_data):
         fullcube_data = np.array(fullcube_data)
 
-    # Generate a full 2d sample grid, as required for regridding orography
-    # NOTE: as seen in "regrid_bilinear_rectilinear_src_and_grid"
-    # TODO: can this not also be wound into the _create_cube method ?
-    src_cs = src_coords[0].coord_system
-    sample_grid_x, sample_grid_y = i_regrid._sample_grid(src_cs,
-                                                         dst_coords[0],
-                                                         dst_coords[1])
+#    # Generate a full 2d sample grid, as required for regridding orography
+#    # NOTE: as seen in "regrid_bilinear_rectilinear_src_and_grid"
+#    # TODO: can this not also be wound into the _create_cube method ?
+#    src_cs = src_coords[0].coord_system
+#    sample_grid_x, sample_grid_y = i_regrid._sample_grid(src_cs,
+#                                                         dst_coords[0],
+#                                                         dst_coords[1])
 
     result_cube = iris.cube.Cube(fullcube_data)
     result_cube.metadata = source_cube.metadata
 
-    for i_dim, coord in enumerate(dst_coords):
-        result_cube.add_aux_coord(coord, (i_dim))
+    for coord in dst_coords:
+        result_cube.add_aux_coord(coord, grid_cube.coord_dims(coord))
 
     return result_cube
 
