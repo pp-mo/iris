@@ -64,9 +64,23 @@ ndhf.coord('longitude').coord_system = cs_pc
 ndhf.coord('latitude').coord_system = cs_pc
 assert ndhf.shape[0] == 1
 ndhf = ndhf[0]
-#ndhf = ndhf[:990]
-#ndhf = ndhf[100:104,100:104]
-ndhf = ndhf[100:400,:300]
+
+#Mask the problem areas 
+#TODO: how do we generalise this ???
+ndhf.data[-6:,:6] = np.ma.masked
+ndhf.data[-6:,-6:] = np.ma.masked
+ndhf.data[-12:, 720-62:720+62] = np.ma.masked
+ndhf.data[-2, 1061] = np.ma.masked
+
+
+ndhf = ndhf[900:]   # a quick test of handling bad cells
+#ndhf = ndhf[-14:,:50]   # a REALLY quick test of handling bad cells
+#ndhf = ndhf[-14:,:720]   # a reduced test of handling bad cells
+#ndhf = ndhf[-14:,:]   # a reduced test of handling bad cells
+#ndhf = ndhf[800:900]   # a quick test with no bad cells
+#ndhf = ndhf[:990]  # a large calc avoiding bad cells
+#ndhf = ndhf[100:104,100:104]  # a very tiny test (doesn't show anything)
+#ndhf = ndhf[100:400,:300]   # medium-length visual test with no bad cells
 
 ndhf.data[ndhf.data > 1e6] = np.ma.masked
 

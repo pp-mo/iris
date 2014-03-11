@@ -537,6 +537,75 @@ def _create_cube(data, src, x_dim, y_dim, src_x_coord, src_y_coord,
     return result
 
 
+def _create_cube_xy_1d_or_2d(data, src, grid,
+                             src_x_coord, src_y_coord,
+                             grid_x_coord, grid_y_coord):
+    """
+    Return a new Cube for the result of regridding the source Cube onto
+    the new grid.
+
+    All the metadata and coordinates of the result Cube are copied from
+    the source Cube, with two exceptions:
+        - Grid dimension coordinates are copied from the grid Cube (but mapped
+        into the original source-cube dimensions).
+        - Auxiliary coordinates which span the grid dimensions are
+          ignored.
+
+    Args:
+
+    * data:
+        The regridded data as an N-dimensional NumPy array.
+    * src:
+        The source Cube.
+    * grid:
+        The cube defining the horizontal grid of the result.
+    * src_x_coord:
+        The X :class:`iris.coords.DimCoord`.
+    * src_y_coord:
+        The Y :class:`iris.coords.DimCoord`.
+    * grid_x_coord:
+        The :class:`iris.coords.DimCoord` for the new grid's X
+        coordinate.
+    * grid_y_coord:
+        The :class:`iris.coords.DimCoord` for the new grid's Y
+        coordinate.
+
+    Returns:
+        The new, regridded Cube.
+
+    .. note::
+
+        The source cube must not have any coordinate factories which make
+        horizontal coordinates, or any such coordinates.
+
+    """
+    # Create a result cube with the appropriate metadata
+    result = iris.cube.Cube(data)
+    result.metadata = copy.deepcopy(src.metadata)
+
+    replace_data = {
+        src_x_coord.as_defn(): ()
+        }
+
+    # Copy across all the coordinates, replacing old with new in the case of
+    # the identified horizontal ones.
+    def copy_coords(src_coords, add_method):
+        for coord in src_coords:
+            dims = src.coord_dims(coord)
+            if coord.as_defn() in replace_defns:
+                pass
+            elif src_x_dims in dims or src_y_dims in dims:
+                continue
+            result_coord = coord.copy()
+            add_method(result_coord, dims)
+            coord_mapping[id(coord)] = result_coord
+
+    copy_coords(src.dim_coords, result.add_dim_coord)
+    copy_coords(src.aux_coords, result.add_aux_coord)
+
+    return result
+
+
 def regrid_bilinear_rectilinear_src_and_grid(src, grid):
     """
     Return a new Cube that is the result of regridding the source Cube

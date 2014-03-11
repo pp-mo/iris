@@ -27,7 +27,7 @@ iris.proxy.apply_proxy('ESMF', globals())
 import cartopy.crs as ccrs
 import iris
 import iris.experimental.regrid as i_regrid
-
+import iris.unit
 import iris.experimental._angle_calcs as angle_calcs
 
 #: A static Cartopy Geodetic() instance for transforming to true-lat-lons.
@@ -48,59 +48,121 @@ def _convert_latlons(crs, x_array, y_array):
     return ll_values[..., 0], ll_values[..., 1]
 
 
+_unit_degrees = iris.unit.Unit('degrees')
+
+
 def _make_esmpy_field(x_coord, y_coord, ref_name='field',
                      data=None, mask=None):
     """
     Create an ESMPy ESMF.Field on given coordinates, based on a ESMF.Mesh.
 
-    Create a ESMF.Mesh from the coordinates, defining corners and centre
-    positions as lats+lons.
-    Add a grid mask if provided.
-    Create and return a Field mapped on this Mesh, setting data if provided.
+    Create a ESMF.Mesh from the coordinates, defining corners from the
+    coordinate values.  Return an ESMF.Field based on this, setting the point
+    data if provided.  The separate mask argument, if provided, specifies cells
+    to be omitted from the underlying Mesh.
 
     Args:
 
     * x_coord, y_coord (:class:`iris.coords.Coord`):
-        Two-dimensional coordinates of shape (ny, nx).
-        Their contiguous bounds define an ESMF.Mesh of shape (nx, ny).
+        X and Y coordinates, either one- or two-dimensional (both the same).
+        The resulting ESMF.Field is based on an ESMF.Mesh representing 2d
+        bounds derived from these coordinates.
 
     Kwargs:
 
-    * data (:class:`numpy.ndarray`, shape (nx,ny)):
+    * ref_name (string):
+        A user id-name for the field.
+    * data (float array-like):
         Set the Field data content.
-    * mask (:class:`numpy.ndarray`, boolean, shape (nx,ny)):
-        Add a mask item to the grid, assigning it 0/1 where mask=False/True.
+    * mask (boolean array-like):
+        Specifies cells to be omitted from the underlying Mesh.
+
+    .. note::
+
+        Each set of four cell bound points must conform to ESMF validity
+        requirements:  The points must all be distinct, and the values trace a
+        convex, anti-clockwise path describing a finite area (i.e. not flat).
+        The 'mask' can be used to omit cells that will otherwise cause errors.
+
+    .. note::
+
+        Although ESMF supports arbitrary coordinate types, here we require that
+        X and Y are longitude and latitude coordinates.
 
     """
-    # Get all cell corner coordinates as true-lat-lons
+    # Get all cell corner coordinates as 2D arrays
+    if x_coord.ndim == 2:
+        # 2D source coordinates: define 2d sets contiguously
+        x_bounds = x_coord.bounds
+        y_bounds = y_coord.bounds
+    else:
+        # 1D source coordinates: define 2d sets contiguously
+        x_bounds_contiguous, y_bounds_contiguous = np.meshgrid(
+            x_coord.contiguous_bounds(),
+            y_coord.contiguous_bounds())
 
-#    x_bounds, y_bounds = np.meshgrid(x_coord.contiguous_bounds(),
-#                                     y_coord.contiguous_bounds())
-    ny, nx = x_coord.shape
+        # Expand these into general 4-point bounds (i.e. they now just "happen"
+        # to be contiguous!): points 0,1,2,3 anticlockwise around the cell.
+        def _make_full_bounds_array(bounds_contiguous):
+            bounds_full_4point = np.empty((bounds_contiguous.shape[0] - 1,
+                                           bounds_contiguous.shape[1] - 1,
+                                           4))
+            bounds_full_4point[..., 0] = bounds_contiguous[:-1, :-1]
+            bounds_full_4point[..., 1] = bounds_contiguous[:-1, 1:]
+            bounds_full_4point[..., 2] = bounds_contiguous[1:, 1:]
+            bounds_full_4point[..., 3] = bounds_contiguous[1:, :-1]
+            return bounds_full_4point
+
+        x_bounds = _make_full_bounds_array(x_bounds_contiguous)
+        y_bounds = _make_full_bounds_array(y_bounds_contiguous)
+
+
+    ny, nx = x_bounds.shape[:-1]
     n_cells = nx * ny
 
+    # Convert the coordinate values to degrees (as coord_systems need this)
+    x_bounds = x_coord.units.convert(x_bounds, _unit_degrees)
+    y_bounds = x_coord.units.convert(y_bounds, _unit_degrees)
+
+    # Transform these into "true" longitudes and latitudes.
     grid_crs = x_coord.coord_system.as_cartopy_crs()
-    lon_bounds, lat_bounds = _convert_latlons(grid_crs,
-                                              x_coord.bounds.flat[:],
-                                              y_coord.bounds.flat[:])
+    x_bounds, y_bounds = _convert_latlons(grid_crs,
+                                          x_bounds.flat[:], y_bounds.flat[:])
 
-    lon_bounds = lon_bounds.reshape((n_cells, 4))
-    lat_bounds = lat_bounds.reshape((n_cells, 4))
+    # Reform so the values are indexed simply by [cell_index, bounds_index].
+    x_bounds = x_bounds.reshape((n_cells, 4))
+    y_bounds = y_bounds.reshape((n_cells, 4))
 
-    # Fix lon_bounds to avoid +/-180 crossing within each cell boundary.
-    angle_calcs.fix_longitude_bounds(lon_bounds)
+    # Fix the longitudes to avoid any 180-degree crossings within each cell.
+    angle_calcs.fix_longitude_bounds(x_bounds)
 
-    # Calculate which cells are 'valid' (in ESMF terms, at least).
-    i_ok = angle_calcs.valid_bounds_shapes(lon_bounds, lat_bounds)
+#    do_prune_to_valid = True
+    do_prune_to_valid = False
+
+#    # Calculate which cells are 'valid' (in ESMF terms, at least).
+#    if do_prune_to_valid:
+#        i_ok = angle_calcs.valid_bounds_shapes(x_bounds, y_bounds)
+#        if mask is not None:
+#            i_ok &= ~mask
+#    else:
+#        i_ok = ~mask
+
+    i_ok = np.ones((n_cells), dtype=bool)
+    if mask is not None:
+        i_ok &= ~mask.flat[:]
+
+#    if do_prune_to_valid:
+#        assert np.all(i_ok)
 
     # Convert to a valid-indices array (for now -- for older code approach).
     i_ok = np.array(np.where(i_ok)[0])
+
     n_validpoints = i_ok.size
 
-    lon_bounds = lon_bounds[i_ok]
-    lat_bounds = lat_bounds[i_ok]
+    x_bounds = x_bounds[i_ok]
+    y_bounds = y_bounds[i_ok]
 
-    assert np.all(angle_calcs.valid_bounds_shapes(lon_bounds, lat_bounds))
+#    assert np.all(angle_calcs.valid_bounds_shapes(x_bounds, y_bounds))
 
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
@@ -124,13 +186,13 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
     #
     # Create a map of 'id' number (integers) for all the bounds points
     # NOTE: these are the VALID points only...
-    n_nodes = lon_bounds.size
+    n_nodes = x_bounds.size
     node_ids = np.arange(n_nodes, dtype=np.int32)
     # Create a map of all-zeros for the 'node owners' field
     node_owners = np.zeros(n_nodes)
     # Concatenate all the bounds position coords
-    combined_node_coords = np.concatenate((lon_bounds[..., None],
-                                           lat_bounds[..., None]),
+    combined_node_coords = np.concatenate((x_bounds[..., None],
+                                           y_bounds[..., None]),
                                           axis=-1).flat[:]
 
     mesh.add_nodes(nodeCount=n_nodes,
@@ -253,15 +315,15 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
     if not all(_valid_units(coord) for coord in src_coords + dst_coords):
         raise ValueError("Unsupported units: must be 'degrees' or 'm'.")
 
-    # Work out the dimensions occupoed by the horizontal coordinates
+    # Work out the dimensions occupied by the horizontal coordinates
     def xy_dims(cube, xy_coords):
         if xy_coords[0].ndim == 1:
             # 1d X and Y occupy two separate source dimensions
             xy_dims = [cube.coord_dims(coord)[0]
-                           for coord in src_coords]
+                           for coord in xy_coords]
         else:
             # 2d X and Y *share* two source dimensions.
-            xy_dims = source_cube.coord_dims(src_coords[0])
+            xy_dims = cube.coord_dims(xy_coords[0])
         return xy_dims
 
     src_dims_xy = xy_dims(source_cube, src_coords)
@@ -345,35 +407,20 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         data.mask = coverage_field.data < coverage_tolerance_threshold
 
         # Reconstruct proper shape (Iris-dims order)
-        ny, nx = dst_coords[0].points.shape
-        data = data.reshape((ny, nx))
+#        ny, nx = dst_coords[0].points.shape
+#        data = data.reshape((ny, nx))
 
-        # Transpose ESMF result_cube dims (X,Y) back to the order of the source
-        if (dst_dims_xy[0] > dst_dims_xy[1]):
-            data = data.transpose()
+#        # Transpose ESMF result_cube dims (X,Y) back to the order of the source
+#        if (dst_dims_xy[0] > dst_dims_xy[1]):
+#            data = data.transpose()
 
         # Paste regridded slice back into parent array
+        data = data.reshape([grid_cube.shape[i_dim] for i_dim in dst_dims_xy])
         fullcube_data[slice_indices_tuple] = data
 
     # Remove the data mask if completely unused.
     if not np.ma.is_masked(fullcube_data):
         fullcube_data = np.array(fullcube_data)
-
-#    # Generate a full 2d sample grid, as required for regridding orography
-#    # NOTE: as seen in "regrid_bilinear_rectilinear_src_and_grid"
-#    # TODO: can this not also be wound into the _create_cube method ?
-#    src_cs = src_coords[0].coord_system
-#    sample_grid_x, sample_grid_y = i_regrid._sample_grid(src_cs,
-#                                                         dst_coords[0],
-#                                                         dst_coords[1])
-
-#    result_cube = iris.cube.Cube(fullcube_data)
-#    result_cube.metadata = source_cube.metadata
-#
-#    for coord in dst_coords:
-#        result_cube.add_aux_coord(coord, grid_cube.coord_dims(coord))
-#
-#    return result_cube
 
     # Return result_cube as a new cube based on the source.
     # TODO: please tidy this interface !!!
@@ -391,3 +438,16 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         sample_grid_x=None,
         sample_grid_y=None,
         regrid_callback=None)
+
+    # Return result_cube as a new cube based on the source.
+    # TODO: please tidy this interface !!!
+    # NOTE: the 'regrid' parts are unused, as we already checked that the
+    # source had no horizontal coordinate factories.
+    return i_regrid._create_cube_xy_1d_or_2d(
+        data=fullcube_data,
+        src=source_cube,
+        grid=grid_cube,
+        src_x_coord=src_coords[0],
+        src_y_coord=src_coords[1],
+        grid_x_coord=dst_coords[0],
+        grid_y_coord=dst_coords[1])
