@@ -95,16 +95,79 @@ def _get_xy_coords(cube):
         A tuple containing the cube's x and y coordinates.
 
     """
+    return _get_xy_coords_inner(cube, only_1d=True)
+
+
+def _get_xy_coords_1d_or_2d(cube):
+    """
+    Return the x and y coordinates from a cube, allowing two-dimensional ones.
+
+    This function will preferentially return a pair of dimension
+    coordinates (if there are more than one potential x or y dimension
+    coordinates a ValueError will be raised). If the cube does not have
+    a pair of x and y dimension coordinates it will return 1D or 2D auxiliary
+    coordinates (including scalars). If there is not one and only one set
+    of x and y auxiliary coordinates a ValueError will be raised.
+    Only monotonic 1D coordinates are considered.
+
+    Having identified the x and y coordinates, the function checks that they
+    have equal coordinate systems and that they either map to different single
+    cube dimensions, or to the same two cube dimensions.
+
+    Args:
+
+    * cube:
+        An instance of :class:`iris.cube.Cube`.
+
+    Returns:
+        A tuple containing the cube's x and y coordinates.
+
+    """
+    return _get_xy_coords_inner(cube, only_1d=False)
+
+
+def _get_xy_coords_inner(cube, only_1d=True):
+    """
+    Return the x and y coordinates from a cube.
+
+    This function will preferentially return a pair of dimension
+    coordinates (if there are more than one potential x or y dimension
+    coordinates a ValueError will be raised). If the cube does not have
+    a pair of x and y dimension coordinates it will return auxiliary
+    coordinates (including scalars). If there is not one and only one set
+    of x and y auxiliary coordinates a ValueError will be raised.
+
+    The function checks that the x and y coordinates have equal coordinate
+    systems, and that they are both 1D (or 2D if 'only_1d' is set False).
+    It also checks that 1D coordinates map to two different cube dimensions, or
+    that 2D ones map to the same two cube dimensions.
+
+    Args:
+
+    * cube:
+        An instance of :class:`iris.cube.Cube`.
+
+    Returns:
+        A tuple containing the cube's x and y coordinates.
+
+    """
+    required_ndims_string = '1D' if only_1d else '1D or 2D'
+    def is_suitable_aux_coord(coord):
+        # Check coord is either 2d (and we allow that), or 1d *and* monotonic.
+        return ((coord.ndim == 2 and not only_1d) or
+                (coord.ndim == 1 and coord.is_monotonic()))
+
     # Look for a suitable dimension coords first.
     x_coords = cube.coords(axis='x', dim_coords=True)
     if not x_coords:
         # If there is no x coord in dim_coords look for scalars or
         # monotonic coords in aux_coords.
         x_coords = [coord for coord in cube.coords(axis='x', dim_coords=False)
-                    if coord.ndim == 1 and coord.is_monotonic()]
+                    if is_suitable_aux_coord(coord)]
     if len(x_coords) != 1:
-        raise ValueError('Cube {!r} must contain a single 1D x '
-                         'coordinate.'.format(cube.name()))
+        raise ValueError('Cube {!r} must contain a single {} x '
+                         'coordinate.'.format(required_ndims_string,
+                                              cube.name()))
     x_coord = x_coords[0]
 
     # Look for a suitable dimension coords first.
@@ -113,10 +176,11 @@ def _get_xy_coords(cube):
         # If there is no y coord in dim_coords look for scalars or
         # monotonic coords in aux_coords.
         y_coords = [coord for coord in cube.coords(axis='y', dim_coords=False)
-                    if coord.ndim == 1 and coord.is_monotonic()]
+                    if is_suitable_aux_coord(coord)]
     if len(y_coords) != 1:
-        raise ValueError('Cube {!r} must contain a single 1D y '
-                         'coordinate.'.format(cube.name()))
+        raise ValueError('Cube {!r} must contain a single {} y '
+                         'coordinate.'.format(required_ndims_string,
+                                              cube.name()))
     y_coord = y_coords[0]
 
     if x_coord.coord_system != y_coord.coord_system:
@@ -124,21 +188,30 @@ def _get_xy_coords(cube):
                          "coordinates must have the same coordinate "
                          "system.".format(x_coord.name(), y_coord.name()))
 
-    # The x and y coordinates must describe different dimensions
-    # or be scalar coords.
-    x_dims = cube.coord_dims(x_coord)
-    x_dim = None
-    if x_dims:
-        x_dim = x_dims[0]
+    if only_1d or (x_coord.ndim == 1 and y_coord.ndim == 1):
+        # The x and y coordinates must describe different dimensions
+        # or be scalar coords
+        x_dims = cube.coord_dims(x_coord)
+        x_dim = None
+        if x_dims:
+            x_dim = x_dims[0]
 
-    y_dims = cube.coord_dims(y_coord)
-    y_dim = None
-    if y_dims:
-        y_dim = y_dims[0]
+        y_dims = cube.coord_dims(y_coord)
+        y_dim = None
+        if y_dims:
+            y_dim = y_dims[0]
 
-    if x_dim is not None and y_dim == x_dim:
-        raise ValueError("The cube's x and y coords must not describe the "
-                         "same data dimension.")
+        if x_dim is not None and y_dim == x_dim:
+            raise ValueError("The cube's x and y coords must not describe the "
+                             "same data dimension.")
+    else:
+        # Allowing 2d cases, and at least one of those found is > 1d.
+        if (x_coord.ndim != 2 or y_coord.ndim != 2):
+            raise ValueError("The cube's x and y coords must either be both "
+                             "one-dimensional, or both 2D.")
+        if cube.coord_dims(x_coord) != cube.coord_dims(y_coord):
+            raise ValueError("The 2D x and y coords do not map to the same "
+                             "data dimensions.")
 
     return x_coord, y_coord
 
@@ -461,6 +534,82 @@ def _create_cube(data, src, x_dim, y_dim, src_x_coord, src_y_coord,
             msg = 'Cannot update aux_factory {!r} because of dropped' \
                   ' coordinates.'.format(factory.name())
             warnings.warn(msg)
+    return result
+
+
+def _create_cube_xy_1d_or_2d(data, src, grid,
+                             src_x_coord, src_y_coord, src_xy_dims,
+                             grid_x_coord, grid_y_coord, grid_xy_dims):
+    """
+    Return a new Cube for the result of regridding the source Cube onto
+    the new grid.
+
+    All the metadata and coordinates of the result Cube are copied from
+    the source Cube, with two exceptions:
+        - Grid dimension coordinates are copied from the grid Cube (but mapped
+        into the original source-cube dimensions).
+        - Auxiliary coordinates which span the grid dimensions are
+          ignored.
+
+    Args:
+
+    * data:
+        The regridded data as an N-dimensional NumPy array.
+    * src:
+        The source Cube.
+    * grid:
+        The cube defining the horizontal grid of the result.
+    * src_x_coord (:class:`iris.coords.Coord`):
+        The X :class:`iris.coords.DimCoord`.
+    * src_y_coord (:class:`iris.coords.Coord`):
+        The Y :class:`iris.coords.DimCoord`.
+    * src_xy_dims (pair of int):
+        Dimensions of (x, y) in source cube.
+    * grid_x_coord (:class:`iris.coords.Coord`):
+        The :class:`iris.coords.DimCoord` for the new grid's X
+        coordinate.
+    * grid_y_coord (:class:`iris.coords.Coord`):
+        The :class:`iris.coords.DimCoord` for the new grid's Y
+        coordinate.
+    * grid_xy_dims (pair of int):
+        Dimensions of (x, y) in the resulting cube.
+
+    Returns:
+        The new, regridded Cube.
+
+    .. note::
+
+        The source cube must not have any coordinate factories which make
+        horizontal coordinates, or any such coordinates.
+
+    """
+    # Create a result cube with the appropriate metadata
+    result = iris.cube.Cube(data)
+    result.metadata = copy.deepcopy(src.metadata)
+
+    # Copy across all the coordinates, replacing old with new in the case of
+    # the identified horizontal ones.
+    result_x_dim = src_xy_dims[0]
+    result_y_dim = src_xy_dims[1]
+    result_yx_dims = (result_y_dim, result_x_dim)
+    def copy_coords(src_coords, add_method):
+        for coord in src_coords:
+            dims = src.coord_dims(coord)
+            if coord is src_x_coord:
+                coord = grid_x_coord
+                dims = result_x_dim if coord.ndim == 1 else result_yx_dims
+            elif coord is src_y_coord:
+                coord = grid_y_coord
+                dims = result_y_dim if coord.ndim == 1 else result_yx_dims
+            elif set(dims) & set(src_xy_dims):
+                # Ignore all other coords mapped to regridded dimensions.
+                continue
+            result_coord = coord.copy()
+            add_method(result_coord, dims)
+
+    copy_coords(src.dim_coords, result.add_dim_coord)
+    copy_coords(src.aux_coords, result.add_aux_coord)
+
     return result
 
 

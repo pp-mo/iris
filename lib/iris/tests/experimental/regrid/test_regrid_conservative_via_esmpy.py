@@ -43,8 +43,17 @@ skip_esmf = unittest.skipIf(
 import iris
 import iris.analysis
 import iris.analysis.cartography as i_cartog
-from iris.experimental.regrid_conservative import \
-    regrid_conservative_via_esmpy
+
+do_old = False
+#do_old = True
+if do_old:
+    age_string = "OLD"
+    from iris.experimental.regrid_conservative_OLD import \
+        regrid_conservative_via_esmpy
+else:
+    age_string = "NEW"
+    from iris.experimental.regrid_conservative import \
+        regrid_conservative_via_esmpy
 import iris.tests.stock as istk
 
 
@@ -161,6 +170,13 @@ class TestConservativeRegrid(tests.IrisTest):
         self.stock_regrid_c1toc2 = regrid_conservative_via_esmpy(c1, c2)
         self.stock_c1_areasum = _cube_area_sum(c1)
 
+    def _check_masked_allclose(self, a, b, *args, **kwargs):
+        # Toleranced comparison of arrays or scalars including masks if any.
+        # NOTE: to do this, we wrap the args as masked arrays in all cases.
+        self.assertMaskedArrayAllClose(np.ma.MaskedArray(a),
+                                       np.ma.MaskedArray(b),
+                                       *args, **kwargs)
+
     def test_simple_areas(self):
         """
         Test area-conserving regrid between simple "near-square" grids.
@@ -183,10 +199,15 @@ class TestConservativeRegrid(tests.IrisTest):
                              [0.00, 0.25, 0.25, 0.00],
                              [0.00, 0.00, 0.00, 0.00]])
         # Numbers are slightly off (~0.25000952).  This is expected.
-        self.assertArrayAllClose(c1to2.data, d_expect, rtol=5.0e-5)
+        self._check_masked_allclose(c1to2.data, d_expect, rtol=5.0e-5)
 
         # check that the area sums are equivalent, simple total is a bit off
-        self.assertArrayAllClose(c1to2_areasum, c1_areasum)
+#        print 'Difference error %(c1to2_areasum, c1_areasum) = ', \
+#            100.0 * _reldiff(c1to2_areasum, c1_areasum)
+        if do_old:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=5.0e-5)
 
         #
         # regrid back onto original grid again ...
@@ -201,10 +222,16 @@ class TestConservativeRegrid(tests.IrisTest):
                              [0.0, 0.1250, 0.2500, 0.1250, 0.0],
                              [0.0, 0.0625, 0.1250, 0.0625, 0.0],
                              [0.0, 0.0000, 0.0000, 0.0000, 0.0]])
+        # NB ignore mask in this one.
         self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.00002)
 
         # check area sums again
-        self.assertArrayAllClose(c1to2to1_areasum, c1_areasum)
+#        print 'Difference error %(c1to2to1_areasum, c1_areasum) = ', \
+#            100.0 * _reldiff(c1to2to1_areasum, c1_areasum)
+        if do_old:
+            self._check_masked_allclose(c1to2to1_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2to1_areasum, c1_areasum, rtol=1.0e-4)
 
     def test_simple_missing_data(self):
         """
@@ -243,7 +270,8 @@ class TestConservativeRegrid(tests.IrisTest):
         Check valid operation on a multidimensional cube.
 
         Calculation should repeat across multiple dimensions.
-        Any attached orography is interpolated.
+
+        NOTE: attached orography + factories are not supported.
 
         NOTE: in future, extra dimensions may be passed through to ESMF:  At
         present, it repeats the calculation on 2d slices.  So we check that
@@ -258,6 +286,10 @@ class TestConservativeRegrid(tests.IrisTest):
         c1.data[1, 1, 3:9, 4:7] = np.ma.masked
         # Give it a slightly more challenging indexing order: tzyx --> xzty
         c1.transpose((3, 1, 0, 2))
+
+        # remove the hybrid heights, as conservative-regrid can't handle this.
+        c1.remove_aux_factory(c1.aux_factory('altitude'))
+        c1.remove_coord('surface_altitude')
 
         # Construct a (coarser) target grid of about the same extent
         c1_cs = c1.coord(axis='x').coord_system
@@ -277,7 +309,6 @@ class TestConservativeRegrid(tests.IrisTest):
         c1_to_c2 = regrid_conservative_via_esmpy(c1, c2)
 
         # check that all the original coords exist in the new cube
-        # NOTE: this also effectively confirms we haven't lost the orography
         def list_coord_names(cube):
             return sorted([coord.name() for coord in cube.coords()])
 
@@ -323,8 +354,16 @@ class TestConservativeRegrid(tests.IrisTest):
         # Test global regridding.
         # Compute basic test data cubes.
         shape1 = (8, 6)
-        xlim1 = 180.0 * (shape1[0] - 1) / shape1[0]
-        ylim1 = 90.0 * (shape1[1] - 1) / shape1[1]
+
+#        do_limit_scope = True
+        do_limit_scope = False
+        if not do_limit_scope:
+            xrange2, yrange2 = 180.0, 90.0
+        else:
+            xrange2, yrange2 = 179.9, 89.9
+
+        xlim1 = xrange2 * (shape1[0] - 1) / shape1[0]
+        ylim1 = yrange2 * (shape1[1] - 1) / shape1[1]
         c1 = _make_test_cube(shape1, (-xlim1, xlim1), (-ylim1, ylim1))
         # Create a small, plausible global array:
         # - top + bottom rows all the same
@@ -340,8 +379,8 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # Create a rotated grid to regrid this onto.
         shape2 = (14, 11)
-        xlim2 = 180.0 * (shape2[0] - 1) / shape2[0]
-        ylim2 = 90.0 * (shape2[1] - 1) / shape2[1]
+        xlim2 = xrange2 * (shape2[0] - 1) / shape2[0]
+        ylim2 = yrange2 * (shape2[1] - 1) / shape2[1]
         c2 = _make_test_cube(shape2, (-xlim2, xlim2), (-ylim2, ylim2),
                              pole_latlon=(47.4, 25.7))
 
@@ -351,7 +390,44 @@ class TestConservativeRegrid(tests.IrisTest):
         # Check that before+after area-sums match fairly well
         c1_areasum = _cube_area_sum(c1)
         c1toc2_areasum = _cube_area_sum(c1toc2)
-        self.assertArrayAllClose(c1toc2_areasum, c1_areasum, rtol=0.006)
+
+        do_show_results = True
+#        do_show_results = False
+        if do_show_results:
+            # Show diffs...
+            print
+            print 'GLOBAL REGRID AREA TEST (version = "{}"):'.format(
+                age_string)
+
+            print 'GLOBAL REGRID AREA mask:'
+            print np.array(np.ma.getmaskarray(c1toc2.data), dtype=int)
+
+            print
+            print 'GLOBAL REGRID AREA sums:'
+            print "  original : ", c1_areasum
+            print "  regridded : ", c1toc2_areasum
+            a, b = c1_areasum, c1toc2_areasum
+            percent = 100.0 * abs(a - b) / (0.5 * (a + b))
+            print "  %diff : ", percent
+
+            import cartopy.crs as ccrs
+            import iris.plot as iplt
+            import matplotlib.pyplot as plt
+            plt.switch_backend('tkagg')
+
+            plt.figure()
+            ax1 = plt.axes(projection=ccrs.PlateCarree())
+            ax1.set_global()
+            iplt.pcolormesh(c1, edgecolor='black', vmin=0.5, vmax=5.5)
+
+            plt.figure()
+            ax2 = plt.axes(projection=ccrs.PlateCarree())
+            ax2.set_global()
+            iplt.pcolormesh(c1toc2, edgecolor='black', vmin=0.5, vmax=5.5)
+
+            plt.show()
+
+        self._check_masked_allclose(c1toc2_areasum, c1_areasum, rtol=0.006)
 
     def test_global_collapse(self):
         # Test regridding global data to a single cell.
@@ -380,7 +456,7 @@ class TestConservativeRegrid(tests.IrisTest):
         with context:
             c1_to_global = regrid_conservative_via_esmpy(c1, c2)
             # Check the total area sum is still the same
-            self.assertArrayAllClose(c1_to_global.data[0, 0], c1_areasum)
+            self._check_masked_allclose(c1_to_global.data[0, 0], c1_areasum)
 
     def test_single_cells(self):
         # Test handling of single-cell grids.
@@ -415,7 +491,7 @@ class TestConservativeRegrid(tests.IrisTest):
         if condense_to_1x1_supported:
             context = _donothing_context_manager()
         with context:
-            self.assertArrayAllClose(c1x1_areasum, c1_areasum)
+            self._check_masked_allclose(c1x1_areasum, c1_areasum)
 
         # Condense entire region onto a single cell covering the area of 'c2'
         xlims2 = _minmax(c2.coord(axis='x').bounds)
@@ -435,7 +511,7 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # Check the total area sum is still the same
         c1_to_c2x1_areasum = _cube_area_sum(c1_to_c2x1)
-        self.assertArrayAllClose(c1_to_c2x1_areasum, c1_areasum, 0.0004)
+        self._check_masked_allclose(c1_to_c2x1_areasum, c1_areasum, 0.0004)
 
         # 1x1 -> NxN : regrid single cell to NxN grid
         # construct a single-cell approximation to 'c1' with the same area sum.
@@ -453,14 +529,14 @@ class TestConservativeRegrid(tests.IrisTest):
         c1x1_to_c1_areasum = _cube_area_sum(c1x1_to_c1)
 
         # Check that area sum is ~unchanged, as expected
-        self.assertArrayAllClose(c1x1_to_c1_areasum, c1_areasum, 0.0004)
+        self._check_masked_allclose(c1x1_to_c1_areasum, c1_areasum, 0.0004)
 
         # Check 1x1 -> 1x1
         # NOTE: can *only* get any result with a fully overlapping cell, so
         # just regrid onto self
         c1x1toself = regrid_conservative_via_esmpy(c1x1, c1x1)
         c1x1toself_areasum = _cube_area_sum(c1x1toself)
-        self.assertArrayAllClose(c1x1toself_areasum, c1_areasum, 0.0004)
+        self._check_masked_allclose(c1x1toself_areasum, c1_areasum, 0.0004)
         # NOTE: perhaps surprisingly, this has a similar level of error.
 
     def test_longitude_wraps(self):
@@ -503,7 +579,7 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # Show that results are the same, when output rolled by same amount
         rolled_data = np.roll(c1toc2_shifted.data, x2_shift_steps, axis=1)
-        self.assertArrayAllClose(rolled_data, c1toc2.data)
+        self._check_masked_allclose(rolled_data, c1toc2.data)
 
         # Repeat with rolled *source* data : result should be identical
         x1_shift_steps = int(shape1[0] / 3)
@@ -538,15 +614,28 @@ class TestConservativeRegrid(tests.IrisTest):
         c1to2 = regrid_conservative_via_esmpy(c1, c2)
 
         # check for expected pattern
-        d_expect = np.array([[0.0, 0.0, 0.0, 0.0],
-                             [0.0, 0.23614, 0.23614, 0.0],
-                             [0.0, 0.26784, 0.26784, 0.0],
-                             [0.0, 0.0, 0.0, 0.0]])
-        self.assertArrayAllClose(c1to2.data, d_expect, rtol=5.0e-5)
+        if do_old:
+            d_expect = np.array([[0.0, 0.0, 0.0, 0.0],
+                                 [0.0, 0.23614, 0.23614, 0.0],
+                                 [0.0, 0.26784, 0.26784, 0.0],
+                                 [0.0, 0.0, 0.0, 0.0]])
+            self.assertArrayAllClose(c1to2.data, d_expect, rtol=5.0e-5)
+        else:
+            d_expect = np.array([[0.0, 0.0, 0.0, 0.0],
+                                 [0.0, 0.25, 0.25, 0.0],
+                                 [0.0, 0.25, 0.25, 0.0],
+                                 [0.0, 0.0, 0.0, 0.0]])
+            self._check_masked_allclose(c1to2.data, d_expect)
 
         # check sums
         c1to2_areasum = _cube_area_sum(c1to2)
-        self.assertArrayAllClose(c1to2_areasum, c1_areasum)
+        print '%(c1to2_areasum, c1_areasum) : ', 100.0 * _reldiff(
+            c1to2_areasum,
+            c1_areasum)
+        if do_old:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=0.004)
 
         #
         # transform back again ...
@@ -554,16 +643,31 @@ class TestConservativeRegrid(tests.IrisTest):
         c1to2to1 = regrid_conservative_via_esmpy(c1to2, c1)
 
         # check values
-        d_expect = np.array([[0.0, 0.0, 0.0, 0.0, 0.0],
-                             [0.0, 0.056091, 0.112181, 0.056091, 0.0],
-                             [0.0, 0.125499, 0.250998, 0.125499, 0.0],
-                             [0.0, 0.072534, 0.145067, 0.072534, 0.0],
-                             [0.0, 0.0, 0.0, 0.0, 0.0]])
-        self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.0005)
+        if do_old:
+            d_expect = np.array([[0.0, 0.0, 0.0, 0.0, 0.0],
+                                 [0.0, 0.056091, 0.112181, 0.056091, 0.0],
+                                 [0.0, 0.125499, 0.250998, 0.125499, 0.0],
+                                 [0.0, 0.072534, 0.145067, 0.072534, 0.0],
+                                 [0.0, 0.0, 0.0, 0.0, 0.0]])
+            self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.0005)
+        else:
+            d_expect = np.array([[0.0, 0.0, 0.0, 0.0, 0.0],
+                                 [0.0, 0.0625, 0.125, 0.0625, 0.0],
+                                 [0.0, 0.125, 0.25, 0.125, 0.0],
+                                 [0.0, 0.0625, 0.125, 0.0625, 0.0],
+                                 [0.0, 0.0, 0.0, 0.0, 0.0]])
+            # NOTE: ignoring the mask here
+            self.assertArrayAllClose(c1to2to1.data, d_expect)
 
         # check sums
         c1to2to1_areasum = _cube_area_sum(c1to2to1)
-        self.assertArrayAllClose(c1to2to1_areasum, c1_areasum)
+        print '%(c1to2to1_areasum, c1_areasum) : ', 100.0 * _reldiff(
+            c1to2to1_areasum,
+            c1_areasum)
+        if do_old:
+            self._check_masked_allclose(c1to2to1_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=0.004)
 
     def test_fail_no_cs(self):
         # Test error when one coordinate has no coord_system.
@@ -658,8 +762,10 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check we have zeros (or nearly) all around the edge..
         c1toc2_zeros = np.ma.array(c1to2.data)
+        # Replace any masked values with zero.
         c1toc2_zeros[c1toc2_zeros.mask] = 0.0
-        c1toc2_zeros = np.abs(c1toc2_zeros.mask) < 1.0e-6
+        # Find where results are ~= zero.
+        c1toc2_zeros = np.abs(c1toc2_zeros) < 1.0e-6
         self.assertArrayEqual(c1toc2_zeros[0, :], True)
         self.assertArrayEqual(c1toc2_zeros[-1, :], True)
         self.assertArrayEqual(c1toc2_zeros[:, 0], True)
@@ -667,7 +773,7 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check the area-sum operation
         c1to2_areasum = _cube_area_sum(c1to2)
-        self.assertArrayAllClose(c1to2_areasum, c1_areasum, rtol=0.004)
+        self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=0.004)
 
         #
         # Now repeat, transforming backwards ...
@@ -685,8 +791,10 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check we have zeros (or nearly) all around the edge..
         c2toc1_zeros = np.ma.array(c2toc1.data)
+        # Replace any masked values with zero.
         c2toc1_zeros[c2toc1_zeros.mask] = 0.0
-        c2toc1_zeros = np.abs(c2toc1_zeros.mask) < 1.0e-6
+        # Find where results are ~= zero.
+        c2toc1_zeros = np.abs(c2toc1_zeros) < 1.0e-6
         self.assertArrayEqual(c2toc1_zeros[0, :], True)
         self.assertArrayEqual(c2toc1_zeros[-1, :], True)
         self.assertArrayEqual(c2toc1_zeros[:, 0], True)
@@ -694,7 +802,7 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check the area-sum operation
         c2toc1_areasum = _cube_area_sum(c2toc1)
-        self.assertArrayAllClose(c2toc1_areasum, c2_areasum, rtol=0.004)
+        self._check_masked_allclose(c2toc1_areasum, c2_areasum, rtol=0.004)
 
     def test_missing_data_rotated(self):
         """
@@ -776,7 +884,8 @@ class TestConservativeRegrid(tests.IrisTest):
                 # as the 'missing areas' are not the same.
                 c1_areasum = _cube_area_sum(c1)
                 c1to2_areasum = _cube_area_sum(c1toc2)
-                self.assertArrayAllClose(c1_areasum, c1to2_areasum, rtol=0.003)
+                self._check_masked_allclose(c1_areasum, c1to2_areasum,
+                                            rtol=0.003)
 
 
 if __name__ == '__main__':
