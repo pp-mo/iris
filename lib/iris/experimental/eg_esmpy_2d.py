@@ -25,38 +25,41 @@ tgt_grid_original = tgt_grid.copy()
 # With that fixed, error now looks like spatial_dims mismatch between src+dst.
 # So let's hack it here to have 2d lats+lons, and treat as a Mesh.
 #
-tgt_coord_orig_x = tgt_grid.coord('longitude')
-tgt_coord_orig_y = tgt_grid.coord('latitude')
-tgt_grid_coord_x = iris.coords.AuxCoord.from_coord(tgt_coord_orig_x)
-tgt_grid_coord_y = iris.coords.AuxCoord.from_coord(tgt_coord_orig_y)
-lats_limit = 89.9
-tgt_grid_coord_y.bounds = np.clip(tgt_grid_coord_y.bounds,
-                                  -lats_limit, lats_limit)
-x_points_2d, y_points_2d = np.meshgrid(tgt_grid_coord_x.points,
-                                       tgt_grid_coord_y.points)
-x_contig_bounds_2d, y_contig_bounds_2d = np.meshgrid(
-    tgt_grid_coord_x.contiguous_bounds(),
-    tgt_grid_coord_y.contiguous_bounds())
-shape_full_bounds_2d = list(x_points_2d.shape) + [4]
-x_full_bounds_2d = np.zeros(shape_full_bounds_2d)
-y_full_bounds_2d = np.zeros(shape_full_bounds_2d)
-x_full_bounds_2d[..., 0] = x_contig_bounds_2d[:-1, :-1]
-x_full_bounds_2d[..., 1] = x_contig_bounds_2d[:-1, 1:]
-x_full_bounds_2d[..., 2] = x_contig_bounds_2d[1:, 1:]
-x_full_bounds_2d[..., 3] = x_contig_bounds_2d[1:, :-1]
-y_full_bounds_2d[..., 0] = y_contig_bounds_2d[:-1, :-1]
-y_full_bounds_2d[..., 1] = y_contig_bounds_2d[:-1, 1:]
-y_full_bounds_2d[..., 2] = y_contig_bounds_2d[1:, 1:]
-y_full_bounds_2d[..., 3] = y_contig_bounds_2d[1:, :-1]
-tgt_grid_coord_x = tgt_grid_coord_x.copy(points=x_points_2d, bounds=x_full_bounds_2d)
-tgt_grid_coord_y = tgt_grid_coord_y.copy(points=y_points_2d, bounds=y_full_bounds_2d)
-# remove + replace
-x_dim, = tgt_grid.coord_dims(tgt_coord_orig_x)
-y_dim, = tgt_grid.coord_dims(tgt_coord_orig_y)
-tgt_grid.remove_coord(tgt_coord_orig_x)
-tgt_grid.remove_coord(tgt_coord_orig_y)
-tgt_grid.add_aux_coord(tgt_grid_coord_x, (y_dim, x_dim))
-tgt_grid.add_aux_coord(tgt_grid_coord_y, (y_dim, x_dim))
+#do_make_dst_2d = True
+do_make_dst_2d = False
+if do_make_dst_2d:
+    tgt_coord_orig_x = tgt_grid.coord('longitude')
+    tgt_coord_orig_y = tgt_grid.coord('latitude')
+    tgt_grid_coord_x = iris.coords.AuxCoord.from_coord(tgt_coord_orig_x)
+    tgt_grid_coord_y = iris.coords.AuxCoord.from_coord(tgt_coord_orig_y)
+    lats_limit = 89.9
+    tgt_grid_coord_y.bounds = np.clip(tgt_grid_coord_y.bounds,
+                                      -lats_limit, lats_limit)
+    x_points_2d, y_points_2d = np.meshgrid(tgt_grid_coord_x.points,
+                                           tgt_grid_coord_y.points)
+    x_contig_bounds_2d, y_contig_bounds_2d = np.meshgrid(
+        tgt_grid_coord_x.contiguous_bounds(),
+        tgt_grid_coord_y.contiguous_bounds())
+    shape_full_bounds_2d = list(x_points_2d.shape) + [4]
+    x_full_bounds_2d = np.zeros(shape_full_bounds_2d)
+    y_full_bounds_2d = np.zeros(shape_full_bounds_2d)
+    x_full_bounds_2d[..., 0] = x_contig_bounds_2d[:-1, :-1]
+    x_full_bounds_2d[..., 1] = x_contig_bounds_2d[:-1, 1:]
+    x_full_bounds_2d[..., 2] = x_contig_bounds_2d[1:, 1:]
+    x_full_bounds_2d[..., 3] = x_contig_bounds_2d[1:, :-1]
+    y_full_bounds_2d[..., 0] = y_contig_bounds_2d[:-1, :-1]
+    y_full_bounds_2d[..., 1] = y_contig_bounds_2d[:-1, 1:]
+    y_full_bounds_2d[..., 2] = y_contig_bounds_2d[1:, 1:]
+    y_full_bounds_2d[..., 3] = y_contig_bounds_2d[1:, :-1]
+    tgt_grid_coord_x = tgt_grid_coord_x.copy(points=x_points_2d, bounds=x_full_bounds_2d)
+    tgt_grid_coord_y = tgt_grid_coord_y.copy(points=y_points_2d, bounds=y_full_bounds_2d)
+    # remove + replace
+    x_dim, = tgt_grid.coord_dims(tgt_coord_orig_x)
+    y_dim, = tgt_grid.coord_dims(tgt_coord_orig_y)
+    tgt_grid.remove_coord(tgt_coord_orig_x)
+    tgt_grid.remove_coord(tgt_coord_orig_y)
+    tgt_grid.add_aux_coord(tgt_grid_coord_x, (y_dim, x_dim))
+    tgt_grid.add_aux_coord(tgt_grid_coord_y, (y_dim, x_dim))
 
 # hack coord-system for now...
 cs_pc = iris.coord_systems.GeogCS(iris.fileformats.pp.EARTH_RADIUS)

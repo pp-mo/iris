@@ -538,8 +538,8 @@ def _create_cube(data, src, x_dim, y_dim, src_x_coord, src_y_coord,
 
 
 def _create_cube_xy_1d_or_2d(data, src, grid,
-                             src_x_coord, src_y_coord,
-                             grid_x_coord, grid_y_coord):
+                             src_x_coord, src_y_coord, src_xy_dims,
+                             grid_x_coord, grid_y_coord, grid_xy_dims):
     """
     Return a new Cube for the result of regridding the source Cube onto
     the new grid.
@@ -559,16 +559,20 @@ def _create_cube_xy_1d_or_2d(data, src, grid,
         The source Cube.
     * grid:
         The cube defining the horizontal grid of the result.
-    * src_x_coord:
+    * src_x_coord (:class:`iris.coords.Coord`):
         The X :class:`iris.coords.DimCoord`.
-    * src_y_coord:
+    * src_y_coord (:class:`iris.coords.Coord`):
         The Y :class:`iris.coords.DimCoord`.
-    * grid_x_coord:
+    * src_xy_dims (pair of int):
+        Dimensions of (x, y) in source cube.
+    * grid_x_coord (:class:`iris.coords.Coord`):
         The :class:`iris.coords.DimCoord` for the new grid's X
         coordinate.
-    * grid_y_coord:
+    * grid_y_coord (:class:`iris.coords.Coord`):
         The :class:`iris.coords.DimCoord` for the new grid's Y
         coordinate.
+    * grid_xy_dims (pair of int):
+        Dimensions of (x, y) in the resulting cube.
 
     Returns:
         The new, regridded Cube.
@@ -583,22 +587,25 @@ def _create_cube_xy_1d_or_2d(data, src, grid,
     result = iris.cube.Cube(data)
     result.metadata = copy.deepcopy(src.metadata)
 
-    replace_data = {
-        src_x_coord.as_defn(): ()
-        }
-
     # Copy across all the coordinates, replacing old with new in the case of
     # the identified horizontal ones.
+    result_x_dim = src_xy_dims[0]
+    result_y_dim = src_xy_dims[1]
+    result_yx_dims = (result_y_dim, result_x_dim)
     def copy_coords(src_coords, add_method):
         for coord in src_coords:
             dims = src.coord_dims(coord)
-            if coord.as_defn() in replace_defns:
-                pass
-            elif src_x_dims in dims or src_y_dims in dims:
+            if coord is src_x_coord:
+                coord = grid_x_coord
+                dims = result_x_dim if coord.ndim == 1 else result_yx_dims
+            elif coord is src_y_coord:
+                coord = grid_y_coord
+                dims = result_y_dim if coord.ndim == 1 else result_yx_dims
+            elif set(dims) & set(src_xy_dims):
+                # Ignore all other coords mapped to regridded dimensions.
                 continue
             result_coord = coord.copy()
             add_method(result_coord, dims)
-            coord_mapping[id(coord)] = result_coord
 
     copy_coords(src.dim_coords, result.add_dim_coord)
     copy_coords(src.aux_coords, result.add_aux_coord)

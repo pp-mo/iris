@@ -162,7 +162,17 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
     x_bounds = x_bounds[i_ok]
     y_bounds = y_bounds[i_ok]
 
-#    assert np.all(angle_calcs.valid_bounds_shapes(x_bounds, y_bounds))
+    if not np.all(angle_calcs.valid_bounds_shapes(x_bounds, y_bounds)):
+        i_bads = np.where(~angle_calcs.valid_bounds_shapes(x_bounds, y_bounds))[0]
+        print 'Bad cells found! ({} of)'.format(len(i_bads))
+        for i_bad in i_bads:
+            print '\n#{}:\n'.format(i_bad)
+            print 'xx = np.array([{:10.5g}, {:10.5g}, {:10.5g}, {:10.5g}])'.format(*x_bounds[i_bad])
+            print 'yy = np.array([{:10.5g}, {:10.5g}, {:10.5g}, {:10.5g}])'.format(*y_bounds[i_bad])
+            for x, y in zip(x_bounds[i_bad], y_bounds[i_bad]):
+                print '    {:10.5g}, {:10.5g}'.format(x, y)
+        raise ValueError()
+        # plt.plot(xx, yy, '-'); [plt.plot(x, y, 'x', markersize=20, color=c) for x, y, c in zip(xx, yy, ['black', 'red', 'blue', 'green'])]; plt.show()
 
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
@@ -221,18 +231,11 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
     # these should all be *valid* ones
     assert not np.any(elem_connects < 0)
 
-    # Add a mask item to the Mesh, if requested
-    if mask is not None:
-        mask = None
-#        mask = np.where(mask, 1, 0)
-#        mask = np.array(mask, dtype=np.int32)
-#        mask = mask.flat[:]
-
     mesh.add_elements(elementCount=n_elems,
                       elementIds=elem_ids.flat[:],
                       elementTypes=elem_types.flat[:],
                       elementConn=elem_connects.flat[:],
-                      elementMask=mask)
+                      elementMask=None)
 
     # create a Field based on this mesh
     field = ESMF.Field(mesh, ref_name, meshloc=ESMF.MeshLoc.ELEMENT)
@@ -324,6 +327,8 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         else:
             # 2d X and Y *share* two source dimensions.
             xy_dims = cube.coord_dims(xy_coords[0])
+            # NB we need these in x, y order (opposite to normal)
+            xy_dims = (xy_dims[1], xy_dims[0])
         return xy_dims
 
     src_dims_xy = xy_dims(source_cube, src_coords)
@@ -348,12 +353,10 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
     dst_shape = np.array(source_cube.shape)
     dst_shape[list(src_dims_xy)] = [grid_cube.shape[i_dim]
                                     for i_dim in dst_dims_xy]
-#    dst_shape = grid_cube.shape
 
     # NOTE: result_cube array is masked -- fix this afterward if all unmasked
     fullcube_data = np.ma.zeros(dst_shape)
 
-#    if 1:
     # Iterate 2d slices over all possible indices of the 'other' dimensions
     all_other_dims = filter(lambda i_dim: i_dim not in src_dims_xy,
                             xrange(source_cube.ndim))
@@ -366,14 +369,6 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
 
         # Get the source data, reformed into the right dimension order, (x,y).
         src_data_2d = source_cube.data[slice_indices_tuple]
-#        if (src_dims_xy[0] > src_dims_xy[1]):
-#            src_data_2d = src_data_2d.transpose()
-
-#        assert source_cube.ndim == 2
-#        # NB must transpose data, as we have (y, x) dims order
-#        #    (well usually, *not checked here*)
-#        # .. but ESMF uses (x, y)
-#        src_data_2d = source_cube.data.copy()
 
         # Work out whether we have missing data to define a source grid mask.
         if np.ma.is_masked(src_data_2d):
@@ -406,38 +401,14 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         coverage_tolerance_threshold = 1.0 - 1.0e-8
         data.mask = coverage_field.data < coverage_tolerance_threshold
 
-        # Reconstruct proper shape (Iris-dims order)
-#        ny, nx = dst_coords[0].points.shape
-#        data = data.reshape((ny, nx))
-
-#        # Transpose ESMF result_cube dims (X,Y) back to the order of the source
-#        if (dst_dims_xy[0] > dst_dims_xy[1]):
-#            data = data.transpose()
-
         # Paste regridded slice back into parent array
-        data = data.reshape([grid_cube.shape[i_dim] for i_dim in dst_dims_xy])
+        data = data.reshape([grid_cube.shape[i_dim]
+                             for i_dim in [dst_dims_xy[1], dst_dims_xy[0]]])
         fullcube_data[slice_indices_tuple] = data
 
     # Remove the data mask if completely unused.
     if not np.ma.is_masked(fullcube_data):
         fullcube_data = np.array(fullcube_data)
-
-    # Return result_cube as a new cube based on the source.
-    # TODO: please tidy this interface !!!
-    # NOTE: the 'regrid' parts are unused, as we already checked that the
-    # source had no horizontal coordinate factories.
-    return i_regrid._create_cube(
-        fullcube_data,
-        src=source_cube,
-        x_dim=src_dims_xy[0],
-        y_dim=src_dims_xy[1],
-        src_x_coord=src_coords[0],
-        src_y_coord=src_coords[1],
-        grid_x_coord=dst_coords[0],
-        grid_y_coord=dst_coords[1],
-        sample_grid_x=None,
-        sample_grid_y=None,
-        regrid_callback=None)
 
     # Return result_cube as a new cube based on the source.
     # TODO: please tidy this interface !!!
@@ -449,5 +420,7 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         grid=grid_cube,
         src_x_coord=src_coords[0],
         src_y_coord=src_coords[1],
+        src_xy_dims=src_dims_xy,
         grid_x_coord=dst_coords[0],
-        grid_y_coord=dst_coords[1])
+        grid_y_coord=dst_coords[1],
+        grid_xy_dims=dst_dims_xy)
