@@ -201,7 +201,12 @@ class TestConservativeRegrid(tests.IrisTest):
         self._check_masked_allclose(c1to2.data, d_expect, rtol=5.0e-5)
 
         # check that the area sums are equivalent, simple total is a bit off
-        self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=5.0e-5)
+#        print 'Expected error %(c1to2_areasum, c1_areasum) = ', \
+#            100.0 * _reldiff(c1to2_areasum, c1_areasum)
+        if do_old:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=5.0e-5)
 
         #
         # regrid back onto original grid again ...
@@ -220,7 +225,12 @@ class TestConservativeRegrid(tests.IrisTest):
         self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.00002)
 
         # check area sums again
-        self._check_masked_allclose(c1to2to1_areasum, c1_areasum, rtol=1.0e-4)
+#        print 'Expected error %(c1to2to1_areasum, c1_areasum) = ', \
+#            100.0 * _reldiff(c1to2to1_areasum, c1_areasum)
+        if do_old:
+            self._check_masked_allclose(c1to2to1_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2to1_areasum, c1_areasum, rtol=1.0e-4)
 
     def test_simple_missing_data(self):
         """
@@ -380,8 +390,8 @@ class TestConservativeRegrid(tests.IrisTest):
         c1_areasum = _cube_area_sum(c1)
         c1toc2_areasum = _cube_area_sum(c1toc2)
 
-#        do_show_results = True
-        do_show_results = False
+        do_show_results = True
+#        do_show_results = False
         if do_show_results:
             # Show diffs...
             print
@@ -407,12 +417,12 @@ class TestConservativeRegrid(tests.IrisTest):
             plt.figure()
             ax1 = plt.axes(projection=ccrs.PlateCarree())
             ax1.set_global()
-            iplt.pcolormesh(c1)
+            iplt.pcolormesh(c1, edgecolor='black', vmin=0.5, vmax=5.5)
 
             plt.figure()
             ax2 = plt.axes(projection=ccrs.PlateCarree())
             ax2.set_global()
-            iplt.pcolormesh(c1toc2)
+            iplt.pcolormesh(c1toc2, edgecolor='black', vmin=0.5, vmax=5.5)
 
             plt.show()
 
@@ -621,7 +631,10 @@ class TestConservativeRegrid(tests.IrisTest):
         print '%(c1to2_areasum, c1_areasum) : ', 100.0 * _reldiff(
             c1to2_areasum,
             c1_areasum)
-        self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=0.004)
+        if do_old:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=0.004)
 
         #
         # transform back again ...
@@ -650,8 +663,10 @@ class TestConservativeRegrid(tests.IrisTest):
         print '%(c1to2to1_areasum, c1_areasum) : ', 100.0 * _reldiff(
             c1to2to1_areasum,
             c1_areasum)
-#        self._check_masked_allclose(c1to2to1_areasum, c1_areasum)
-        self._check_masked_allclose(c1to2to1_areasum, c1_areasum, rtol=0.01)
+        if do_old:
+            self._check_masked_allclose(c1to2to1_areasum, c1_areasum)
+        else:
+            self._check_masked_allclose(c1to2_areasum, c1_areasum, rtol=0.004)
 
     def test_fail_no_cs(self):
         # Test error when one coordinate has no coord_system.
