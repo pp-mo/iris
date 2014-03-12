@@ -53,15 +53,6 @@ def _calc_angles_abc(a, b, c):
     ang_diff = np.where(ang_diff > -np.pi, ang_diff, ang_diff + 2*np.pi)
     # subtract from 180 to get interior angle
     result = np.pi - ang_diff
-    # ALSO explicitly invalidate any angles where two of the points coincide.
-    # TODO: this really needs a valid magnitude concept, not a magic number (!)
-    eps = 1e-5
-    # Flag input locations where any of the 3 points are indistinguishable.
-    sames = ((np.max(np.abs(a - b), axis=-1) < eps) |
-             (np.max(np.abs(b - c), axis=-1) < eps) |
-             (np.max(np.abs(c - a), axis=-1) < eps))
-    # Invalidate those locations by returning an out-of-range value.
-    result[sames] = 2.0 * np.pi
     return result
 
 
@@ -87,23 +78,38 @@ def valid_bounds_shapes(x_bounds, y_bounds):
     """
     assert x_bounds.shape == y_bounds.shape
     assert x_bounds.shape[-1] == 4
-    points = [np.concatenate((x_bounds[..., i_point:i_point+1],
-                              y_bounds[..., i_point:i_point+1]),
-                             axis=-1)
-              for i_point in range(4)]
+    pt_0, pt_1, pt_2, pt_3 = [
+        np.concatenate((x_bounds[..., i_point:i_point+1],
+                        y_bounds[..., i_point:i_point+1]),
+                       axis=-1)
+        for i_point in range(4)]
+
+    # Flag input locations where any of the 4 points are indistinguishable.
+    # TODO: this really needs a valid magnitude concept, not a magic number (!)
+    eps = 1e-5
+    valids = ((np.max(np.abs(pt_0 - pt_1), axis=-1) > eps) &
+              (np.max(np.abs(pt_0 - pt_2), axis=-1) > eps) &
+              (np.max(np.abs(pt_0 - pt_3), axis=-1) > eps) &
+              (np.max(np.abs(pt_1 - pt_2), axis=-1) > eps) &
+              (np.max(np.abs(pt_1 - pt_3), axis=-1) > eps) &
+              (np.max(np.abs(pt_2 - pt_3), axis=-1) > eps))
 
     # Define a tolerance to exclude angles too close to 0 or 180.
     eps = np.deg2rad(0.01)
     eps_from_180 = np.pi - eps
 
-    # Check that all internal angles are >=(0+eps) and <(180-eps).
+    # Valid internal angles are >=(0+eps) and <(180-eps).
     def deg_in_180(ang):
         return (eps <= ang) & (ang < eps_from_180)
 
-    a012 = _calc_angles_abc(points[0], points[1], points[2])
-    a123 = _calc_angles_abc(points[1], points[2], points[3])
-    a230 = _calc_angles_abc(points[2], points[3], points[0])
-    valids = deg_in_180(a012) & deg_in_180(a123) & deg_in_180(a230)
+    a012 = _calc_angles_abc(pt_0, pt_1, pt_2)
+    a123 = _calc_angles_abc(pt_1, pt_2, pt_3)
+    a230 = _calc_angles_abc(pt_2, pt_3, pt_0)
+    a301 = _calc_angles_abc(pt_3, pt_0, pt_1)
+
+    valids &= (deg_in_180(a012) & deg_in_180(a123) &
+               deg_in_180(a230) & deg_in_180(a301))
+
     return valids
 
 
@@ -111,10 +117,10 @@ def _lon_degrees_wrap_to_reference(x, y):
     # Wrap x (in degrees) into the range y-180 .. y+180.
     # x and y can be scalars or compatible array objects.
     # TODO: Modify array in-place
-    x += 5*180 - y
-    x -= 360.0 * np.fix(x / 360.0)
-    x += y - 180.0
-    return x
+    result = x + 5*180 - y
+    result -= 360.0 * np.fix(result / 360.0)
+    result += y - 180.0
+    return result
 
 
 def fix_longitude_bounds(lons):
@@ -141,4 +147,15 @@ def fix_longitude_bounds(lons):
         raise ValueError('2d longitudes array must have shape[-1] == 4.')
 
     # TODO: Modify array in-place
-    lons = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1].copy())
+    lons[:] = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1])
+
+
+if __name__ == '__main__':
+    bad_case_pts = np.array([
+                             (-154.300000,  78.963636),
+                             (-89.153541,  69.835216),
+                             (-42.562722,  74.711569),
+                             (-334.300000,  86.490909)])
+    xx = bad_case_pts[..., 0].reshape((1,4))
+    yy = bad_case_pts[..., 1].reshape((1,4))
+    assert ~valid_bounds_shapes(xx, yy)
