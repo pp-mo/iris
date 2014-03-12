@@ -44,12 +44,14 @@ import iris
 import iris.analysis
 import iris.analysis.cartography as i_cartog
 
-do_old = False
-#do_old = True
+#do_old = False
+do_old = True
 if do_old:
+    age_string = "OLD"
     from iris.experimental.regrid_conservative_OLD import \
         regrid_conservative_via_esmpy
 else:
+    age_string = "NEW"
     from iris.experimental.regrid_conservative import \
         regrid_conservative_via_esmpy
 import iris.tests.stock as istk
@@ -367,28 +369,40 @@ class TestConservativeRegrid(tests.IrisTest):
         c1toc2 = regrid_conservative_via_esmpy(c1, c2)
 
 
-        # Show diffs...
-        import cartopy.crs as ccrs
-        import iris.plot as iplt
-        import matplotlib.pyplot as plt
-        plt.switch_backend('tkagg')
-
-        plt.figure()
-        ax1 = plt.axes(projection=ccrs.PlateCarree())
-        ax1.set_global()
-        iplt.pcolormesh(c1)
-
-        plt.figure()
-        ax2 = plt.axes(projection=ccrs.PlateCarree())
-        ax2.set_global()
-        iplt.pcolormesh(c1toc2)
-
-        plt.show()
-
         # Check that before+after area-sums match fairly well
         c1_areasum = _cube_area_sum(c1)
         c1toc2_areasum = _cube_area_sum(c1toc2)
+
+        do_show_results = True
+        if do_show_results:
+            # Show diffs...
+            print 'GLOBAL REGRID AREA SUMS (version = "{}"):'.format(age_string)
+            print "  original : ", c1_areasum
+            print "  regridded : ", c1toc2_areasum
+            a, b = c1_areasum, c1toc2_areasum
+            percent = 100.0 * abs(a - b) / (0.5 * (a + b))
+            print "  %diff : ", percent
+
+            import cartopy.crs as ccrs
+            import iris.plot as iplt
+            import matplotlib.pyplot as plt
+            plt.switch_backend('tkagg')
+
+            plt.figure()
+            ax1 = plt.axes(projection=ccrs.PlateCarree())
+            ax1.set_global()
+            iplt.pcolormesh(c1)
+
+            plt.figure()
+            ax2 = plt.axes(projection=ccrs.PlateCarree())
+            ax2.set_global()
+            iplt.pcolormesh(c1toc2)
+
+            plt.show()
+
+
         self.assertArrayAllClose(c1toc2_areasum, c1_areasum, rtol=0.006)
+
 
 #    def test_global_collapse(self):
 #        # Test regridding global data to a single cell.
