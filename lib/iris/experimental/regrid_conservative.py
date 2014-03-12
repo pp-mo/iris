@@ -176,7 +176,7 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
                 print msg.format('yy', *y_bounds[i_bad])
                 for x, y in zip(x_bounds[i_bad], y_bounds[i_bad]):
                     print '    {:10.5g}, {:10.5g}'.format(x, y)
-            raise ValueError()
+#            raise ValueError("Bad cells in grid.")
             # plt.plot(xx, yy, '-'); [plt.plot(x, y, 'x', markersize=20, color=c) for x, y, c in zip(xx, yy, ['black', 'red', 'blue', 'green'])]; plt.show()
 
     # Make an index of the valid-node numbers from the original points
@@ -372,8 +372,12 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         slice_indices_array[all_other_dims] = other_indices
         slice_indices_tuple = tuple(slice_indices_array)
 
-        # Get the source data, reformed into the right dimension order, (x,y).
+        # Get the source data, as a 2d array.
         src_data_2d = source_cube.data[slice_indices_tuple]
+
+        # Reform to the 'standard' dimension order = y,x.
+        if src_dims_xy[0] < src_dims_xy[1]:
+            src_data_2d = src_data_2d.transpose()
 
         # Work out whether we have missing data to define a source grid mask.
         if np.ma.is_masked(src_data_2d):
@@ -406,9 +410,15 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         coverage_tolerance_threshold = 1.0 - 1.0e-8
         data.mask = coverage_field.data < coverage_tolerance_threshold
 
-        # Paste regridded slice back into parent array
+        # Reconstruct correct 2d form.
         data = data.reshape([grid_cube.shape[i_dim]
                              for i_dim in [dst_dims_xy[1], dst_dims_xy[0]]])
+
+        # Reform into dimension order required by result cube.
+        if src_dims_xy[0] < src_dims_xy[1]:
+            data = data.transpose()
+
+        #Paste regridded slice back into parent array
         fullcube_data[slice_indices_tuple] = data
 
     # Remove the data mask if completely unused.
