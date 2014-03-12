@@ -23,6 +23,41 @@ TODO: which bits are still needed ?
 import numpy as np
 
 
+def bounds_points_all_distinct(x_bounds, y_bounds):
+    """
+    Calculate which 2d cell bounds have all-different points.
+
+    Args:
+
+    * x_bounds, y_bounds (float arrays):
+        Numpy arrays of X and Y coordinates.
+        Both must have same shape, and shape[-1] == 4.
+
+    Returns:
+        a boolean array (same shape as arguments).
+
+    """
+    assert x_bounds.shape == y_bounds.shape
+    assert x_bounds.shape[-1] == 4
+    pt_0, pt_1, pt_2, pt_3 = [
+        np.concatenate((x_bounds[..., i_point:i_point+1],
+                        y_bounds[..., i_point:i_point+1]),
+                       axis=-1)
+        for i_point in range(4)]
+
+    # Flag input locations where any of the 4 points are indistinguishable.
+    # TODO: this really needs a valid magnitude concept, not a magic number (!)
+    eps = 1e-5
+    valids = ((np.max(np.abs(pt_0 - pt_1), axis=-1) > eps) &
+              (np.max(np.abs(pt_0 - pt_2), axis=-1) > eps) &
+              (np.max(np.abs(pt_0 - pt_3), axis=-1) > eps) &
+              (np.max(np.abs(pt_1 - pt_2), axis=-1) > eps) &
+              (np.max(np.abs(pt_1 - pt_3), axis=-1) > eps) &
+              (np.max(np.abs(pt_2 - pt_3), axis=-1) > eps))
+
+    return valids
+
+
 def _calc_angles_abc(a, b, c):
     """
     Calculate internal angles "abc" from 3 arrays of 2d point locations.
@@ -56,11 +91,11 @@ def _calc_angles_abc(a, b, c):
     return result
 
 
-def valid_bounds_shapes(x_bounds, y_bounds):
+def bounds_convex(x_bounds, y_bounds):
     """
-    Calculate which 2d bounds coordinates represent "valid" bounded regions.
+    Calculate which 2d cell bounds describe a convex boundary.
 
-    This means they describe an anticlockwise convex quadrilateral.
+    This means all internal angles are >0 and <180.
 
     Args:
 
@@ -71,10 +106,6 @@ def valid_bounds_shapes(x_bounds, y_bounds):
     Returns:
         a boolean array (same shape as arguments).
 
-    .. note::
-
-        The validity concept matches that required by ESMF.
-
     """
     assert x_bounds.shape == y_bounds.shape
     assert x_bounds.shape[-1] == 4
@@ -83,16 +114,6 @@ def valid_bounds_shapes(x_bounds, y_bounds):
                         y_bounds[..., i_point:i_point+1]),
                        axis=-1)
         for i_point in range(4)]
-
-    # Flag input locations where any of the 4 points are indistinguishable.
-    # TODO: this really needs a valid magnitude concept, not a magic number (!)
-    eps = 1e-5
-    valids = ((np.max(np.abs(pt_0 - pt_1), axis=-1) > eps) &
-              (np.max(np.abs(pt_0 - pt_2), axis=-1) > eps) &
-              (np.max(np.abs(pt_0 - pt_3), axis=-1) > eps) &
-              (np.max(np.abs(pt_1 - pt_2), axis=-1) > eps) &
-              (np.max(np.abs(pt_1 - pt_3), axis=-1) > eps) &
-              (np.max(np.abs(pt_2 - pt_3), axis=-1) > eps))
 
     # Define a tolerance to exclude angles too close to 0 or 180.
     eps = np.deg2rad(0.01)
@@ -107,9 +128,34 @@ def valid_bounds_shapes(x_bounds, y_bounds):
     a230 = _calc_angles_abc(pt_2, pt_3, pt_0)
     a301 = _calc_angles_abc(pt_3, pt_0, pt_1)
 
-    valids &= (deg_in_180(a012) & deg_in_180(a123) &
-               deg_in_180(a230) & deg_in_180(a301))
+    valids = (deg_in_180(a012) & deg_in_180(a123) &
+              deg_in_180(a230) & deg_in_180(a301))
 
+    return valids
+
+
+def valid_bounds_shapes(x_bounds, y_bounds):
+    """
+    Calculate which 2d cell bounds represent "valid" bounded regions.
+
+    This means they describe an anticlockwise convex quadrilateral.
+
+    Args:
+
+    * x_bounds, y_bounds (float arrays):
+        Numpy arrays of X and Y coordinates.
+        Both must have same shape, and shape[-1] == 4.
+
+    Returns:
+        a boolean array (same shape as arguments).
+
+    .. note::
+
+        This validity concept matches that required by ESMF.
+
+    """
+    valids = bounds_points_all_distinct(x_bounds, y_bounds)
+    valids = valids & bounds_convex(x_bounds, y_bounds)
     return valids
 
 
@@ -158,4 +204,13 @@ if __name__ == '__main__':
                              (-334.300000,  86.490909)])
     xx = bad_case_pts[..., 0].reshape((1,4))
     yy = bad_case_pts[..., 1].reshape((1,4))
-    assert ~valid_bounds_shapes(xx, yy)
+    assert valid_bounds_shapes(xx, yy) == np.array([False])
+
+    good_case_pts = np.array([
+                              (-154.300000,  78.963636),
+                              (-89.153541,  69.835216),
+                              (-42.562722,  74.711569),
+                              (25.7,  86.490909)])
+    xx = good_case_pts[..., 0].reshape((1,4))
+    yy = good_case_pts[..., 1].reshape((1,4))
+    assert valid_bounds_shapes(xx, yy) == np.array([True])
