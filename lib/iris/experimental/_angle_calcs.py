@@ -178,6 +178,7 @@ def fix_longitude_bounds(lons):
     The array is modified in-place.
 
     Args:
+
     * lons (float array):
         The longitude bounds values, in degrees.
         Must have shape[-1] == 4.
@@ -192,8 +193,61 @@ def fix_longitude_bounds(lons):
     if lons.shape[-1] != 4:
         raise ValueError('2d longitudes array must have shape[-1] == 4.')
 
-    # TODO: Modify array in-place
     lons[:] = _lon_degrees_wrap_to_reference(lons, lons[..., 0:1])
+
+    # In certain cases, points at lons[..., 0] +/- 180 need "flipping" to
+    # produce valid results...
+
+
+def fix_bounds_with_longitude_flips(lon_bounds, lat_bounds):
+    """
+    Make non-convex 2d bounds cells valid by wrapping the longitudes.
+
+    Within cells that fail the internal-angles criterion, attempt to "flip" any
+    longitudes that are +/-180 degrees from the bound[0] value, to fix the
+    problem.  An Exception is raised if this does not cure the problem.
+
+    The input 'lon_bounds' array is modified in-place.
+
+    Args:
+
+    * lon_bounds, lat_bounds (float arrays):
+        Numpy arrays of X and Y coordinate bounds, in degrees.
+        Both must have same shape, and shape[-1] == 4.
+
+    """
+    fail_cells = np.where(~bounds_convex(lon_bounds, lat_bounds))
+    if len(fail_cells[0]) == 0:
+        # Nothing to do.
+        return
+
+    # Try to fix each cell in turn.
+    for fail_cell in zip(*fail_cells):
+        lons, lats = lon_bounds[fail_cell], lat_bounds[fail_cell]
+        # Find points with longitudes at +/-180 from lons[0].
+        rel_vals = lons - lons[0]
+        lons_180_refs = (rel_vals + 360.0) % 360.0
+        lons_180_inds = np.where(np.abs(lons_180_refs - 180.0) < 0.001)[0]
+        n_180_inds = len(lons_180_inds)
+        # Try all combinations of flip and no-flip at each +/-180 point.
+        for flip_01s in np.ndindex(tuple([2] * n_180_inds)):
+            flip_flags = np.array(flip_01s, dtype=bool)
+            i_flips = lons_180_inds[flip_flags]
+            lons_try = lons.copy()
+            lons_try[i_flips] = lons_try[i_flips] - lons[0]
+            lons_try[i_flips] *= -1
+            lons_try[i_flips] = lons_try[i_flips] + lons[0]
+            test_try = bounds_convex(lons_try.reshape((1, 4)),
+                                     lats.reshape((1, 4)))
+            if test_try[0]:
+                # This mod works : paste longitudes into the original array.
+                lon_bounds[fail_cell] = lons_try
+                # Skip to next cell.
+                break
+
+    # Finally check to see if we failed to fix them all.
+    if np.any(~bounds_convex(lon_bounds, lat_bounds)):
+        raise ValueError("Failed to rectify all non-convex cells.")
 
 
 if __name__ == '__main__':

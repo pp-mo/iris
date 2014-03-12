@@ -133,22 +133,21 @@ def _donothing_context_manager():
 
 @skip_esmf
 class TestConservativeRegrid(tests.IrisTest):
-    @classmethod
-    def setUpClass(cls):
-        # Pre-initialise ESMF, just to avoid warnings about no logfile.
-        # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
-        if ESMF is not None:
-            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-            cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
-            ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
-
-    @classmethod
-    def tearDownClass(cls):
-        # remove the logfile if we can, just to be tidy
-        if ESMF is not None:
-            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-            if os.path.exists(cls._emsf_logfile_path):
-                os.remove(cls._emsf_logfile_path)
+#    @classmethod
+#    def setUpClass(cls):
+#        # Pre-initialise ESMF, just to avoid warnings about no logfile.
+#        # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
+#        if ESMF is not None:
+#            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
+#            cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
+#            ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
+#    @classmethod
+#    def tearDownClass(cls):
+#        # remove the logfile if we can, just to be tidy
+#        if ESMF is not None:
+#            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
+#            if os.path.exists(cls._emsf_logfile_path):
+#                os.remove(cls._emsf_logfile_path)
 
     def setUp(self):
         # Compute basic test data cubes.
@@ -168,51 +167,51 @@ class TestConservativeRegrid(tests.IrisTest):
         self.stock_regrid_c1toc2 = regrid_conservative_via_esmpy(c1, c2)
         self.stock_c1_areasum = _cube_area_sum(c1)
 
-    def test_simple_areas(self):
-        """
-        Test area-conserving regrid between simple "near-square" grids.
-
-        Grids have overlapping areas in the same (lat-lon) coordinate system.
-        Grids are "nearly flat" lat-lon spaces (small ranges near the equator).
-
-        """
-        c1, c2 = self.stock_c1_c2
-        c1_areasum = self.stock_c1_areasum
-
-        # main regrid
-        c1to2 = regrid_conservative_via_esmpy(c1, c2)
-
-        c1to2_areasum = _cube_area_sum(c1to2)
-
-        # Check expected result (Cartesian equivalent, so not exact).
-        d_expect = np.array([[0.00, 0.00, 0.00, 0.00],
-                             [0.00, 0.25, 0.25, 0.00],
-                             [0.00, 0.25, 0.25, 0.00],
-                             [0.00, 0.00, 0.00, 0.00]])
-        # Numbers are slightly off (~0.25000952).  This is expected.
-        self.assertArrayAllClose(c1to2.data, d_expect, rtol=5.0e-5)
-
-        # check that the area sums are equivalent, simple total is a bit off
-        self.assertArrayAllClose(c1to2_areasum, c1_areasum, rtol=5.0e-5)
-
-        #
-        # regrid back onto original grid again ...
-        #
-        c1to2to1 = regrid_conservative_via_esmpy(c1to2, c1)
-
-        c1to2to1_areasum = _cube_area_sum(c1to2to1)
-
-        # Check expected result (Cartesian/exact difference now greater)
-        d_expect = np.array([[0.0, 0.0000, 0.0000, 0.0000, 0.0],
-                             [0.0, 0.0625, 0.1250, 0.0625, 0.0],
-                             [0.0, 0.1250, 0.2500, 0.1250, 0.0],
-                             [0.0, 0.0625, 0.1250, 0.0625, 0.0],
-                             [0.0, 0.0000, 0.0000, 0.0000, 0.0]])
-        self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.00002)
-
-        # check area sums again
-        self.assertArrayAllClose(c1to2to1_areasum, c1_areasum, rtol=1.0e-4)
-
+#    def test_simple_areas(self):
+#        """
+#        Test area-conserving regrid between simple "near-square" grids.
+#
+#        Grids have overlapping areas in the same (lat-lon) coordinate system.
+#        Grids are "nearly flat" lat-lon spaces (small ranges near the equator).
+#
+#        """
+#        c1, c2 = self.stock_c1_c2
+#        c1_areasum = self.stock_c1_areasum
+#
+#        # main regrid
+#        c1to2 = regrid_conservative_via_esmpy(c1, c2)
+#
+#        c1to2_areasum = _cube_area_sum(c1to2)
+#
+#        # Check expected result (Cartesian equivalent, so not exact).
+#        d_expect = np.array([[0.00, 0.00, 0.00, 0.00],
+#                             [0.00, 0.25, 0.25, 0.00],
+#                             [0.00, 0.25, 0.25, 0.00],
+#                             [0.00, 0.00, 0.00, 0.00]])
+#        # Numbers are slightly off (~0.25000952).  This is expected.
+#        self.assertArrayAllClose(c1to2.data, d_expect, rtol=5.0e-5)
+#
+#        # check that the area sums are equivalent, simple total is a bit off
+#        self.assertArrayAllClose(c1to2_areasum, c1_areasum, rtol=5.0e-5)
+#
+#        #
+#        # regrid back onto original grid again ...
+#        #
+#        c1to2to1 = regrid_conservative_via_esmpy(c1to2, c1)
+#
+#        c1to2to1_areasum = _cube_area_sum(c1to2to1)
+#
+#        # Check expected result (Cartesian/exact difference now greater)
+#        d_expect = np.array([[0.0, 0.0000, 0.0000, 0.0000, 0.0],
+#                             [0.0, 0.0625, 0.1250, 0.0625, 0.0],
+#                             [0.0, 0.1250, 0.2500, 0.1250, 0.0],
+#                             [0.0, 0.0625, 0.1250, 0.0625, 0.0],
+#                             [0.0, 0.0000, 0.0000, 0.0000, 0.0]])
+#        self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.00002)
+#
+#        # check area sums again
+#        self.assertArrayAllClose(c1to2to1_areasum, c1_areasum, rtol=1.0e-4)
+#
 #    def test_simple_missing_data(self):
 #        """
 #        Check for missing data handling.
@@ -329,41 +328,68 @@ class TestConservativeRegrid(tests.IrisTest):
 #        c1, _ = self.stock_c1_c2
 #        testcube = regrid_conservative_via_esmpy(c1, c1)
 #        self.assertEqual(testcube, c1)
-#
-#    def test_global(self):
-#        # Test global regridding.
-#        # Compute basic test data cubes.
-#        shape1 = (8, 6)
-#        xlim1 = 180.0 * (shape1[0] - 1) / shape1[0]
-#        ylim1 = 90.0 * (shape1[1] - 1) / shape1[1]
-#        c1 = _make_test_cube(shape1, (-xlim1, xlim1), (-ylim1, ylim1))
-#        # Create a small, plausible global array:
-#        # - top + bottom rows all the same
-#        # - left + right columns "mostly close" for checking across the seam
-#        basedata = np.array(
-#            [[1, 1, 1, 1, 1, 1, 1, 1],
-#             [1, 1, 4, 4, 4, 2, 2, 1],
-#             [2, 1, 4, 4, 4, 2, 2, 2],
-#             [2, 5, 5, 1, 1, 1, 5, 5],
-#             [5, 5, 5, 1, 1, 1, 5, 5],
-#             [5, 5, 5, 5, 5, 5, 5, 5]])
-#        c1.data[:] = basedata
-#
-#        # Create a rotated grid to regrid this onto.
-#        shape2 = (14, 11)
-#        xlim2 = 180.0 * (shape2[0] - 1) / shape2[0]
-#        ylim2 = 90.0 * (shape2[1] - 1) / shape2[1]
-#        c2 = _make_test_cube(shape2, (-xlim2, xlim2), (-ylim2, ylim2),
-#                             pole_latlon=(47.4, 25.7))
-#
-#        # Perform regridding
-#        c1toc2 = regrid_conservative_via_esmpy(c1, c2)
-#
-#        # Check that before+after area-sums match fairly well
-#        c1_areasum = _cube_area_sum(c1)
-#        c1toc2_areasum = _cube_area_sum(c1toc2)
-#        self.assertArrayAllClose(c1toc2_areasum, c1_areasum, rtol=0.006)
-#
+
+    def test_global(self):
+        # Test global regridding.
+        # Compute basic test data cubes.
+        shape1 = (8, 6)
+
+        do_limit_scope = True
+#        do_limit_scope = False
+        if not do_limit_scope:
+            xrange2, yrange2 = 180.0, 90.0
+        else:
+            xrange2, yrange2 = 179.9, 89.9
+
+        xlim1 = xrange2 * (shape1[0] - 1) / shape1[0]
+        ylim1 = yrange2 * (shape1[1] - 1) / shape1[1]
+        c1 = _make_test_cube(shape1, (-xlim1, xlim1), (-ylim1, ylim1))
+        # Create a small, plausible global array:
+        # - top + bottom rows all the same
+        # - left + right columns "mostly close" for checking across the seam
+        basedata = np.array(
+            [[1, 1, 1, 1, 1, 1, 1, 1],
+             [1, 1, 4, 4, 4, 2, 2, 1],
+             [2, 1, 4, 4, 4, 2, 2, 2],
+             [2, 5, 5, 1, 1, 1, 5, 5],
+             [5, 5, 5, 1, 1, 1, 5, 5],
+             [5, 5, 5, 5, 5, 5, 5, 5]])
+        c1.data[:] = basedata
+
+        # Create a rotated grid to regrid this onto.
+        shape2 = (14, 11)
+        xlim2 = xrange2 * (shape2[0] - 1) / shape2[0]
+        ylim2 = yrange2 * (shape2[1] - 1) / shape2[1]
+        c2 = _make_test_cube(shape2, (-xlim2, xlim2), (-ylim2, ylim2),
+                             pole_latlon=(47.4, 25.7))
+
+        # Perform regridding
+        c1toc2 = regrid_conservative_via_esmpy(c1, c2)
+
+
+        # Show diffs...
+        import cartopy.crs as ccrs
+        import iris.plot as iplt
+        import matplotlib.pyplot as plt
+        plt.switch_backend('tkagg')
+
+        plt.figure()
+        ax1 = plt.axes(projection=ccrs.PlateCarree())
+        ax1.set_global()
+        iplt.pcolormesh(c1)
+
+        plt.figure()
+        ax2 = plt.axes(projection=ccrs.PlateCarree())
+        ax2.set_global()
+        iplt.pcolormesh(c1toc2)
+
+        plt.show()
+
+        # Check that before+after area-sums match fairly well
+        c1_areasum = _cube_area_sum(c1)
+        c1toc2_areasum = _cube_area_sum(c1toc2)
+        self.assertArrayAllClose(c1toc2_areasum, c1_areasum, rtol=0.006)
+
 #    def test_global_collapse(self):
 #        # Test regridding global data to a single cell.
 #        # Fetch 'standard' testcube data

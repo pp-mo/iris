@@ -163,16 +163,21 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
     y_bounds = y_bounds[i_ok]
 
     if not np.all(angle_calcs.valid_bounds_shapes(x_bounds, y_bounds)):
-        i_bads = np.where(~angle_calcs.valid_bounds_shapes(x_bounds, y_bounds))[0]
-        print 'Bad cells found! ({} of)'.format(len(i_bads))
-        for i_bad in i_bads:
-            print '\n#{}:\n'.format(i_bad)
-            print 'xx = np.array([{:10.5g}, {:10.5g}, {:10.5g}, {:10.5g}])'.format(*x_bounds[i_bad])
-            print 'yy = np.array([{:10.5g}, {:10.5g}, {:10.5g}, {:10.5g}])'.format(*y_bounds[i_bad])
-            for x, y in zip(x_bounds[i_bad], y_bounds[i_bad]):
-                print '    {:10.5g}, {:10.5g}'.format(x, y)
-        raise ValueError()
-        # plt.plot(xx, yy, '-'); [plt.plot(x, y, 'x', markersize=20, color=c) for x, y, c in zip(xx, yy, ['black', 'red', 'blue', 'green'])]; plt.show()
+        try:
+            angle_calcs.fix_bounds_with_longitude_flips(x_bounds, y_bounds)
+        except ValueError as e:
+            i_bads = np.where(~angle_calcs.valid_bounds_shapes(x_bounds,
+                                                               y_bounds))[0]
+            print 'Bad cells found! ({} of)'.format(len(i_bads))
+            for i_bad in i_bads:
+                print '\n#{}:\n'.format(i_bad)
+                msg = '{} = np.array([{:10.5g}, {:10.5g}, {:10.5g}, {:10.5g}])'
+                print msg.format('xx', *x_bounds[i_bad])
+                print msg.format('yy', *y_bounds[i_bad])
+                for x, y in zip(x_bounds[i_bad], y_bounds[i_bad]):
+                    print '    {:10.5g}, {:10.5g}'.format(x, y)
+            raise ValueError()
+            # plt.plot(xx, yy, '-'); [plt.plot(x, y, 'x', markersize=20, color=c) for x, y, c in zip(xx, yy, ['black', 'red', 'blue', 'green'])]; plt.show()
 
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
