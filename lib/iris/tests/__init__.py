@@ -423,7 +423,9 @@ class IrisTest(unittest.TestCase):
 
         """
         np.testing.assert_array_equal(a.mask, b.mask)
-        np.testing.assert_allclose(a[~a.mask].data, b[~b.mask].data)
+        if a.ndim > 0 and b.ndim > 0:
+            a, b = a[~a.mask].data, b[~b.mask].data
+        np.testing.assert_allclose(a, b, rtol=rtol, atol=atol, **kwargs)
 
     @contextlib.contextmanager
     def temp_filename(self, suffix=''):
