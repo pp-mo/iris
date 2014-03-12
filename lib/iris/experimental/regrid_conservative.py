@@ -52,7 +52,7 @@ _unit_degrees = iris.unit.Unit('degrees')
 
 
 def _make_esmpy_field(x_coord, y_coord, ref_name='field',
-                     data=None, mask=None):
+                      data=None, mask=None):
     """
     Create an ESMPy ESMF.Field on given coordinates, based on a ESMF.Mesh.
 
@@ -116,7 +116,6 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
         x_bounds = _make_full_bounds_array(x_bounds_contiguous)
         y_bounds = _make_full_bounds_array(y_bounds_contiguous)
 
-
     ny, nx = x_bounds.shape[:-1]
     n_cells = nx * ny
 
@@ -162,12 +161,18 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
     x_bounds = x_bounds[i_ok]
     y_bounds = y_bounds[i_ok]
 
-    if not np.all(angle_calcs.valid_bounds_shapes(x_bounds, y_bounds)):
+#    if not np.all(angle_calcs.valid_bounds_shapes(x_bounds, y_bounds)):
+# NOTE: the 'non-convex' cases with duplicated points don't in practice seem to
+# be causing a problem at the moment ?
+# Fixing those with 'flipped' longitudes seems enough, for now.
+    if not np.all(angle_calcs.bounds_convex(x_bounds, y_bounds)):
         try:
             angle_calcs.fix_bounds_with_longitude_flips(x_bounds, y_bounds)
         except ValueError as e:
-            i_bads = np.where(~angle_calcs.valid_bounds_shapes(x_bounds,
-                                                               y_bounds))[0]
+#            i_bads = np.where(~angle_calcs.valid_bounds_shapes(x_bounds,
+#                                                               y_bounds))[0]
+            i_bads = np.where(~angle_calcs.bounds_convex(x_bounds,
+                                                         y_bounds))[0]
             print 'Bad cells found! ({} of)'.format(len(i_bads))
             for i_bad in i_bads:
                 print '\n#{}:\n'.format(i_bad)
@@ -177,7 +182,6 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
                 for x, y in zip(x_bounds[i_bad], y_bounds[i_bad]):
                     print '    {:10.5g}, {:10.5g}'.format(x, y)
 #            raise ValueError("Bad cells in grid.")
-            # plt.plot(xx, yy, '-'); [plt.plot(x, y, 'x', markersize=20, color=c) for x, y, c in zip(xx, yy, ['black', 'red', 'blue', 'green'])]; plt.show()
 
     # Make an index of the valid-node numbers from the original points
     # So.. nnfp[original_point_index] = index-in-valid-bounds-arrays
@@ -190,8 +194,8 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
     # define valid slots
     valid_node_inds = i_ok * 4
     for i_pt in range(4):
-        node_numbers_from_points[i_pt + 4 * i_ok] = i_pt + 4 * np.arange(n_validpoints, dtype=np.int32)
-
+        node_numbers_from_points[i_pt + 4 * i_ok] = \
+            i_pt + 4 * np.arange(n_validpoints, dtype=np.int32)
 
     # create a Mesh object
     mesh = ESMF.Mesh(parametricDim=2, spatialDim=2)
@@ -214,7 +218,6 @@ def _make_esmpy_field(x_coord, y_coord, ref_name='field',
                    nodeIds=node_ids.flat[:],
                    nodeCoords=combined_node_coords,
                    nodeOwners=node_owners)
-
 
     #
     # Create 'elements', which represent the cells themselves
@@ -328,7 +331,7 @@ def regrid_conservative_via_esmpy(source_cube, grid_cube):
         if xy_coords[0].ndim == 1:
             # 1d X and Y occupy two separate source dimensions
             xy_dims = [cube.coord_dims(coord)[0]
-                           for coord in xy_coords]
+                       for coord in xy_coords]
         else:
             # 2d X and Y *share* two source dimensions.
             xy_dims = cube.coord_dims(xy_coords[0])
