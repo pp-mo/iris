@@ -761,8 +761,10 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check we have zeros (or nearly) all around the edge..
         c1toc2_zeros = np.ma.array(c1to2.data)
+        # Replace any masked values with zero.
         c1toc2_zeros[c1toc2_zeros.mask] = 0.0
-        c1toc2_zeros = np.abs(c1toc2_zeros.mask) < 1.0e-6
+        # Find where results are ~= zero.
+        c1toc2_zeros = np.abs(c1toc2_zeros) < 1.0e-6
         self.assertArrayEqual(c1toc2_zeros[0, :], True)
         self.assertArrayEqual(c1toc2_zeros[-1, :], True)
         self.assertArrayEqual(c1toc2_zeros[:, 0], True)
@@ -788,8 +790,10 @@ class TestConservativeRegrid(tests.IrisTest):
 
         # check we have zeros (or nearly) all around the edge..
         c2toc1_zeros = np.ma.array(c2toc1.data)
+        # Replace any masked values with zero.
         c2toc1_zeros[c2toc1_zeros.mask] = 0.0
-        c2toc1_zeros = np.abs(c2toc1_zeros.mask) < 1.0e-6
+        # Find where results are ~= zero.
+        c2toc1_zeros = np.abs(c2toc1_zeros) < 1.0e-6
         self.assertArrayEqual(c2toc1_zeros[0, :], True)
         self.assertArrayEqual(c2toc1_zeros[-1, :], True)
         self.assertArrayEqual(c2toc1_zeros[:, 0], True)
