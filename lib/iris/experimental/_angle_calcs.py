@@ -34,7 +34,7 @@ def bounds_points_all_distinct(x_bounds, y_bounds):
         Both must have same shape, and shape[-1] == 4.
 
     Returns:
-        a boolean array (same shape as arguments).
+        A boolean array, shape as arguments without the last (XY) dimension.
 
     """
     assert x_bounds.shape == y_bounds.shape
@@ -70,7 +70,7 @@ def _calc_angles_abc(a, b, c):
         [..., 0] and [..., 1] are X and Y values.
 
     Returns:
-        An array of floats without the last (XY) dimension.
+        An array of floats, shape as arguments without the last (XY) dimension.
         Results are in radians.
 
     """
@@ -104,7 +104,7 @@ def bounds_convex(x_bounds, y_bounds):
         Both must have same shape, and shape[-1] == 4.
 
     Returns:
-        a boolean array (same shape as arguments).
+        A boolean array, shape as arguments without the last (XY) dimension.
 
     """
     assert x_bounds.shape == y_bounds.shape
@@ -147,11 +147,12 @@ def valid_bounds_shapes(x_bounds, y_bounds):
         Both must have same shape, and shape[-1] == 4.
 
     Returns:
-        a boolean array (same shape as arguments).
+        A boolean array, shape as arguments without the last (XY) dimension.
 
     .. note::
 
-        This validity concept matches that required by ESMF.
+        This validity concept possibly matches that required by ESMF.
+        Or, possibly, the unique-corners requirement is not actually needed.
 
     """
     valids = bounds_points_all_distinct(x_bounds, y_bounds)
@@ -162,7 +163,6 @@ def valid_bounds_shapes(x_bounds, y_bounds):
 def _lon_degrees_wrap_to_reference(x, y):
     # Wrap x (in degrees) into the range y-180 .. y+180.
     # x and y can be scalars or compatible array objects.
-    # TODO: Modify array in-place
     result = x + 5*180 - y
     result -= 360.0 * np.fix(result / 360.0)
     result += y - 180.0

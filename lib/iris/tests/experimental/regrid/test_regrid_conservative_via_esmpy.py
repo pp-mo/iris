@@ -135,21 +135,22 @@ def _donothing_context_manager():
 
 @skip_esmf
 class TestConservativeRegrid(tests.IrisTest):
-#@classmethod
-#def setUpClass(cls):
-#    # Pre-initialise ESMF, just to avoid warnings about no logfile.
-#    # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
-#    if ESMF is not None:
-#        # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-#        cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
-#        ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
-#@classmethod
-#def tearDownClass(cls):
-#    # remove the logfile if we can, just to be tidy
-#    if ESMF is not None:
-#        # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-#        if os.path.exists(cls._emsf_logfile_path):
-#            os.remove(cls._emsf_logfile_path)
+    @classmethod
+    def setUpClass(cls):
+        # Pre-initialise ESMF, just to avoid warnings about no logfile.
+        # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
+        if ESMF is not None:
+            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
+            cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
+            ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
+
+    @classmethod
+    def tearDownClass(cls):
+        # remove the logfile if we can, just to be tidy
+        if ESMF is not None:
+            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
+            if os.path.exists(cls._emsf_logfile_path):
+                os.remove(cls._emsf_logfile_path)
 
     def setUp(self):
         # Compute basic test data cubes.
@@ -201,7 +202,7 @@ class TestConservativeRegrid(tests.IrisTest):
         self._check_masked_allclose(c1to2.data, d_expect, rtol=5.0e-5)
 
         # check that the area sums are equivalent, simple total is a bit off
-#        print 'Expected error %(c1to2_areasum, c1_areasum) = ', \
+#        print 'Difference error %(c1to2_areasum, c1_areasum) = ', \
 #            100.0 * _reldiff(c1to2_areasum, c1_areasum)
         if do_old:
             self._check_masked_allclose(c1to2_areasum, c1_areasum)
@@ -225,7 +226,7 @@ class TestConservativeRegrid(tests.IrisTest):
         self.assertArrayAllClose(c1to2to1.data, d_expect, atol=0.00002)
 
         # check area sums again
-#        print 'Expected error %(c1to2to1_areasum, c1_areasum) = ', \
+#        print 'Difference error %(c1to2to1_areasum, c1_areasum) = ', \
 #            100.0 * _reldiff(c1to2to1_areasum, c1_areasum)
         if do_old:
             self._check_masked_allclose(c1to2to1_areasum, c1_areasum)
@@ -269,7 +270,8 @@ class TestConservativeRegrid(tests.IrisTest):
         Check valid operation on a multidimensional cube.
 
         Calculation should repeat across multiple dimensions.
-        Any attached orography is interpolated.
+
+        NOTE: attached orography + factories are not supported.
 
         NOTE: in future, extra dimensions may be passed through to ESMF:  At
         present, it repeats the calculation on 2d slices.  So we check that
@@ -307,7 +309,6 @@ class TestConservativeRegrid(tests.IrisTest):
         c1_to_c2 = regrid_conservative_via_esmpy(c1, c2)
 
         # check that all the original coords exist in the new cube
-        # NOTE: this also effectively confirms we haven't lost the orography
         def list_coord_names(cube):
             return sorted([coord.name() for coord in cube.coords()])
 
