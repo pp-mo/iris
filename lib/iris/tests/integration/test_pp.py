@@ -428,11 +428,18 @@ class TestWgdosPackingRoundtrip(tests.IrisTest):
     def test_wgdos_pacing(self):
         test_cube = tests.stock.simple_pp()
         test_filename = 'simple_packed.pp'
-        packer = iris.fileformats.pp.PpWgdosPacker(bpacc=-4)
+        test_accuracy = -5
+        packer = iris.fileformats.pp.PpWgdosPacker(bpacc=test_accuracy)
         iris.save(test_cube,
                   test_filename,
                   pack=packer)
-
+        reloaded = iris.load_cube(test_filename)
+        self.assertEqual(test_cube.metadata, reloaded.metadata)
+        max_diff = np.max(np.abs(reloaded.data - test_cube.data))
+        data_range = np.max(test_cube.data) - np.min(test_cube.data)
+        tolerance_level = data_range * (2.0 ** test_accuracy)
+        print 'range=', data_range,' bits=',-test_accuracy,' tolerance=', tolerance_level, ', max error = ', max_diff
+        self.assertLess(max_diff, tolerance_level)
 
 if __name__ == "__main__":
     tests.main()
