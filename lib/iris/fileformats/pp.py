@@ -14,6 +14,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
+from iris.fileformats import pp_packing
 """
 Provides UK Met Office Post Process (PP) format specific capabilities.
 
@@ -1152,7 +1153,9 @@ class PPField(object):
         pp_file.write(struct.pack(">L", int(len_of_data_payload)))
 
         # the data itself
-        if lb[HEADER_DICT['lbpack'][0]] == 0:
+        if lb[HEADER_DICT['lbpack'][0]] in (pp_packing.PACKING_TYPE_NONE,
+                                            pp_packing.PACKING_TYPE_WGDOS):
+            # TODO: THIS IS ALL WRONG !!
             data.tofile(pp_file)
         else:
             raise NotImplementedError('Writing packed pp data with lbpack of %s '
@@ -1701,25 +1704,133 @@ def _load_cubes_variable_loader(filenames, callback, loading_function,
     return iris.fileformats.rules.load_cubes(filenames, callback, pp_loader)
 
 
-def save(cube, target, append=False, field_coords=None):
+class PpPacker(object):
+    """
+    Abstract superclass for PP packing method specifiers.
+
+    An object that can be passed to :meth:`iris.save` to indicate that PP data
+    should be saved with WGDOS packing.
+
+    These objects are actually callables that can be "applied" to a
+    :class:`iris.fileformats.pp.PPField`.
+
+    """
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def __call__(self, field):
+        """ 
+        Perform a transformation on a PPField.
+
+        May modify the argument in-place.
+
+        Args:
+        * field (:class:`iris.fileformats.pp.PPField`):
+            A pp field to be transformed.
+
+        Returns:
+            The transformed :class:`iris.fileformats.pp.PPField`.
+
+        """
+
+class PpWgdosPacker(PpPacker):
+    """
+    A PpPacker that can apply WGDOS style compression.
+
+    """
+    def __init__(self, bpacc=-6):
+        """ 
+        Args:
+        * bpacc (int):
+            Specify the precision of WGDOS packing operations.
+            Individual levels are spaced at fractions of roughly (2.0 ** bpacc)
+            of the data range, so this is -(<approx number of bits>).
+
+        """
+        self.bpacc = bpacc
+
+    def __call__(self, field):
+        # "Remove" the field data array and transform as required.
+        data = field.data
+        field.data = None
+        # Always convert to float type. Ensure 4-byte native for C interface.
+        data = data.astype(np.float32)
+        # Calculate the packed result.
+        result = pp_packing.pack_field(pp_packing.PACKING_TYPE_WGDOS,
+                                       data, field.lbrow, field.lbnpt,
+                                       field.bmdi,  # mdi value
+                                       self.bpacc,  # packing accuracy = n-bits
+                                       0)  # n_bits (unused)
+        assert result.dtype == np.int8
+        assert result.size % PP_WORD_DEPTH == 0
+        # Reset the data dtype to "big-endian 4-byte floating".
+        # This is basically a lie, but enables PPField.save to work properly:
+        # (1) order=big-endian and size=4-byte means the byte data saves as-is,
+        # without swapping or downcasting.
+        # (2) kind=floating records the intended type into LBUSER[0] -- i.e.
+        # this is the intended type of the *unpacked result* (not 'result').
+        result.dtype = np.dtype('>f4')
+        field.data = result
+
+        # Also set field words that contain packing method information.
+        field.lbpack = pp_packing.PACKING_TYPE_WGDOS
+        field.bacc = self.bpacc
+        return field
+
+#
+# NOTE: this one is just for testing !
+#
+class PpNullPacker(PpPacker):
+    """
+    An object that can be passed to :meth:`iris.save` to indicate that PP data
+    should be saved with NO packing.
+
+    """
+    def __init__(self, debug_print=None):
+        """ 
+        Args:
+        * debug_print (string):
+            Print this when used.
+
+        """
+        self.debug_print = debug_print
+
+    def __call__(self, field_in):
+        if self.debug_print:
+            print '****** PpNullPacker transforming (note="{}")'.format(
+                self.debug_print)
+        return field_in
+
+
+def save(cube, target, append=False, field_coords=None, pack=None):
     """
     Use the PP saving rules (and any user rules) to save a cube to a PP file.
 
     Args:
 
-        * cube         - A :class:`iris.cube.Cube`, :class:`iris.cube.CubeList` or list of cubes.
-        * target       - A filename or open file handle.
+    * cube (:class:`iris.cube.Cube`, :class:`iris.cube.CubeList`
+    or list of cubes):
+        data to be saved as PP fields.
+    * target (file-like or filename):
+        a filename or writeable file-like object.
 
     Kwargs:
 
-        * append       - Whether to start a new file afresh or add the cube(s) to the end of the file.
-                         Only applicable when target is a filename, not a file handle.
-                         Default is False.
+    * append (bool):
+        if set, cube(s) are added to to the end of the file.
+        Only applicable when target is a filename, not a file handle.
+        Default is False : make a fresh file.
 
-        * field_coords - list of 2 coords or coord names which are to be used for
-                         reducing the given cube into 2d slices, which will ultimately
-                         determine the x and y coordinates of the resulting fields.
-                         If None, the final two  dimensions are chosen for slicing.
+    * field_coords (list of :class:iris.coords.Coord' or string):
+        coords or coord names which are to be used for reducing the given cube
+        into 2d slices, which will ultimately determine the x and y coordinates
+        of the resulting fields.
+        If None, the last two  dimensions are chosen for slicing.
+
+    * pack (callable):
+        Specifies a one-argument packing method, to be applied to all the saved
+        PP fields.
+        Normally a :class:`~iris.fileformats.pp.PpPacker` object.
 
     See also :func:`iris.io.save`.
 
@@ -1822,6 +1933,10 @@ def save(cube, target, append=False, field_coords=None):
 
         # Log the rules used
         iris.fileformats.rules.log('PP_SAVE', target if isinstance(target, basestring) else target.name, verify_rules_ran)
+
+        # Transform by packing, if requested.
+        if pack:
+            pp_field = pack(pp_field)
 
         # Write to file
         pp_field.save(pp_file)
