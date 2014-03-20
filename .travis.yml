@@ -103,10 +103,14 @@ install:
   - /usr/bin/python -c 'import cartopy; cartopy.io.shapereader.natural_earth()'
 
 # mo_unpack
-  - ./.travis_no_output wget https://puma.nerc.ac.uk/trac/UM_TOOLS/raw-attachment/wiki/unpack/unpack-030712.tgz
-  - ./.travis_no_output tar -xf unpack-030712.tgz
-  - cd unpack-030712/libmo_unpack
-#?  - gcc -c -fPIC -O4 -mfpmath=sse -msse -I include -D_LARGEFILE_SOURCE -D_LARGEFILE_SOURCE64 -D_FILE_OFFSET_BITS=64 *.c
+  - ./.travis_no_output wget https://puma.nerc.ac.uk/trac/UM_TOOLS/raw-attachment/wiki/unpack/unpack-160114.tgz
+  - ./.travis_no_output tar -xf unpack-160114.tgz
+  - cd unpack-160114/libmo_unpack
+# NOTE: At present, compile+link options need to be kept up-to-date with content of the "make_library" script
+#   -- which itself is not suitable to our needs
+# Current version (=unpack-160114.  *Unchanged* since previous=unpack-030712):
+#   OPTS="-O4 -mfpmath=sse -msse -I include -D_LARGEFILE_SOURCE -D_LARGEFILE_SOURCE64 -D_FILE_OFFSET_BITS=64"
+# NOTE: except we are *not* using "-D_FILE_OFFSET_BITS=64".  I don't know why.
   - ../../.travis_no_output gcc -c -fPIC -O4 -mfpmath=sse -msse -I include -D_LARGEFILE_SOURCE *.c
   - ../../.travis_no_output gcc -shared -Wl,-soname,libmo_unpack.so -o lib/libmo_unpack.so *.o
   - ../../.travis_no_output sudo cp lib/* /usr/local/lib
