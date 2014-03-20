@@ -32,9 +32,9 @@ class TestPackField(tests.IrisTest):
     def setUp(self):
         # Create test data matching C single floats (bytes must be right).
         test_vals = np.array([[77.3, 2.1, 3.0, 4.0],
-                               [999.0005, 999.0006, 999.0007, 999.0008],
-                               [99999.03, 999.04, 9.05, 0.06]],
-                              dtype=np.float32)
+                              [999.0005, 999.0006, 999.0007, 999.0008],
+                              [99999.03, 999.04, 9.05, 0.06]],
+                             dtype=np.float32)
 
         # NOTE: As it is, this is too small to work.
         # NOTE: this is a problem with the library interface -- it makes no
@@ -69,12 +69,11 @@ class TestPackField(tests.IrisTest):
         bytes_out = result.tostring()
         self.assertArrayEqual(bytes_out, bytes_in)
 
-
     def test_wgdos_pack_unpack(self):
         # Set "typical" accuracy value for test, and matching tolerance level.
         accuracy_bits = 6
             #
-            # NOTE: 
+            # NOTE:
             # If you increase this to 8 bits, it coredumps.  7 "seems ok".
             # THIS IS NOT NICE.
             #
@@ -87,7 +86,8 @@ class TestPackField(tests.IrisTest):
                             0)  # n_bits (unused)
         original_size = len(self.test_array.tostring())
         result_size = len(result.tostring())
-#        print '\nSizes: original={}, result={}'.format(original_size, result_size)
+#        print '\nSizes: original={}, result={}'.format(
+#            original_size, result_size)
         self.assertLess(result_size, original_size)
         # Check we can reverse the operation
         # NOTE: form of the call (no keywords)

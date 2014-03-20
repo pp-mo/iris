@@ -1719,7 +1719,7 @@ class PpPacker(object):
 
     @abc.abstractmethod
     def __call__(self, field):
-        """ 
+        """
         Perform a transformation on a PPField.
 
         May modify the argument in-place.
@@ -1733,13 +1733,14 @@ class PpPacker(object):
 
         """
 
+
 class PpWgdosPacker(PpPacker):
     """
     A PpPacker that can apply WGDOS style compression.
 
     """
     def __init__(self, bpacc=-6):
-        """ 
+        """
         Args:
         * bpacc (int):
             Specify the precision of WGDOS packing operations.
@@ -1777,6 +1778,7 @@ class PpWgdosPacker(PpPacker):
         field.bacc = self.bpacc
         return field
 
+
 #
 # NOTE: this one is just for testing !
 #
@@ -1787,7 +1789,7 @@ class PpNullPacker(PpPacker):
 
     """
     def __init__(self, debug_print=None):
-        """ 
+        """
         Args:
         * debug_print (string):
             Print this when used.

@@ -438,7 +438,8 @@ class TestWgdosPackingRoundtrip(tests.IrisTest):
         max_diff = np.max(np.abs(reloaded.data - test_cube.data))
         data_range = np.max(test_cube.data) - np.min(test_cube.data)
         tolerance_level = data_range * (2.0 ** test_accuracy)
-        print 'range=', data_range,' bits=',-test_accuracy,' tolerance=', tolerance_level, ', max error = ', max_diff
+        print 'range={}, bits={}, tolerance={}, max-error={}'.format(
+            data_range, -test_accuracy, tolerance_level, max_diff)
         self.assertLess(max_diff, tolerance_level)
 
 if __name__ == "__main__":
