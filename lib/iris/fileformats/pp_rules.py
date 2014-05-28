@@ -410,15 +410,15 @@ def convert(f):
         standard_name = "sea_water_potential_temperature"
         units = "Celsius"
 
-    if \
-            ((f.lbsrce % 10000) == 1111) and \
-            ((f.lbsrce / 10000) / 100.0 > 0):
-        attributes['source'] = 'Data from Met Office Unified Model %4.2f' % ((f.lbsrce / 10000) / 100.0)
-
-    if \
-            ((f.lbsrce % 10000) == 1111) and \
-            ((f.lbsrce / 10000) / 100.0 == 0):
-        attributes['source'] = 'Data from Met Office Unified Model'
+    um_ver = iris.fileformats.pp.UMVERSION.from_lbsrce(f.lbsrce)
+    if not um_ver.unknown:
+        if um_ver.major == 0:
+            ver_string = ''
+        else:
+#            ver_string = str(um_ver)
+            ver_string = ' {:d}.{:02d}'.format(um_ver.major, um_ver.minor)
+        attributes['source'] = \
+            'Data from Met Office Unified Model{}'.format(ver_string)
 
     if f.lbuser[6] != 0 or (f.lbuser[3] / 1000) != 0 or (f.lbuser[3] % 1000) != 0:
         attributes['STASH'] = f.stash

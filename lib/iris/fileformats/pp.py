@@ -341,6 +341,81 @@ class STASH(collections.namedtuple('STASH', 'model section item')):
         return not self.__eq__(other)
 
 
+class UMVERSION(object):
+    """A class representing a UM version."""
+
+    def __init__(self, major, minor, unknown=False):
+        """
+        Create a UMVERSION object.
+
+        Args:
+        * major, minor (integer):
+            Major and minor version codes: major>0, 0<=minor<=99.
+
+        Kwargs:
+        * unknown (bool):
+            If True, the UM version is unknown (also major=minor=0).
+        * lbsrce (int):
+            Original lbsrce value, if known.
+
+        """
+        for val in (major, minor):
+            val = float(val)
+            if abs(val - np.round(val)) > 1e-5:
+                raise ValueError('UMVERSION components must both be integers')
+            if val < 0:
+                raise ValueError('UMVERSION components must both be positive')
+        if minor > 99:
+            raise ValueError('minor UMVERSION component must be <= 99')
+
+        self.unknown = unknown
+        if unknown:
+            major, minor = (0, 0)
+
+        self.major = int(np.round(major))
+        # Major version component, 0 for unrecognised LBSRCE value.
+
+        self.minor = int(np.round(minor))
+        # Minor version component.
+
+    @classmethod
+    def from_lbsrce(cls, lbsrce):
+        """
+        Create UM version from an LBSRCE value.
+
+        """
+        if lbsrce % 10000 == 1111:
+            lbsrce /= 10000
+            major, minor, invalid = lbsrce / 100, lbsrce % 100, False
+        else:
+            major, minor, invalid = 0, 0, True
+
+        return cls(major, minor, unknown=invalid)
+
+    def lbsrce(self):
+        """
+        Calculate an LBSRCE value.
+
+        The original value if generated with :meth:`from_lbsrce`.
+        Zero if 'unknown'.
+
+        """
+        if self.unknown:
+            result = 0
+        else:
+            code = self.major * 100 + self.minor
+            result = code * 10000 + 1111
+        return result
+
+    def __str__(self):
+        """Return string representation of a UMVERSION, or '' if unknown."""
+        if self.unknown:
+            result = ''
+        else:
+            result = "{:d}.{:d}".format(self.major, self.minor)
+        return result
+
+
 class SplittableInt(object):
     """
     A class to hold integers which can easily get each decimal digit individually.
