@@ -45,7 +45,8 @@ iris.proxy.apply_proxy('iris.fileformats.pp_packing', globals())
 
 __all__ = ['load', 'save', 'load_cubes', 'PPField',
            'add_load_rules', 'reset_load_rules',
-           'add_save_rules', 'reset_save_rules', 'STASH', 'EARTH_RADIUS']
+           'add_save_rules', 'reset_save_rules', 'STASH', 'UMVERSION',
+           'EARTH_RADIUS']
 
 
 EARTH_RADIUS = 6371229.0
@@ -341,22 +342,34 @@ class STASH(collections.namedtuple('STASH', 'model section item')):
         return not self.__eq__(other)
 
 
-class UMVERSION(object):
-    """A class representing a UM version."""
+class UMVERSION(collections.namedtuple('UMVERSION',
+                                       ('major', 'minor', 'unknown'))):
+    """
+    A class representing a UM version.
 
-    def __init__(self, major, minor, unknown=False):
+    UMVERSION objects:
+
+    * are immutable.
+    * provide __eq__ and __ne__.
+    * provide a __str__ yielding  '<major>.<minor>', or '' if unknown.
+
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, major, minor, unknown=False):
         """
         Create a UMVERSION object.
 
         Args:
+
         * major, minor (integer):
-            Major and minor version codes: major>0, 0<=minor<=99.
+            Major and minor version codes: major>=0, 0<=minor<=99.
 
         Kwargs:
+
         * unknown (bool):
-            If True, the UM version is unknown (also major=minor=0).
-        * lbsrce (int):
-            Original lbsrce value, if known.
+            If True, the UM version is unknown (also forces major=minor=0).
 
         """
         for val in (major, minor):
@@ -364,19 +377,17 @@ class UMVERSION(object):
             if abs(val - np.round(val)) > 1e-5:
                 raise ValueError('UMVERSION components must both be integers')
             if val < 0:
-                raise ValueError('UMVERSION components must both be positive')
+                raise ValueError('UMVERSION components must both be >= 0')
+
         if minor > 99:
             raise ValueError('minor UMVERSION component must be <= 99')
 
-        self.unknown = unknown
+        major = int(np.round(major))
+        minor = int(np.round(minor))
+        unknown = bool(unknown)
         if unknown:
             major, minor = (0, 0)
-
-        self.major = int(np.round(major))
-        # Major version component, 0 for unrecognised LBSRCE value.
-
-        self.minor = int(np.round(minor))
-        # Minor version component.
+        return super(UMVERSION, cls).__new__(cls, major, minor, unknown)
 
     @classmethod
     def from_lbsrce(cls, lbsrce):
@@ -396,8 +407,7 @@ class UMVERSION(object):
         """
         Calculate an LBSRCE value.
 
-        The original value if generated with :meth:`from_lbsrce`.
-        Zero if 'unknown'.
+        Result is 0 for unknown version.
 
         """
         if self.unknown:
@@ -408,7 +418,12 @@ class UMVERSION(object):
         return result
 
     def __str__(self):
-        """Return string representation of a UMVERSION, or '' if unknown."""
+        """
+        Return string representation of a UMVERSION.
+
+        Result is '' for unknown version.
+
+        """
         if self.unknown:
             result = ''
         else:
