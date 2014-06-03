@@ -14,13 +14,13 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
-"""Unit tests for :class:`iris.fileformats.pp.UMVERSION`."""
+"""Unit tests for :class:`iris.fileformats.pp.UmVersion`."""
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-from iris.fileformats.pp import UMVERSION
+from iris.fileformats.pp import UmVersion
 
 
 class Test___init__(tests.IrisTest):
@@ -31,38 +31,50 @@ class Test___init__(tests.IrisTest):
         self.assertEqual(umver.unknown, unknown)
 
     def test_simple(self):
-        umver = UMVERSION(2, 5)
+        umver = UmVersion(2, 5)
         self._check_init(umver, 2, 5, False)
 
     def test_unknown(self):
-        umver = UMVERSION(2, 5, unknown=True)
-        self._check_init(umver, 0, 0, True)
+        umver = UmVersion(None, None)
+        self._check_init(umver, None, None, True)
+
+    def test_unknown__noargs(self):
+        umver = UmVersion()
+        self._check_init(umver, None, None, True)
+
+    def test_unknown__nomajor(self):
+        umver = UmVersion(1)
+        self._check_init(umver, None, None, True)
+
+    def test_unknown__nominor(self):
+        umver = UmVersion(None, 1)
+        self._check_init(umver, None, None, True)
 
     def test_float(self):
-        umver = UMVERSION(2.0000001, 4.9999999)
+        umver = UmVersion(2.0000001, 4.9999999)
         self._check_init(umver, 2, 5, False)
 
     def test_zeros(self):
-        umver = UMVERSION(0, 0)
+        umver = UmVersion(0, 0)
         self._check_init(umver, 0, 0, False)
 
     def test_fail_float(self):
         with self.assertRaises(ValueError) as err_context:
-            umver = UMVERSION(2.3, 4)
+            umver = UmVersion(2.3, 4)
         msg = err_context.exception.message
         self.assertIn('both', msg)
         self.assertIn('integers', msg)
 
     def test_fail_negative(self):
         with self.assertRaises(ValueError) as err_context:
-            umver = UMVERSION(2, -4)
+            umver = UmVersion(2, -4)
         msg = err_context.exception.message
         self.assertIn('both', msg)
         self.assertIn('>= 0', msg)
 
     def test_fail_minor_range(self):
         with self.assertRaises(ValueError) as err_context:
-            umver = UMVERSION(2, 105)
+            umver = UmVersion(2, 105)
         msg = err_context.exception.message
         self.assertIn('minor', msg)
         self.assertIn('99', msg)
@@ -71,7 +83,7 @@ class Test___init__(tests.IrisTest):
 class Test___slots__(tests.IrisTest):
     def check_fails_attr_write(self, attr_name):
         with self.assertRaises(AttributeError) as err_context:
-            umver = UMVERSION(1, 1)
+            umver = UmVersion(1, 1)
             attr_value = getattr(umver, attr_name)
             setattr(umver, attr_name, attr_value)
         msg = err_context.exception.message
@@ -89,24 +101,24 @@ class Test___slots__(tests.IrisTest):
 
 class Test___str__(tests.IrisTest):
     def test_simple(self):
-        self.assertEqual(str(UMVERSION(2, 5)), '2.5')
+        self.assertEqual(str(UmVersion(2, 5)), '2.5')
 
     def test_zeros(self):
-        self.assertEqual(str(UMVERSION(0, 0)), '0.0')
+        self.assertEqual(str(UmVersion(0, 0)), '0.0')
 
     def test_unknown(self):
-        self.assertEqual(str(UMVERSION(2, 5, unknown=True)), '')
+        self.assertEqual(str(UmVersion()), '')
 
 
 class Test_lbsrce(tests.IrisTest):
     def test_simple(self):
-        self.assertEqual(UMVERSION(2, 5).lbsrce(), 2051111)
+        self.assertEqual(UmVersion(2, 5).lbsrce(), 2051111)
 
     def test_zeros(self):
-        self.assertEqual(UMVERSION(0, 0).lbsrce(), 1111)
+        self.assertEqual(UmVersion(0, 0).lbsrce(), 1111)
 
     def test_unknown(self):
-        self.assertEqual(UMVERSION(2, 5, unknown=True).lbsrce(), 0)
+        self.assertEqual(UmVersion().lbsrce(), 0)
 
 
 class Test_from_lbsrce(tests.IrisTest):
@@ -119,47 +131,45 @@ class Test_from_lbsrce(tests.IrisTest):
         self.assertEqual(umver.lbsrce(), lbsrce)
 
     def test_simple(self):
-        umver = UMVERSION.from_lbsrce(2051111)
+        umver = UmVersion.from_lbsrce(2051111)
         self._check_lbsrce(umver,
                            (2, 5, False),
                            '2.5',
                            2051111)
 
     def test_no_version(self):
-        umver = UMVERSION.from_lbsrce(1111)
+        umver = UmVersion.from_lbsrce(1111)
         self._check_lbsrce(umver,
                            (0, 0, False),
                            '0.0',
                            1111)
 
     def test_unknown(self):
-        umver = UMVERSION.from_lbsrce(123)
+        umver = UmVersion.from_lbsrce(123)
         self._check_lbsrce(umver,
-                           (0, 0, True),
+                           (None, None, True),
                            '',
                            0)
 
 
 class Test__comparisons(tests.IrisTest):
     def test_eq(self):
-        self.assertEqual(UMVERSION(2, 5), UMVERSION(2, 5))
+        self.assertEqual(UmVersion(2, 5), UmVersion(2, 5))
 
     def test_eq__unknown(self):
-        self.assertEqual(UMVERSION(2, 5, unknown=True),
-                         UMVERSION(1, 7, unknown=True))
+        self.assertEqual(UmVersion(), UmVersion())
 
     def test_ne__minor(self):
-        self.assertNotEqual(UMVERSION(2, 5), UMVERSION(2, 6))
+        self.assertNotEqual(UmVersion(2, 5), UmVersion(2, 6))
 
     def test_ne__major(self):
-        self.assertNotEqual(UMVERSION(1, 5), UMVERSION(2, 5))
+        self.assertNotEqual(UmVersion(1, 5), UmVersion(2, 5))
 
     def test_ne__both(self):
-        self.assertNotEqual(UMVERSION(1, 5), UMVERSION(2, 5))
+        self.assertNotEqual(UmVersion(1, 5), UmVersion(2, 5))
 
     def test_ne__unknown(self):
-        self.assertNotEqual(UMVERSION(1, 5),
-                            UMVERSION(1, 5, unknown=True))
+        self.assertNotEqual(UmVersion(1, 5), UmVersion(None, None))
 
 
 if __name__ == "__main__":

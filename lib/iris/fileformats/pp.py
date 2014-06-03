@@ -45,7 +45,7 @@ iris.proxy.apply_proxy('iris.fileformats.pp_packing', globals())
 
 __all__ = ['load', 'save', 'load_cubes', 'PPField',
            'add_load_rules', 'reset_load_rules',
-           'add_save_rules', 'reset_save_rules', 'STASH', 'UMVERSION',
+           'add_save_rules', 'reset_save_rules', 'STASH', 'UmVersion',
            'EARTH_RADIUS']
 
 
@@ -342,12 +342,12 @@ class STASH(collections.namedtuple('STASH', 'model section item')):
         return not self.__eq__(other)
 
 
-class UMVERSION(collections.namedtuple('UMVERSION',
+class UmVersion(collections.namedtuple('UmVersion',
                                        ('major', 'minor', 'unknown'))):
     """
     A class representing a UM version.
 
-    UMVERSION objects:
+    UmVersion objects:
 
     * are immutable.
     * provide __eq__ and __ne__.
@@ -357,51 +357,52 @@ class UMVERSION(collections.namedtuple('UMVERSION',
 
     __slots__ = ()
 
-    def __new__(cls, major, minor, unknown=False):
+    def __new__(cls, major=None, minor=None):
         """
-        Create a UMVERSION object.
+        Create a UmVersion object.
 
         Args:
 
         * major, minor (integer):
             Major and minor version codes: major>=0, 0<=minor<=99.
-
-        Kwargs:
-
-        * unknown (bool):
-            If True, the UM version is unknown (also forces major=minor=0).
+            If either is None, the code represents "unknown", which has
+            different behaviour (q.v.).
 
         """
-        for val in (major, minor):
-            val = float(val)
-            if abs(val - np.round(val)) > 1e-5:
-                raise ValueError('UMVERSION components must both be integers')
-            if val < 0:
-                raise ValueError('UMVERSION components must both be >= 0')
-
-        if minor > 99:
-            raise ValueError('minor UMVERSION component must be <= 99')
-
-        major = int(np.round(major))
-        minor = int(np.round(minor))
-        unknown = bool(unknown)
+        unknown = (major is None) or (minor is None)
         if unknown:
-            major, minor = (0, 0)
-        return super(UMVERSION, cls).__new__(cls, major, minor, unknown)
+            major, minor = None, None
+        else:
+            for val in (major, minor):
+                val = float(val)
+                if abs(val - np.round(val)) > 1e-5:
+                    raise ValueError('UmVersion components must both be '
+                                     'integers')
+                if val < 0:
+                    raise ValueError('UmVersion components must both be >= 0')
+
+            if minor > 99:
+                raise ValueError('minor UmVersion component must be <= 99')
+
+            major = int(np.round(major))
+            minor = int(np.round(minor))
+
+        return super(UmVersion, cls).__new__(cls, major, minor, unknown)
 
     @classmethod
     def from_lbsrce(cls, lbsrce):
         """
         Create UM version from an LBSRCE value.
 
-        """
-        if lbsrce % 10000 == 1111:
-            lbsrce /= 10000
-            major, minor, invalid = lbsrce / 100, lbsrce % 100, False
-        else:
-            major, minor, invalid = 0, 0, True
+        Returns an "unknown" version if the lower four digits are not '1111'.
 
-        return cls(major, minor, unknown=invalid)
+        """
+        if lbsrce % 10000 != 1111:
+            major, minor = None, None
+        else:
+            lbsrce /= 10000
+            major, minor = lbsrce / 100, lbsrce % 100
+        return cls(major, minor)
 
     def lbsrce(self):
         """
@@ -419,7 +420,7 @@ class UMVERSION(collections.namedtuple('UMVERSION',
 
     def __str__(self):
         """
-        Return string representation of a UMVERSION.
+        Return string representation of a UmVersion.
 
         Result is '' for unknown version.
 
