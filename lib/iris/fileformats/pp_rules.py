@@ -410,7 +410,7 @@ def convert(f):
         standard_name = "sea_water_potential_temperature"
         units = "Celsius"
 
-    um_ver = iris.fileformats.pp.UMVERSION.from_lbsrce(f.lbsrce)
+    um_ver = iris.fileformats.pp.UMVersion.from_lbsrce(f.lbsrce)
     if not um_ver.unknown:
         if um_ver.major == 0:
             ver_string = ''
