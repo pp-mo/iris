@@ -242,9 +242,9 @@ class SphAcwConvexPolygon(object):
         # adjacent duplicated points.
         edges = self.edge_gcs()
         points = self.points
-        return all([all([edge.has_point_on_left_side(point) >= 0.0
-                         for point in points])
-                    for edge in edges])
+        points = points[2:] + points[:2]
+        return all(edge.has_point_on_left_side(point) >= 0.0
+                   for edge, point in zip(edges, points))
 
     def _make_anticlockwise_convex(self):
         # Reorder points as required, or raise an error if not possible.
