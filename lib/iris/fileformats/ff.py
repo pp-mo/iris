@@ -602,7 +602,14 @@ class FF2PP(object):
         for i_model_level in range(levels_count):
             # Make subsequent fields alike, but distinct.
             if i_model_level > 0:
-                field = field.copy()
+                new_field = type(field)()
+                for attr in field.__slots__:
+                    try:
+                        value = getattr(field, attr)
+                    except AttributeError:
+                        pass
+                    else:
+                        setattr(new_field, attr, value)
             # Provide the correct "model level" value.
             field.lblev = i_model_level
             # TODO: as LBC lookup headers cover multiple layers, they
