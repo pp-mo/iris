@@ -28,7 +28,8 @@ import tempfile
 import numpy as np
 
 # Borrow some definitions...
-from iris.fileformats.ff import _FF_HEADER_POINTERS, FF_HEADER as _FF_HEADER
+from iris.fileformats._old_ff import (
+    _FF_HEADER_POINTERS, FF_HEADER as _FF_HEADER)
 from iris.fileformats.pp import _header_defn
 
 

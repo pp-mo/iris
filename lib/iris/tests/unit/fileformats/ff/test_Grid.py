@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -24,7 +24,7 @@ import iris.tests as tests
 
 import mock
 
-from iris.fileformats.ff import Grid
+from iris.fileformats._old_ff import Grid
 
 
 class Test___init__(tests.IrisTest):

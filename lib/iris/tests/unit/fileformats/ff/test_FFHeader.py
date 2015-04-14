@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -26,7 +26,7 @@ import collections
 import numpy as np
 import mock
 
-from iris.fileformats.ff import FFHeader
+from iris.fileformats._old_ff import FFHeader
 
 
 MyGrid = collections.namedtuple('MyGrid', 'column row real horiz_grid_type')
@@ -63,7 +63,7 @@ class Test_grid(tests.IrisTest):
 
     def test_unknown(self):
         header = self._header(0)
-        with mock.patch('iris.fileformats.ff.NewDynamics',
+        with mock.patch('iris.fileformats._old_ff.NewDynamics',
                         mock.Mock(return_value=mock.sentinel.grid)):
             with mock.patch('warnings.warn') as warn:
                 grid = header.grid()

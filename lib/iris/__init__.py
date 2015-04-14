@@ -132,7 +132,7 @@ class Future(threading.local):
     """Run-time configuration controller."""
 
     def __init__(self, cell_datetime_objects=False, netcdf_promote=False,
-                 strict_grib_load=False):
+                 strict_grib_load=False, ff_load_um=False):
         """
         A container for run-time options controls.
 
@@ -170,16 +170,27 @@ class Future(threading.local):
         encounters a GRIB message which uses a template not supported
         by the conversion.
 
+        The option 'ff_load_um' controls whether UM FieldsFiles are loaded via
+        the :mod:`iris.experimental.um` module, rather than the existing
+        standard :mod:`iris.fileformats.ff` support.
+
+        .. note::
+
+            This is currently just a proof-of-concept, not ready for release.
+
         """
         self.__dict__['cell_datetime_objects'] = cell_datetime_objects
         self.__dict__['netcdf_promote'] = netcdf_promote
         self.__dict__['strict_grib_load'] = strict_grib_load
+        self.__dict__['ff_load_um'] = ff_load_um
 
     def __repr__(self):
         return ('Future(cell_datetime_objects={}, netcdf_promote={}, '
-                'strict_grib_load={})'.format(self.cell_datetime_objects,
-                                              self.netcdf_promote,
-                                              self.strict_grib_load))
+                'strict_grib_load={}, ff_load_um={})'.format(
+                    self.cell_datetime_objects,
+                    self.netcdf_promote,
+                    self.strict_grib_load,
+                    self.ff_load_um))
 
     def __setattr__(self, name, value):
         if name not in self.__dict__:

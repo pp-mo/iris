@@ -31,7 +31,7 @@ import mock
 import numpy as np
 
 import iris
-import iris.fileformats.ff as ff
+import iris.fileformats._old_ff as ff
 import iris.fileformats.pp as pp
 
 
@@ -228,7 +228,7 @@ class TestFFVariableResolutionGrid(tests.IrisTest):
 
 class TestFFPayload(tests.IrisTest):
     def _test_payload(self, mock_field, expected_depth, expected_type):
-        with mock.patch('iris.fileformats.ff.FFHeader') as mock_header:
+        with mock.patch('iris.fileformats._old_ff.FFHeader') as mock_header:
             mock_header.return_value = None
             ff2pp = ff.FF2PP('Not real')
             data_depth, data_type = ff2pp._payload(mock_field)

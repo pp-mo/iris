@@ -15,7 +15,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 """
-Provides UK Met Office Fields File (FF) format specific capabilities.
+Legacy UK Met Office Fields File (FF) format specific capabilities.
+
+This will eventually be replaced by :mod:`iris.fileformants.um_ff`, based on
+(what is now) :mod:`iris.experimental.um'.
 
 """
 
