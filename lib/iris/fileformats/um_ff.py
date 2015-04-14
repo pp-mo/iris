@@ -23,7 +23,7 @@ At present, iris.load usage is switchable by :data:`iris.FUTURE.ff_load_um`.
     * When 'off', it uses :mod:`iris.fileformats._old_ff`, as previously.
     * When 'on' it uses this interface instead.
 
-In future (if accepted), we could remove _old_ff, and the switch, but that is a
+In future (if accepted), we can remove _old_ff, and the switch, but that is a
 long way off.
 
 """
