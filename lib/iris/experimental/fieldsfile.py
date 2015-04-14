@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -24,7 +24,7 @@ from __future__ import (absolute_import, division, print_function)
 from iris.coords import DimCoord
 from iris.cube import CubeList
 from iris.exceptions import TranslationError
-from iris.fileformats.ff import FF2PP
+from iris.fileformats._old_ff import FF2PP
 from iris.fileformats.pp_rules import (_convert_time_coords,
                                        _convert_vertical_coords,
                                        _convert_scalar_realization_coords,
