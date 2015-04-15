@@ -334,41 +334,49 @@ class _NormalDataProvider(object):
     to the data payload for a standard FieldsFile LOOKUP entry.
 
     """
-    def __init__(self, source, offset, word_size):
+    def __init__(self, source, offset, word_size, filepath):
         self.source = source
         self.offset = offset
         self.word_size = word_size
+        self.reopen_path = filepath
 
     def read_data(self, field):
-        self.source.seek(self.offset)
-        lbpack = field.lbpack
-        # Ensure lbpack.n4 (number format) is: native, CRAY, or IEEE.
-        format = (lbpack // 1000) % 10
-        if format not in (0, 2, 3):
-            raise ValueError('Unsupported number format: {}'.format(format))
-        lbpack = lbpack % 1000
-        # NB. This comparison includes checking for the absence of any
-        # compression.
-        if lbpack == 0 or lbpack == 2:
-            if lbpack == 0:
-                word_size = self.word_size
+        reopen_required = self.source.closed
+        if reopen_required:
+            self.source = open(self.reopen_path)
+        try:
+            self.source.seek(self.offset)
+            lbpack = field.lbpack
+            # Ensure lbpack.n4 (number format) is: native, CRAY, or IEEE.
+            format = (lbpack // 1000) % 10
+            if format not in (0, 2, 3):
+                raise ValueError('Unsupported number format: {}'.format(format))
+            lbpack = lbpack % 1000
+            # NB. This comparison includes checking for the absence of any
+            # compression.
+            if lbpack == 0 or lbpack == 2:
+                if lbpack == 0:
+                    word_size = self.word_size
+                else:
+                    word_size = _CRAY32_SIZE
+                dtype = _DATA_DTYPES[word_size][field.lbuser1]
+                rows = field.lbrow
+                cols = field.lbnpt
+                # The data is stored in rows, so with the shape (rows, cols)
+                # we don't need to invoke Fortran order.
+                data = np.fromfile(self.source, dtype, count=rows * cols)
+                data = data.reshape(rows, cols)
+            elif lbpack == 1:
+                from iris.fileformats.pp_packing import wgdos_unpack
+                data_size = ((field.lbnrec * 2) - 1) * _WGDOS_SIZE
+                data_bytes = self.source.read(data_size)
+                data = wgdos_unpack(data_bytes, field.lbrow, field.lbnpt,
+                                    field.bmdi)
             else:
-                word_size = _CRAY32_SIZE
-            dtype = _DATA_DTYPES[word_size][field.lbuser1]
-            rows = field.lbrow
-            cols = field.lbnpt
-            # The data is stored in rows, so with the shape (rows, cols)
-            # we don't need to invoke Fortran order.
-            data = np.fromfile(self.source, dtype, count=rows * cols)
-            data = data.reshape(rows, cols)
-        elif lbpack == 1:
-            from iris.fileformats.pp_packing import wgdos_unpack
-            data_size = ((field.lbnrec * 2) - 1) * _WGDOS_SIZE
-            data_bytes = self.source.read(data_size)
-            data = wgdos_unpack(data_bytes, field.lbrow, field.lbnpt,
-                                field.bmdi)
-        else:
-            raise ValueError('Unsupported lbpack: {}'.format(field.lbpack))
+                raise ValueError('Unsupported lbpack: {}'.format(field.lbpack))
+        finally:
+            if reopen_required:
+                self.source.close()
         return data
 
 
@@ -382,30 +390,39 @@ class _BoundaryDataProvider(object):
     "unrolled" version of all the boundary points.
 
     """
-    def __init__(self, source, offset, word_size):
+    def __init__(self, source, offset, word_size, filepath):
         self.source = source
         self.offset = offset
         self.word_size = word_size
+        self.field_index = field_index
+        self.reopen_path = filepath
 
     def read_data(self, field):
-        self.source.seek(self.offset)
-        lbpack = field.lbpack
-        # Ensure lbpack.n4 (number format) is: native, CRAY, or IEEE.
-        format = (lbpack // 1000) % 10
-        if format not in (0, 2, 3):
-            raise ValueError('Unsupported number format: {}'.format(format))
-        lbpack = lbpack % 1000
-        if lbpack == 0 or lbpack == 2:
-            if lbpack == 0:
-                word_size = self.word_size
+        reopen_required = self.source.closed
+        if reopen_required:
+            self.source = open(self.reopen_path)
+        try:
+            self.source.seek(self.offset)
+            lbpack = field.lbpack
+            # Ensure lbpack.n4 (number format) is: native, CRAY, or IEEE.
+            format = (lbpack // 1000) % 10
+            if format not in (0, 2, 3):
+                raise ValueError('Unsupported number format: {}'.format(format))
+            lbpack = lbpack % 1000
+            if lbpack == 0 or lbpack == 2:
+                if lbpack == 0:
+                    word_size = self.word_size
+                else:
+                    word_size = _CRAY32_SIZE
+                dtype = _DATA_DTYPES[word_size][field.lbuser1]
+                data = np.fromfile(self.source, dtype, count=field.lblrec)
+                data = data.reshape(field.lbhem - 100, -1)
             else:
-                word_size = _CRAY32_SIZE
-            dtype = _DATA_DTYPES[word_size][field.lbuser1]
-            data = np.fromfile(self.source, dtype, count=field.lblrec)
-            data = data.reshape(field.lbhem - 100, -1)
-        else:
-            msg = 'Unsupported lbpack for LBC: {}'.format(field.lbpack)
-            raise ValueError(msg)
+                msg = 'Unsupported lbpack for LBC: {}'.format(field.lbpack)
+                raise ValueError(msg)
+        finally:
+            if reopen_required:
+                self.source.close()
         return data
 
 
@@ -520,7 +537,8 @@ class FieldsFileVariant(object):
                         data_provider = None
                     else:
                         offset = running_offset
-                        data_provider = data_class(source, offset, word_size)
+                        data_provider = data_class(source, offset, word_size,
+                                                   self._filename)
                     klass = _FIELD_CLASSES.get(raw_headers[Field.LBREL_OFFSET],
                                                Field)
                     ints = raw_headers[:_NUM_FIELD_INTS]
@@ -534,7 +552,8 @@ class FieldsFileVariant(object):
                         data_provider = None
                     else:
                         offset = raw_headers[Field.LBEGIN_OFFSET] * word_size
-                        data_provider = data_class(source, offset, word_size)
+                        data_provider = data_class(source, offset, word_size,
+                                                   self._filename)
                     klass = _FIELD_CLASSES.get(raw_headers[Field.LBREL_OFFSET],
                                                Field)
                     ints = raw_headers[:_NUM_FIELD_INTS]

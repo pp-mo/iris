@@ -1737,7 +1737,9 @@ def _create_field_data(field, data_shape, land_mask):
      * converting LoadedArrayBytes into an actual numpy array.
 
     """
-    if isinstance(field._data, LoadedArrayBytes):
+    if isinstance(field._data, biggus.Array):
+        pass
+    elif isinstance(field._data, LoadedArrayBytes):
         loaded_bytes = field._data
         field._data = _data_bytes_to_shaped_array(loaded_bytes.bytes,
                                                   field.lbpack,

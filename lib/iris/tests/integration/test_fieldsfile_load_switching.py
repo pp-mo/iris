@@ -28,25 +28,36 @@ import iris
 class TestSwitching(tests.IrisTest):
     def _check_load(self):
         filepath = tests.get_data_path(('FF', 'structured', 'small'))
-        result = iris.load(filepath)
+        result = iris.load_cube(filepath)
         return result
 
     def test_switch_default(self):
         result = self._check_load()
-        self.assertEqual(len(result), 1)
-        self.assertIsInstance(result[0], iris.cube.Cube)
+        self.assertIsInstance(result, iris.cube.Cube)
 
     def test_switch_old(self):
         with iris.FUTURE.context(ff_load_um=False):
             result = self._check_load()
-        self.assertEqual(len(result), 1)
-        self.assertIsInstance(result[0], iris.cube.Cube)
+        self.assertIsInstance(result, iris.cube.Cube)
 
     def test_switch_new(self):
         with iris.FUTURE.context(ff_load_um=True):
-            msg = 'loading via experimental.um not provided'
-            with self.assertRaisesRegexp(ValueError, msg):
-                result = self._check_load()
+            result = self._check_load()
+        self.assertIsInstance(result, iris.cube.Cube)
+
+
+class TestEquivalence(tests.IrisTest):
+    def _check_load(self):
+        filepath = tests.get_data_path(('FF', 'structured', 'small'))
+        result = iris.load_cube(filepath)
+        return result
+
+    def test(self):
+        with iris.FUTURE.context(ff_load_um=False):
+            result_old = self._check_load()
+        with iris.FUTURE.context(ff_load_um=True):
+            result_new = self._check_load()
+        self.assertEqual(result_old, result_new)
 
 
 if __name__ == "__main__":
