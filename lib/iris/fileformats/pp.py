@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -1008,7 +1008,170 @@ def _pp_attribute_names(header_defn):
     return normal_headers + special_headers + extra_data + special_attributes
 
 
-class PPField(object):
+class PPFieldExtraPropertiesMixin(object):
+    """
+    A collection of computed properties and convenience functions used in
+    interpreting PPFields.
+
+    """
+    @property
+    def stash(self):
+        """A stash property giving access to the associated STASH object, now supporting __eq__"""
+        if (not hasattr(self, '_stash') or
+                self.lbuser[6] != self._stash.lbuser6() or
+                self.lbuser[3] != self._stash.lbuser3()):
+            self._stash = STASH(self.lbuser[6], self.lbuser[3] // 1000, self.lbuser[3] % 1000)
+        return self._stash
+
+    @stash.setter
+    def stash(self, stash):
+        if isinstance(stash, basestring):
+            self._stash = STASH.from_msi(stash)
+        elif isinstance(stash, STASH):
+            self._stash = stash
+        else:
+            raise ValueError('Cannot set stash to {!r}'.format(stash))
+
+        # Keep the lbuser up to date.
+        self.lbuser = list(self.lbuser)
+        self.lbuser[6] = self._stash.lbuser6()
+        self.lbuser[3] = self._stash.lbuser3()
+
+    @property
+    def lbtim(self):
+        return self._lbtim
+
+    @lbtim.setter
+    def lbtim(self, value):
+        value = int(value)
+        self.raw_lbtim = value
+        self._lbtim = SplittableInt(value, {'ia': slice(2, None), 'ib': 1,
+                                            'ic': 0})
+
+    # lbcode
+    def _lbcode_setter(self, new_value):
+        if not isinstance(new_value, SplittableInt):
+            # add the ix/iy values for lbcode
+            new_value = SplittableInt(new_value, {'iy':slice(0, 2), 'ix':slice(2, 4)})
+        self._lbcode = new_value
+
+    lbcode = property(lambda self: self._lbcode, _lbcode_setter)
+
+    # lbpack
+    def _lbpack_setter(self, new_value):
+        if not isinstance(new_value, SplittableInt):
+            self.raw_lbpack = new_value
+            # add the n1/n2/n3/n4/n5 values for lbpack
+            name_mapping = dict(n5=slice(4, None), n4=3, n3=2, n2=1, n1=0)
+            new_value = SplittableInt(new_value, name_mapping)
+        else:
+            self.raw_lbpack = new_value._value
+        self._lbpack = new_value
+
+    lbpack = property(lambda self: self._lbpack, _lbpack_setter)
+
+    @property
+    def lbproc(self):
+        return self._lbproc
+
+    @lbproc.setter
+    def lbproc(self, value):
+        if not isinstance(value, _LBProc):
+            value = _LBProc(value)
+        self._lbproc = value
+
+    @property
+    def data(self):
+        """The :class:`numpy.ndarray` representing the multidimensional data of the pp file"""
+        # Cache the real data on first use
+        if isinstance(self._data, biggus.Array):
+            data = self._data.masked_array()
+            if ma.count_masked(data) == 0:
+                data = data.data
+            self._data = data
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+
+    @property
+    def calendar(self):
+        """Return the calendar of the field."""
+        # TODO #577 What calendar to return when ibtim.ic in [0, 3]
+        calendar = iris.unit.CALENDAR_GREGORIAN
+        if self.lbtim.ic == 2:
+            calendar = iris.unit.CALENDAR_360_DAY
+        elif self.lbtim.ic == 4:
+            calendar = iris.unit.CALENDAR_365_DAY
+        return calendar
+
+    @property
+    def x_bounds(self):
+        if hasattr(self, "x_lower_bound") and hasattr(self, "x_upper_bound"):
+            return np.column_stack((self.x_lower_bound, self.x_upper_bound))
+
+    @property
+    def y_bounds(self):
+        if hasattr(self, "y_lower_bound") and hasattr(self, "y_upper_bound"):
+            return np.column_stack((self.y_lower_bound, self.y_upper_bound))
+
+    ##############################################################
+    #
+    # From here on define helper methods for PP -> Cube conversion.
+    #
+
+    def time_unit(self, time_unit, epoch='epoch'):
+        return iris.unit.Unit('%s since %s' % (time_unit, epoch), calendar=self.calendar)
+
+    def coord_system(self):
+        """Return a CoordSystem for this PPField.
+
+        Returns:
+            Currently, a :class:`~iris.coord_systems.GeogCS` or
+            :class:`~iris.coord_systems.RotatedGeogCS`.
+
+        """
+        geog_cs = iris.coord_systems.GeogCS(EARTH_RADIUS)
+
+        def degrees_ne(angle, ref_angle):
+            """
+            Return whether an angle differs significantly from a set value.
+
+            The inputs are in degrees.
+            The difference is judged significant if more than 0.0001 degrees.
+
+            """
+            return abs(angle - ref_angle) > 0.0001
+
+        if (degrees_ne(self.bplat, 90.0) or (degrees_ne(self.bplon, 0.0) and
+                                             degrees_ne(self.bplon, 180.0))):
+            # NOTE: when bplat,bplon=90,0 this encodes an unrotated system.
+            # However, the rotated system which is *equivalent* to an unrotated
+            # one actually has blat,bplon=90,180, due to a quirk in the
+            # definition equations.
+            # So we accept BPLON of 0 *or* 180 to mean 'unrotated'.
+            geog_cs = iris.coord_systems.RotatedGeogCS(
+                self.bplat, self.bplon, ellipsoid=geog_cs)
+
+        return geog_cs
+
+    def _x_coord_name(self):
+        # TODO: Remove once we have the ability to derive this in the rules.
+        x_name = "longitude"
+        if isinstance(self.coord_system(), iris.coord_systems.RotatedGeogCS):
+            x_name = "grid_longitude"
+        return x_name
+
+    def _y_coord_name(self):
+        # TODO: Remove once we have the ability to derive this in the rules.
+        y_name = "latitude"
+        if isinstance(self.coord_system(), iris.coord_systems.RotatedGeogCS):
+            y_name = "grid_latitude"
+        return y_name
+
+
+class PPField(PPFieldExtraPropertiesMixin, object):
     """
     A generic class for PP fields - not specific to a particular header release number.
 
@@ -1093,13 +1256,13 @@ class PPField(object):
             setattr(self, key, value)
         return value
 
-    @abc.abstractproperty
-    def t1(self):
-        pass
-
-    @abc.abstractproperty
-    def t2(self):
-        pass
+#    @abc.abstractproperty
+#    def t1(self):
+#        pass
+#
+#    @abc.abstractproperty
+#    def t2(self):
+#        pass
 
     def __repr__(self):
         """Return a string representation of the PP field."""
@@ -1128,98 +1291,6 @@ class PPField(object):
         attributes = sorted(self_attrs, key=lambda pair: (attribute_priority_lookup.get(pair[0], 999), pair[0]) )
 
         return 'PP Field' + ''.join(['\n   %s: %s' % (k, v) for k, v in attributes]) + '\n'
-
-    @property
-    def stash(self):
-        """A stash property giving access to the associated STASH object, now supporting __eq__"""
-        if (not hasattr(self, '_stash') or
-                self.lbuser[6] != self._stash.lbuser6() or
-                self.lbuser[3] != self._stash.lbuser3()):
-            self._stash = STASH(self.lbuser[6], self.lbuser[3] // 1000, self.lbuser[3] % 1000)
-        return self._stash
-    
-    @stash.setter
-    def stash(self, stash):
-        if isinstance(stash, basestring):
-            self._stash = STASH.from_msi(stash)
-        elif isinstance(stash, STASH):
-            self._stash = stash
-        else:
-            raise ValueError('Cannot set stash to {!r}'.format(stash))
-        
-        # Keep the lbuser up to date.
-        self.lbuser = list(self.lbuser)
-        self.lbuser[6] = self._stash.lbuser6()
-        self.lbuser[3] = self._stash.lbuser3()
-
-    @property
-    def lbtim(self):
-        return self._lbtim
-
-    @lbtim.setter
-    def lbtim(self, value):
-        value = int(value)
-        self.raw_lbtim = value
-        self._lbtim = SplittableInt(value, {'ia': slice(2, None), 'ib': 1,
-                                            'ic': 0})
-
-    # lbcode
-    def _lbcode_setter(self, new_value):
-        if not isinstance(new_value, SplittableInt):
-            # add the ix/iy values for lbcode
-            new_value = SplittableInt(new_value, {'iy':slice(0, 2), 'ix':slice(2, 4)})
-        self._lbcode = new_value
-
-    lbcode = property(lambda self: self._lbcode, _lbcode_setter)
-
-    # lbpack
-    def _lbpack_setter(self, new_value):
-        if not isinstance(new_value, SplittableInt):
-            self.raw_lbpack = new_value
-            # add the n1/n2/n3/n4/n5 values for lbpack
-            name_mapping = dict(n5=slice(4, None), n4=3, n3=2, n2=1, n1=0)
-            new_value = SplittableInt(new_value, name_mapping)
-        else:
-            self.raw_lbpack = new_value._value
-        self._lbpack = new_value
-
-    lbpack = property(lambda self: self._lbpack, _lbpack_setter)
-
-    @property
-    def lbproc(self):
-        return self._lbproc
-
-    @lbproc.setter
-    def lbproc(self, value):
-        if not isinstance(value, _LBProc):
-            value = _LBProc(value)
-        self._lbproc = value
-
-    @property
-    def data(self):
-        """The :class:`numpy.ndarray` representing the multidimensional data of the pp file"""
-        # Cache the real data on first use
-        if isinstance(self._data, biggus.Array):
-            data = self._data.masked_array()
-            if ma.count_masked(data) == 0:
-                data = data.data
-            self._data = data
-        return self._data
-
-    @data.setter
-    def data(self, value):
-        self._data = value
-
-    @property
-    def calendar(self):
-        """Return the calendar of the field."""
-        # TODO #577 What calendar to return when ibtim.ic in [0, 3]
-        calendar = iris.unit.CALENDAR_GREGORIAN
-        if self.lbtim.ic == 2:
-            calendar = iris.unit.CALENDAR_360_DAY
-        elif self.lbtim.ic == 4:
-            calendar = iris.unit.CALENDAR_365_DAY
-        return calendar
 
     def _read_extra_data(self, pp_file, file_reader, extra_len):
         """Read the extra data section and update the self appropriately."""
@@ -1250,16 +1321,6 @@ class PPField(object):
                 raise ValueError('Unknown IB value for extra data: %s' % ib)
 
             extra_len -= data_len
-
-    @property
-    def x_bounds(self):
-        if hasattr(self, "x_lower_bound") and hasattr(self, "x_upper_bound"):
-            return np.column_stack((self.x_lower_bound, self.x_upper_bound))
-
-    @property
-    def y_bounds(self):
-        if hasattr(self, "y_lower_bound") and hasattr(self, "y_upper_bound"):
-            return np.column_stack((self.y_lower_bound, self.y_upper_bound))
 
     def save(self, file_handle):
         """
@@ -1420,60 +1481,6 @@ class PPField(object):
         # Data length (again)
         pp_file.write(struct.pack(">L", int(len_of_data_payload)))
 
-    ##############################################################
-    #
-    # From here on define helper methods for PP -> Cube conversion.
-    #
-
-    def time_unit(self, time_unit, epoch='epoch'):
-        return iris.unit.Unit('%s since %s' % (time_unit, epoch), calendar=self.calendar)
-
-    def coord_system(self):
-        """Return a CoordSystem for this PPField.
-
-        Returns:
-            Currently, a :class:`~iris.coord_systems.GeogCS` or
-            :class:`~iris.coord_systems.RotatedGeogCS`.
-
-        """
-        geog_cs = iris.coord_systems.GeogCS(EARTH_RADIUS)
-
-        def degrees_ne(angle, ref_angle):
-            """
-            Return whether an angle differs significantly from a set value.
-
-            The inputs are in degrees.
-            The difference is judged significant if more than 0.0001 degrees.
-
-            """
-            return abs(angle - ref_angle) > 0.0001
-
-        if (degrees_ne(self.bplat, 90.0) or (degrees_ne(self.bplon, 0.0) and
-                                             degrees_ne(self.bplon, 180.0))):
-            # NOTE: when bplat,bplon=90,0 this encodes an unrotated system.
-            # However, the rotated system which is *equivalent* to an unrotated
-            # one actually has blat,bplon=90,180, due to a quirk in the
-            # definition equations.
-            # So we accept BPLON of 0 *or* 180 to mean 'unrotated'.
-            geog_cs = iris.coord_systems.RotatedGeogCS(
-                self.bplat, self.bplon, ellipsoid=geog_cs)
-
-        return geog_cs
-
-    def _x_coord_name(self):
-        # TODO: Remove once we have the ability to derive this in the rules.
-        x_name = "longitude"
-        if isinstance(self.coord_system(), iris.coord_systems.RotatedGeogCS):
-            x_name = "grid_longitude"
-        return x_name
-
-    def _y_coord_name(self):
-        # TODO: Remove once we have the ability to derive this in the rules.
-        y_name = "latitude"
-        if isinstance(self.coord_system(), iris.coord_systems.RotatedGeogCS):
-            y_name = "grid_latitude"
-        return y_name
-
     def copy(self):
         """
         Returns a deep copy of this PPField.
@@ -1527,16 +1534,12 @@ class PPField(object):
         return result
 
 
-class PPField2(PPField):
+class PPField2Mixin(object):
     """
-    A class to hold a single field from a PP file, with a header release number of 2.
+    A mixin containing computed properties unique to PPField2 objects,
+    i.e. PPFields with version-2 headers.
 
     """
-    HEADER_DEFN = _header_defn(2)
-    HEADER_DICT = dict(HEADER_DEFN)
-
-    __slots__ = _pp_attribute_names(HEADER_DEFN)
-
     def _get_t1(self):
         if not hasattr(self, '_t1'):
             self._t1 = netcdftime.datetime(self.lbyr, self.lbmon, self.lbdat, self.lbhr, self.lbmin)
@@ -1574,16 +1577,23 @@ class PPField2(PPField):
         "A netcdftime.datetime object consisting of the lbyrd, lbmond, lbdatd, lbhrd, and lbmind attributes.")
 
 
-class PPField3(PPField):
+class PPField2(PPField, PPField2Mixin):
     """
-    A class to hold a single field from a PP file, with a header release number of 3.
+    A class to hold a single field from a PP file, with a header release number of 2.
 
     """
-    HEADER_DEFN = _header_defn(3)
+    HEADER_DEFN = _header_defn(2)
     HEADER_DICT = dict(HEADER_DEFN)
 
     __slots__ = _pp_attribute_names(HEADER_DEFN)
 
+
+class PPField3Mixin(object):
+    """
+    A mixin containing computed properties unique to PPField3 objects,
+    i.e. PPFields with version-3 headers.
+
+    """
     def _get_t1(self):
         if not hasattr(self, '_t1'):
             self._t1 = netcdftime.datetime(self.lbyr, self.lbmon, self.lbdat, self.lbhr, self.lbmin, self.lbsec)
@@ -1619,6 +1629,17 @@ class PPField3(PPField):
 
     t2 = property(_get_t2, _set_t2, None,
         "A netcdftime.datetime object consisting of the lbyrd, lbmond, lbdatd, lbhrd, lbmind, and lbsecd attributes.")
+
+
+class PPField3(PPField, PPField3Mixin):
+    """
+    A class to hold a single field from a PP file, with a header release number of 3.
+
+    """
+    HEADER_DEFN = _header_defn(3)
+    HEADER_DICT = dict(HEADER_DEFN)
+
+    __slots__ = _pp_attribute_names(HEADER_DEFN)
 
 
 PP_CLASSES = {
