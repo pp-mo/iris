@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014 - 2015, Met Office
+# (C) British Crown Copyright 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -14,7 +14,11 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
-"""Integration tests for loading LBC fieldsfiles."""
+"""
+Integration tests for :func:`iris.load` fieldsfile support operating via
+:mod:`iris.experimental.um`.
+
+"""
 
 from __future__ import (absolute_import, division, print_function)
 

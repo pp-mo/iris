@@ -81,17 +81,14 @@ def load_cubes_32bit_ieee(filenames, callback, constraints=None):
     if not iris.FUTURE.ff_load_um:
         return oldff_load_cubes_32bit_ieee(filenames, callback, constraints)
     else:
-        msg = ('iris.load fieldsfile loading via experimental.um '
+        msg = ('iris.load of fieldsfiles via iris.experimental.um '
                'not provided for 32-bit files')
         raise ValueError(msg)
-#        return pp._load_cubes_variable_loader(filenames, callback, FF2PP,
-#                                              {'word_depth': 4},
-#                                              constraints=constraints)
 
 
 class DeferredArray(object):
     """
-    A wrapper for a deferred array object.
+    A wrapper for array data, with deferred access to the actual values.
 
     Shape + dtype are known, but fetch is only triggered by indexing.
     This is just enough to allow wrapping with a biggus.NumpyArrayAdapter.
@@ -123,10 +120,12 @@ def deferred_field_data(um_field):
 
     .. note::
 
-        Unfortunately, this approach is over-simplistic as we can't represent
-        landmask-compressed data like this, because that does not have a known
-        shape until it is linked to the landmask.
-        URRRGH.
+        This approach is known to be over-simplistic : We can't represent
+        landmask-compressed data like this, because its shape is not known
+        until we've found a corresponding landmask field.
+        If we need to support landmask-compressed data, we must *either* change
+        this approach, or resolve the shape of the data here+now by reference
+        to the landmask in the same file.
 
     """
     fld = um_field
@@ -135,11 +134,32 @@ def deferred_field_data(um_field):
         fld.lbuser1, pp.LBUSER_DTYPE_LOOKUP['default'])
     return biggus.NumpyArrayAdapter(
         DeferredArray(shape=shape, dtype=dtype,
-                      deferred_fetch_call=lambda : fld.get_data()))
+                      deferred_fetch_call=lambda: fld.get_data()))
 
 
-def fake_ppfield_bits(um_field):
-    fld = um_field
+# Find the header indices of those header elements which get obscured by
+# PPField property functions.
+# Pre-calculate these, as it involves scanning the whole header description.
+_SPLIT_INT_PROPERTY_NAMES = ('lbtim', 'lbcode', 'lbpack', 'lbproc')
+_HEADER_SPLIT_INTS_INDICES = {}
+for name, indices in pp.UM_HEADER_3:
+    if name in _SPLIT_INT_PROPERTY_NAMES:
+        # NOTE: none of these ones have multiple indices: just take the first.
+        # NOTE: values are fortran indices, so subtract one here.
+        _HEADER_SPLIT_INTS_INDICES[name] = indices[0] - 1
+
+
+def fakeup_ppfield_bits(fld):
+    """
+    Adjust the properties of a field wrapper so that it can emulate a
+    pp.PPField in pp_rules processing.
+
+    fld is a :class:`_PPFieldWrapper` subtype which inherits from a um.Field.
+    Most of the necessary header values to emulate a PPField are already
+    present from um.Field, but some need 'fixing up'.
+
+    """
+    # Make array-type versions of lbuser, brsvd and lbrsvd.
     fld.lbuser = [fld.lbuser1,
                   fld.lbuser2,
                   fld.lbuser3,
@@ -150,49 +170,72 @@ def fake_ppfield_bits(um_field):
                   ]
     fld.brsvd = [fld.brsvd1, fld.brsvd2, fld.brsvd3, fld.brsvd4]
     fld.lbrsvd = [fld.lbrsvd1, fld.lbrsvd2, fld.lbrsvd3, fld.lbrsvd4]
-    lbtim = fld.int_headers[12]
-    lbcode = fld.int_headers[15]
-    lbpack = fld.int_headers[20]
-    lbproc = fld.int_headers[24]
-    fld.lbtim = lbtim
-    fld.lbcode = lbcode
-    fld.lbpack = lbpack
-    fld.lbproc = lbproc
+
+    # Fix the PPField 'split integer' properties, which replace certain header
+    # words with computed objects.  These won't work otherwise, as they depend
+    # on the special __setattr__ implementation used in pp.PPField.
+    for name, index in _HEADER_SPLIT_INTS_INDICES.iteritems():
+        # Fetch the raw value - from the um header, as the um named property is
+        # hidden by the PPField property function.
+        raw_value = fld.int_headers[index]
+        # Call the PPField setter function to enable normal PPField usage.
+        # This replaces 'x' with a computed object (and stores a raw value
+        # somewhere else, but not in the same way for all of them).
+        setattr(fld, name, raw_value)
 
 
-class PPField2Wrapper(pp.PPFieldExtraPropertiesMixin, pp.PPField2Mixin,
-                      um.Field2):
+class _PPFieldWrapper(pp.PPFieldExtraPropertiesMixin):
     """
-    A thin wrapper providing a mashup of um.Field and a pp.PPField.
+    A thin wrapper providing a mashup of um.Field and the 'extra' properties
+    used by pp.PPField.
 
-    All 'special' methods of PPField2 are added by the multiple imports.
+    The 'special' properties of PPField are added by the multiple imports.
+    This class is effectively abstract, i.e. only used by inheriting it.
+
+    """
+    def __init__(self, um_field):
+        """Construct a um.Field version of the provided field."""
+        # Call the um constructor to add all the named access methods.
+        super(type(um_field), self).__init__(
+            int_headers=um_field.int_headers,
+            real_headers=um_field.real_headers,
+            data_provider=um_field._data_provider)
+        # Adjust our properties to emulate a PPField for rules processing.
+        fakeup_ppfield_bits(self)
+        # Add a deferred acccess wrapper for the data.
+        self._data = deferred_field_data(um_field)
+
+
+class PPField2Wrapper(_PPFieldWrapper, pp.PPField2Mixin, um.Field2):
+    """
+    A PPField wrapper for a version-2 header.
+
+    To the generic PPField 'extra' properties, this adds the PPField2-specific
+    ones, and also inherits from um.Field2.
 
     """
     pass
 
 
-class PPField3Wrapper(pp.PPFieldExtraPropertiesMixin, pp.PPField3Mixin,
-                      um.Field3):
+class PPField3Wrapper(_PPFieldWrapper, pp.PPField3Mixin, um.Field3):
     """
-    A thin wrapper providing a mashup of um.Field and a pp.PPField.
+    A PPField wrapper for a version-3 header.
 
-    All 'special' methods of PPField3 are added by the multiple imports.
+    To the generic PPField 'extra' properties, this adds the PPField3-specific
+    ones, and also inherits from um.Field3.
 
     """
-    def __init__(self, um_field):
-        """Construct a um.Field version of the provided field."""
-        super(um.Field3, self).__init__(
-            int_headers=um_field.int_headers,
-            real_headers=um_field.real_headers,
-            data_provider=um_field._data_provider)
-        self._data = deferred_field_data(um_field)
-        fake_ppfield_bits(self)
+    pass
 
 
 def wrap_field_as_pplike(um_field):
+    """Make a :class:`_PPFieldWrapper` wrapper from a :class:`um.Field`."""
     lbrel = um_field.lbrel
     if lbrel == 2:
-        result = PPField2Wrapper(um_field)
+        msg = ('iris.load of fieldsfiles via iris.experimental.um '
+               'does not support fields with LBREL=2')
+        raise(msg)
+#        result = PPField2Wrapper(um_field)
     elif lbrel == 3:
         result = PPField3Wrapper(um_field)
     else:
@@ -203,7 +246,7 @@ def wrap_field_as_pplike(um_field):
 
 class PPlikeUmFieldsSource(object):
     """
-    A convertor producing PPFields from a FieldsFile.
+    A convertor to extract the fields from a FieldsFile.
 
     Behaves as an iterator producing PPField-like objects.
     Uses :mod:`iris.experimental.um` for the FieldsFile access.
@@ -213,8 +256,8 @@ class PPlikeUmFieldsSource(object):
     def __init__(self, filename, read_data=False,
                  word_depth=DEFAULT_FF_WORD_DEPTH):
         """
-        Create a FieldsFile to Post Process instance that returns a generator
-        of PPFields contained within the FieldsFile.
+        An object that acts as a generator of fields contained within the
+        FieldsFile.
 
         Args:
 
@@ -230,19 +273,24 @@ class PPlikeUmFieldsSource(object):
         Returns:
             PPField generator.
 
-        For example::
-
-            >>> for field in ff.FF2PP(filename):
-            ...     print(field)
-
         """
         self._filename = filename
         self._word_depth = word_depth
-        self._read_data = read_data
+#        self._read_data = read_data
+        if read_data:
+            msg = ('iris.load of fieldsfiles via iris.experimental.um '
+                   'does not support read_data=True.')
+            raise(msg)
 
     def __iter__(self):
         # The key functionality : produce a stream of PPField-like results.
         return pp._interpret_fields(self._iter_fields())
+        # NOTE: the stated purpose of post-filtering with pp._interpret_fields
+        # is to "Turn the fields ... into useable fields".  It's needed because
+        # the content of some fields isn't known without reference to other
+        # fields -- the key instance being landmask-compressed data.
+        # For simplicity, we are currently not supporting that.
+        # See note above in 'deferred_field_data'.
 
     def _iter_fields(self):
         # Return a stream of fields, 'wrapped' as PPField-compatible objects.
@@ -262,4 +310,3 @@ class PPlikeUmFieldsSource(object):
 
         finally:
             open_file.close()
-

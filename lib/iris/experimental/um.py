@@ -350,7 +350,8 @@ class _NormalDataProvider(object):
             # Ensure lbpack.n4 (number format) is: native, CRAY, or IEEE.
             format = (lbpack // 1000) % 10
             if format not in (0, 2, 3):
-                raise ValueError('Unsupported number format: {}'.format(format))
+                msg = 'Unsupported number format: {}'
+                raise ValueError(msg.format(format))
             lbpack = lbpack % 1000
             # NB. This comparison includes checking for the absence of any
             # compression.
@@ -407,7 +408,8 @@ class _BoundaryDataProvider(object):
             # Ensure lbpack.n4 (number format) is: native, CRAY, or IEEE.
             format = (lbpack // 1000) % 10
             if format not in (0, 2, 3):
-                raise ValueError('Unsupported number format: {}'.format(format))
+                msg = 'Unsupported number format: {}'
+                raise ValueError(msg.format(format))
             lbpack = lbpack % 1000
             if lbpack == 0 or lbpack == 2:
                 if lbpack == 0:
