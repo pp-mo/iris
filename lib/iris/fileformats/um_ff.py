@@ -232,10 +232,7 @@ def wrap_field_as_pplike(um_field):
     """Make a :class:`_PPFieldWrapper` wrapper from a :class:`um.Field`."""
     lbrel = um_field.lbrel
     if lbrel == 2:
-        msg = ('iris.load of fieldsfiles via iris.experimental.um '
-               'does not support fields with LBREL=2')
-        raise(msg)
-#        result = PPField2Wrapper(um_field)
+        result = PPField2Wrapper(um_field)
     elif lbrel == 3:
         result = PPField3Wrapper(um_field)
     else:
