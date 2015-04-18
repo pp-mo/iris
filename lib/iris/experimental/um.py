@@ -395,7 +395,6 @@ class _BoundaryDataProvider(object):
         self.source = source
         self.offset = offset
         self.word_size = word_size
-        self.field_index = field_index
         self.reopen_path = filepath
 
     def read_data(self, field):
