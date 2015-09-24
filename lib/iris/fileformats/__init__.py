@@ -26,7 +26,9 @@ from iris.io.format_picker import (FileExtension, FormatAgent,
                                    FormatSpecification, MagicNumber,
                                    UriProtocol, LeadingLine)
 from . import abf
+#from . import mule_ff as ff
 from . import ff
+
 try:
     from . import grib
 except ImportError:
@@ -150,22 +152,22 @@ FORMAT_AGENT.add_spec(FormatSpecification('UM Fieldsfile (FF) ancillary',
                                           constraint_aware_handler=True))
 
 
-FORMAT_AGENT.add_spec(FormatSpecification('UM Fieldsfile (FF) converted '
-                                          'with ieee to 32 bit',
-                                          MagicNumber(4),
-                                          0x00000014,
-                                          ff.load_cubes_32bit_ieee,
-                                          priority=3,
-                                          constraint_aware_handler=True))
-
-
-FORMAT_AGENT.add_spec(FormatSpecification('UM Fieldsfile (FF) ancillary '
-                                          'converted with ieee to 32 bit',
-                                          MagicNumber(4),
-                                          0xFFFF8000,
-                                          ff.load_cubes_32bit_ieee,
-                                          priority=3,
-                                          constraint_aware_handler=True))
+#FORMAT_AGENT.add_spec(FormatSpecification('UM Fieldsfile (FF) converted '
+#                                          'with ieee to 32 bit',
+#                                          MagicNumber(4),
+#                                          0x00000014,
+#                                          ff.load_cubes_32bit_ieee,
+#                                          priority=3,
+#                                          constraint_aware_handler=True))
+#
+#
+#FORMAT_AGENT.add_spec(FormatSpecification('UM Fieldsfile (FF) ancillary '
+#                                          'converted with ieee to 32 bit',
+#                                          MagicNumber(4),
+#                                          0xFFFF8000,
+#                                          ff.load_cubes_32bit_ieee,
+#                                          priority=3,
+#                                          constraint_aware_handler=True))
 
 
 #

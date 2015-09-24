@@ -392,27 +392,27 @@ class FFHeader(object):
             raise AttributeError(msg.format(self.__class__.__name__, name))
         return is_referenceable
 
-#    def shape(self, name):
-#        """
-#        Return the dimension shape of the FieldsFile FIXED_LENGTH_HEADER
-#        pointer attribute.
-#
-#        Args:
-#
-#        * name (string):
-#            Specify the name of the FIXED_LENGTH_HEADER attribute.
-#
-#        Returns:
-#            Dimension tuple.
-#
-#        """
-#
-#        if name in _FF_HEADER_POINTERS:
-#            value = getattr(self, name)[1:]
-#        else:
-#            msg = '{!r} object does not have pointer address {!r}'
-#            raise AttributeError(msg.format(self.__class_.__name__, name))
-#        return value
+    def shape(self, name):
+        """
+        Return the dimension shape of the FieldsFile FIXED_LENGTH_HEADER
+        pointer attribute.
+
+        Args:
+
+        * name (string):
+            Specify the name of the FIXED_LENGTH_HEADER attribute.
+
+        Returns:
+            Dimension tuple.
+
+        """
+
+        if name in _FF_HEADER_POINTERS:
+            value = getattr(self, name)[1:]
+        else:
+            msg = '{!r} object does not have pointer address {!r}'
+            raise AttributeError(msg.format(self.__class_.__name__, name))
+        return value
 
     def grid(self):
         """Return the Grid definition for the FieldsFile."""
@@ -780,16 +780,3 @@ def load_cubes(filenames, callback, constraints=None):
     return pp._load_cubes_variable_loader(filenames, callback, FF2PP,
                                           constraints=constraints)
 
-
-def load_cubes_32bit_ieee(filenames, callback, constraints=None):
-    """
-    Loads cubes from a list of 32bit ieee converted fieldsfiles filenames.
-
-    .. seealso::
-
-        :func:`load_cubes` for keyword details
-
-    """
-    return pp._load_cubes_variable_loader(filenames, callback, FF2PP,
-                                          {'word_depth': 4},
-                                          constraints=constraints)
