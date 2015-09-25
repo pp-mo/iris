@@ -537,7 +537,7 @@ class FF2PP(object):
             raise ValueError('non-64 bit fields files NOT YET SUPPORTED')
 
         self._filename = filename
-        self._mule_file = mule.FieldsFile(filename)
+        self._mule_file = mule.load_umfile(filename)
         self._ff_header = self._mule_file.fixed_length_header
 #        self._ff_header = FFHeader(filename, word_depth=word_depth)
         self._word_depth = word_depth
