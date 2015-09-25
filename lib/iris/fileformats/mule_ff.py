@@ -449,22 +449,22 @@ def _fieldsfile_grid_class(mule_file):
     return grid
 
 
-def _mule_field_dtype(mule_field):
-    # Get the type
-#    dtype_template = _LBUSER_DTYPE_LOOKUP.get(
-#        mule_field.lbuser1,
-#        _LBUSER_DTYPE_LOOKUP['default'])
-#    dtype_name = dtype_template.format(word_depth=DEFAULT_FF_WORD_DEPTH)
-#    data_type = np.dtype(dtype_name)
-
-    # NOTE for now, use the PP definitions, to make existing tests work.
-    # NOTE the type assumptions for PP fields are DIFFERENT...
-    # NOTE this probably means the answers are *wrong*
-    # - we "ought" to have 8-byte data, but we dont
-    # - as with existing ff code = also wrong?
-    types_mapping = pp.LBUSER_DTYPE_LOOKUP
-    data_type = types_mapping.get(mule_field.lbuser1, types_mapping['default'])
-    return data_type
+#def _mule_field_dtype(mule_field):
+#    # Get the type
+##    dtype_template = _LBUSER_DTYPE_LOOKUP.get(
+##        mule_field.lbuser1,
+##        _LBUSER_DTYPE_LOOKUP['default'])
+##    dtype_name = dtype_template.format(word_depth=DEFAULT_FF_WORD_DEPTH)
+##    data_type = np.dtype(dtype_name)
+#
+#    # NOTE for now, use the PP definitions, to make existing tests work.
+#    # NOTE the type assumptions for PP fields are DIFFERENT...
+#    # NOTE this probably means the answers are *wrong*
+#    # - we "ought" to have 8-byte data, but we dont
+#    # - as with existing ff code = also wrong?
+#    types_mapping = pp.LBUSER_DTYPE_LOOKUP
+#    data_type = types_mapping.get(mule_field.lbuser1, types_mapping['default'])
+#    return data_type
 
 
 class _MuleFieldArraylikeWrapper(object):
@@ -484,11 +484,11 @@ class _MuleFieldArraylikeWrapper(object):
         *   LBC unpacking (not now)
 
     """
-    def __init__(self, mule_field):
+    def __init__(self, mule_field, data_type):
         self._mule_field = mule_field
         # Establish the minimum API necessary to wrap this as a Biggus array.
 #        import pdb; pdb.set_trace()
-        self.dtype = _mule_field_dtype(mule_field)
+        self.dtype = data_type
         self.fill_value = mule_field.bmdi  # ??is this right??
         self.shape = (mule_field.lbrow, mule_field.lbnpt)
 
@@ -499,8 +499,9 @@ class _MuleFieldArraylikeWrapper(object):
         return data
 
 
-def _mule_field_data_accessor(mule_field):
-    return biggus.NumpyArrayAdapter(_MuleFieldArraylikeWrapper(mule_field))
+def _mule_field_data_accessor(mule_field, data_type):
+    return biggus.NumpyArrayAdapter(_MuleFieldArraylikeWrapper(mule_field,
+                                                               data_type))
 
 
 class FF2PP(object):
@@ -841,7 +842,7 @@ class FF2PP(object):
                         # This wraps the mule field data access (and so
                         # includes the unpacking support).
                         result_field._data = _mule_field_data_accessor(
-                            mule_field)
+                            mule_field, data_type)
 
 #                        # Provide enough context to read the data bytes later.
 #                        result_field._data = (self._filename, data_offset,
