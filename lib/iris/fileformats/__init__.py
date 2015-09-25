@@ -26,8 +26,7 @@ from iris.io.format_picker import (FileExtension, FormatAgent,
                                    FormatSpecification, MagicNumber,
                                    UriProtocol, LeadingLine)
 from . import abf
-from . import mule_ff as ff
-#from . import ff
+from . import ff
 
 try:
     from . import grib
