@@ -1787,6 +1787,10 @@ def _create_field_data(field, data_shape, land_mask):
                                                   data_shape,
                                                   loaded_bytes.dtype,
                                                   field.bmdi, land_mask)
+    elif isinstance(field._data, biggus.Array):
+        # We already have a biggus-defined deferred access reference.
+        # So just leave it alone !
+        pass
     else:
         # Wrap the reference to the data payload within a data proxy
         # in order to support deferred data loading.

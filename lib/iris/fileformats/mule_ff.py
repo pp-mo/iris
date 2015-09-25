@@ -26,11 +26,14 @@ import os
 import warnings
 
 import numpy as np
+import numpy.ma as ma
 
+import biggus
 from iris.exceptions import NotYetImplementedError
 from iris.fileformats._ff_cross_references import STASH_TRANS
 from . import pp
 
+import mule
 
 IMDI = -32768
 
@@ -155,12 +158,12 @@ class Grid(object):
         """
         self.column_dependent_constants = column_dependent_constants
         self.row_dependent_constants = row_dependent_constants
-        self.ew_spacing = real_constants[REAL_EW_SPACING]
-        self.ns_spacing = real_constants[REAL_NS_SPACING]
-        self.first_lat = real_constants[REAL_FIRST_LAT]
-        self.first_lon = real_constants[REAL_FIRST_LON]
-        self.pole_lat = real_constants[REAL_POLE_LAT]
-        self.pole_lon = real_constants[REAL_POLE_LON]
+        self.ew_spacing = real_constants.col_spacing
+        self.ns_spacing = real_constants.row_spacing
+        self.first_lat = real_constants.start_lat
+        self.first_lon = real_constants.start_lon
+        self.pole_lat = real_constants.north_pole_lat
+        self.pole_lon = real_constants.north_pole_lon
         self.horiz_grid_type = horiz_grid_type
 
     def _x_vectors(self, subgrid):
@@ -392,27 +395,27 @@ class FFHeader(object):
             raise AttributeError(msg.format(self.__class__.__name__, name))
         return is_referenceable
 
-    def shape(self, name):
-        """
-        Return the dimension shape of the FieldsFile FIXED_LENGTH_HEADER
-        pointer attribute.
-
-        Args:
-
-        * name (string):
-            Specify the name of the FIXED_LENGTH_HEADER attribute.
-
-        Returns:
-            Dimension tuple.
-
-        """
-
-        if name in _FF_HEADER_POINTERS:
-            value = getattr(self, name)[1:]
-        else:
-            msg = '{!r} object does not have pointer address {!r}'
-            raise AttributeError(msg.format(self.__class_.__name__, name))
-        return value
+#    def shape(self, name):
+#        """
+#        Return the dimension shape of the FieldsFile FIXED_LENGTH_HEADER
+#        pointer attribute.
+#
+#        Args:
+#
+#        * name (string):
+#            Specify the name of the FIXED_LENGTH_HEADER attribute.
+#
+#        Returns:
+#            Dimension tuple.
+#
+#        """
+#
+#        if name in _FF_HEADER_POINTERS:
+#            value = getattr(self, name)[1:]
+#        else:
+#            msg = '{!r} object does not have pointer address {!r}'
+#            raise AttributeError(msg.format(self.__class_.__name__, name))
+#        return value
 
     def grid(self):
         """Return the Grid definition for the FieldsFile."""
@@ -426,6 +429,78 @@ class FFHeader(object):
                           self.row_dependent_constants,
                           self.real_constants, self.horiz_grid_type)
         return grid
+
+
+_GRID_STAGGERING_CLASS = {3: NewDynamics, 6: ENDGame}
+
+def _fieldsfile_grid_class(mule_file):
+    """Return the Grid definition for the FieldsFile."""
+    grid_staggering = mule_file.fixed_length_header.grid_staggering
+    grid_class = _GRID_STAGGERING_CLASS.get(grid_staggering)
+    if grid_class is None:
+        grid_class = NewDynamics
+        warnings.warn(
+            'Staggered grid type: {} not currently interpreted, assuming '
+            'standard C-grid'.format(grid_staggering))
+    grid = grid_class(mule_file.column_dependent_constants,
+                      mule_file.row_dependent_constants,
+                      mule_file.real_constants,
+                      mule_file.fixed_length_header.horiz_grid_type)
+    return grid
+
+
+def _mule_field_dtype(mule_field):
+    # Get the type
+#    dtype_template = _LBUSER_DTYPE_LOOKUP.get(
+#        mule_field.lbuser1,
+#        _LBUSER_DTYPE_LOOKUP['default'])
+#    dtype_name = dtype_template.format(word_depth=DEFAULT_FF_WORD_DEPTH)
+#    data_type = np.dtype(dtype_name)
+
+    # NOTE for now, use the PP definitions, to make existing tests work.
+    # NOTE the type assumptions for PP fields are DIFFERENT...
+    # NOTE this probably means the answers are *wrong*
+    # - we "ought" to have 8-byte data, but we dont
+    # - as with existing ff code = also wrong?
+    types_mapping = pp.LBUSER_DTYPE_LOOKUP
+    data_type = types_mapping.get(mule_field.lbuser1, types_mapping['default'])
+    return data_type
+
+
+class _MuleFieldArraylikeWrapper(object):
+    """
+    Class to encode deferred access to the data payload of a fieldsfile field.
+
+    Provides an array-like API, sufficient to wrap it in a biggus adaptor.
+    Replaces the use of "pp.PPDataProxy" for field data in PP loading, when
+    the PPfield is derived from a fieldsfile.
+
+    The following properties are currently implemented:
+        *   Biggus-wrappable deferred access.
+        *   encode original field MDI value, and yield masked/unmasked data,
+            as appropriate
+
+    The following features are desirable, not yet implemented:
+        *   LBC unpacking (not now)
+
+    """
+    def __init__(self, mule_field):
+        self._mule_field = mule_field
+        # Establish the minimum API necessary to wrap this as a Biggus array.
+#        import pdb; pdb.set_trace()
+        self.dtype = _mule_field_dtype(mule_field)
+        self.fill_value = mule_field.bmdi  # ??is this right??
+        self.shape = (mule_field.lbrow, mule_field.lbnpt)
+
+    def __getitem__(self, keys):
+        data = self._mule_field.get_data()[keys]
+        if np.any(data == self.fill_value):
+            data = ma.masked_values(data, self.fill_value, copy=False)
+        return data
+
+
+def _mule_field_data_accessor(mule_field):
+    return biggus.NumpyArrayAdapter(_MuleFieldArraylikeWrapper(mule_field))
 
 
 class FF2PP(object):
@@ -457,11 +532,17 @@ class FF2PP(object):
             ...     print(field)
 
         """
+        if word_depth != DEFAULT_FF_WORD_DEPTH:
+            raise ValueError('non-64 bit fields files NOT YET SUPPORTED')
 
-        self._ff_header = FFHeader(filename, word_depth=word_depth)
-        self._word_depth = word_depth
         self._filename = filename
+        self._mule_file = mule.FieldsFile(filename)
+        self._ff_header = self._mule_file.fixed_length_header
+#        self._ff_header = FFHeader(filename, word_depth=word_depth)
+        self._word_depth = word_depth
         self._read_data = read_data
+        if self._read_data:
+            raise ValueError('read_data=True NOT YET SUPPORTED')
 
     def _payload(self, field):
         """Calculate the payload data depth (in bytes) and type."""
@@ -645,40 +726,50 @@ class FF2PP(object):
         # FF table pointer initialisation based on FF LOOKUP table
         # configuration.
 
-        lookup_table = self._ff_header.lookup_table
-        table_index, table_entry_depth, table_count = lookup_table
-        table_offset = (table_index - 1) * self._word_depth       # in bytes
+        table_index = self._ff_header.lookup_start
+        table_entry_depth = self._ff_header.lookup_dim1
+#        table_count = self._ff_header.lookup_dim2
+#        table_offset = (table_index - 1) * self._word_depth       # in bytes
         table_entry_depth = table_entry_depth * self._word_depth  # in bytes
         # Open the FF for processing.
-        with open(self._ff_header.ff_filename, 'rb') as ff_file:
-            ff_file_seek = ff_file.seek
+#        with open(self._ff_header.ff_filename, 'rb') as ff_file:
+        if 1:
+#            ff_file_seek = ff_file.seek
 
             is_boundary_packed = self._ff_header.dataset_type == 5
+            if is_boundary_packed:
+                raise ValueError('LBC variants NOT YET SUPPORTED')
 
-            grid = self._ff_header.grid()
+#            grid = self._ff_header.grid()
+            grid = _fieldsfile_grid_class(self._mule_file)
 
             # Process each FF LOOKUP table entry.
-            while table_count:
-                table_count -= 1
+#            while table_count:
+#                table_count -= 1
+
+            for mule_field in self._mule_file.fields:
+
                 # Move file pointer to the start of the current FF LOOKUP
                 # table entry.
-                ff_file_seek(table_offset, os.SEEK_SET)
+#                ff_file_seek(table_offset, os.SEEK_SET)
 
-                # Read the current PP header entry from the FF LOOKUP table.
-                header_longs = np.fromfile(
-                    ff_file, dtype='>i{0}'.format(self._word_depth),
-                    count=pp.NUM_LONG_HEADERS)
-                # Check whether the current FF LOOKUP table entry is valid.
+#                # Read the current PP header entry from the FF LOOKUP table.
+#                header_longs = np.fromfile(
+#                    ff_file, dtype='>i{0}'.format(self._word_depth),
+#                    count=pp.NUM_LONG_HEADERS)
+#                # Check whether the current FF LOOKUP table entry is valid.
+#                header_floats = np.fromfile(
+#                    ff_file, dtype='>f{0}'.format(self._word_depth),
+#                    count=pp.NUM_FLOAT_HEADERS)
+                header_longs = mule_field._lookup_ints
                 if header_longs[0] == _FF_LOOKUP_TABLE_TERMINATE:
                     # There are no more FF LOOKUP table entries to read.
                     break
-                header_floats = np.fromfile(
-                    ff_file, dtype='>f{0}'.format(self._word_depth),
-                    count=pp.NUM_FLOAT_HEADERS)
+                header_floats = mule_field._lookup_reals
                 header = tuple(header_longs) + tuple(header_floats)
 
-                # Calculate next FF LOOKUP table entry.
-                table_offset += table_entry_depth
+#                # Calculate next FF LOOKUP table entry.
+#                table_offset += table_entry_depth
 
                 # Construct a PPField object and populate using the header_data
                 # read from the current FF LOOKUP table.
@@ -739,15 +830,22 @@ class FF2PP(object):
                 for result_field in fields:
                     # Add a field data element.
                     if self._read_data:
+                        raise ValueError('read_data=True NOT YET SUPPORTED')
                         # Read the actual bytes. This can then be converted to
                         # a numpy array at a higher level.
                         ff_file_seek(data_offset, os.SEEK_SET)
                         result_field._data = pp.LoadedArrayBytes(
                             ff_file.read(data_depth), data_type)
                     else:
-                        # Provide enough context to read the data bytes later.
-                        result_field._data = (self._filename, data_offset,
-                                              data_depth, data_type)
+                        # Provide a biggus array as the data.
+                        # This wraps the mule field data access (and so
+                        # includes the unpacking support).
+                        result_field._data = _mule_field_data_accessor(
+                            mule_field)
+
+#                        # Provide enough context to read the data bytes later.
+#                        result_field._data = (self._filename, data_offset,
+#                                              data_depth, data_type)
 
                     data_offset += data_depth
 
