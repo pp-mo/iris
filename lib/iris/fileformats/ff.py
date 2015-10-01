@@ -437,7 +437,7 @@ class FF2PP(object):
 
                     yield result_field
 
-    def generate_fields(self):
+    def ppfields_generator(self):
         """Return a generator of our fields, as _interpreted_ PPFields."""
         return pp._interpret_fields(self._extract_field())
 
@@ -464,7 +464,7 @@ def load_cubes(filenames, callback, constraints=None):
     """
     def fieldsfile_fields_generator(filepath, **kwargs):
         ff2pp = FF2PP(filepath, **kwargs)
-        return ff2pp.generate_fields()
+        return ff2pp.ppfields_generator()
 
     return pp._load_cubes_variable_loader(filenames, callback,
                                           fieldsfile_fields_generator,
