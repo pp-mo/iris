@@ -235,7 +235,7 @@ class ENDGame(ArakawaC):
 
 _GRID_STAGGERING_CLASS = {3: NewDynamics, 6: ENDGame}
 
-def _fieldsfile_grid_class(mule_file):
+def _fieldsfile_grid(mule_file):
     """Return the Grid definition for the FieldsFile."""
     grid_staggering = mule_file.fixed_length_header.grid_staggering
     grid_class = _GRID_STAGGERING_CLASS.get(grid_staggering)
@@ -360,7 +360,7 @@ class FF2PP(object):
             if is_boundary_packed:
                 raise ValueError('LBC variants NOT YET SUPPORTED')
 
-            grid = _fieldsfile_grid_class(self._mule_file)
+            grid = _fieldsfile_grid(self._mule_file)
 
             for mule_field in self._mule_file.fields:
                 header_longs = mule_field._lookup_ints
