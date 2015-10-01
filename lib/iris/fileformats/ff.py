@@ -437,7 +437,8 @@ class FF2PP(object):
 
                     yield result_field
 
-    def __iter__(self):
+    def generate_fields(self):
+        """Return a generator of our fields, as _interpreted_ PPFields."""
         return pp._interpret_fields(self._extract_field())
 
 
@@ -461,6 +462,11 @@ def load_cubes(filenames, callback, constraints=None):
         orography references).
 
     """
-    return pp._load_cubes_variable_loader(filenames, callback, FF2PP,
+    def fieldsfile_fields_generator(filepath, **kwargs):
+        ff2pp = FF2PP(filepath, **kwargs)
+        return ff2pp.generate_fields()
+
+    return pp._load_cubes_variable_loader(filenames, callback,
+                                          fieldsfile_fields_generator,
                                           constraints=constraints)
 
