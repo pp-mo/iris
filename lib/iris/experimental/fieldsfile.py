@@ -42,7 +42,7 @@ _HINTS = {name: i for i, name in zip(range(len(_HINT_COORDS)), _HINT_COORDS)}
 
 
 def _collations_from_filename(filename):
-    fields = iter(FF2PP(filename))
+    fields = FF2PP(filename).generate_fields()
     return group_structured_fields(fields)
 
 
