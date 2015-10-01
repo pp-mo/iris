@@ -148,7 +148,7 @@ class TestFF2PP2Cube(tests.IrisTest):
     def test_raw_to_table_count(self):
         filename = tests.get_data_path(('FF', 'n48_multi_field_table_count'))
         cubes = iris.load_raw(filename)
-        mule_ff = mule.FieldsFile(filename)
+        mule_ff = mule.FieldsFile.from_file(filename)
         table_count = mule_ff.fixed_length_header.lookup_dim2
         self.assertEqual(len(cubes), table_count)
 

@@ -17,6 +17,7 @@
 """
 Provides UK Met Office Fields File (FF) format specific capabilities.
 
+HACKED VERSION for proof-of-concept implementation via 'mule'.
 """
 
 from __future__ import (absolute_import, division, print_function)
