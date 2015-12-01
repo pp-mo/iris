@@ -64,9 +64,7 @@ __all__ = ['load', 'save', 'load_cubes', 'PPField',
 EARTH_RADIUS = 6371229.0
 
 
-# Cube->PP rules are loaded on first use
-_save_rules = None
-
+from . import pp_save_rules as _save_rules
 
 PP_HEADER_DEPTH = 256
 PP_WORD_DEPTH = 4
@@ -1903,14 +1901,7 @@ def reset_load_rules():
 
 def _ensure_save_rules_loaded():
     """Makes sure the standard save rules are loaded."""
-
-    # Uses these module-level variables
-    global _save_rules
-
-    if _save_rules is None:
-        # Load the pp save rules
-        rules_filename = os.path.join(iris.config.CONFIG_PATH, 'pp_save_rules.txt')
-        _save_rules = iris.fileformats.rules.RulesContainer(rules_filename, iris.fileformats.rules.ProcedureRule)
+    pass
 
 
 def add_save_rules(filename):
@@ -1933,8 +1924,7 @@ def add_save_rules(filename):
         'the methods iris.fileformats.pp.as_fields, '
         'iris.fileformats.pp.as_pairs and iris.fileformats.pp.save_fields '
         'for an alternative solution.')
-    _ensure_save_rules_loaded()
-    _save_rules.import_rules(filename)
+    pass
 
 
 def reset_save_rules():
@@ -1954,10 +1944,7 @@ def reset_save_rules():
         'the methods iris.fileformats.pp.as_fields, '
         'iris.fileformats.pp.as_pairs and iris.fileformats.pp.save_fields '
         'for an alternative solution.')
-    # Uses this module-level variable
-    global _save_rules
-
-    _save_rules = None
+    pass
 
 
 # Stash codes not to be filtered (reference altitude and pressure fields).
@@ -2196,17 +2183,18 @@ def as_pairs(cube, field_coords=None, target=None):
         # Set the data
         pp_field.data = slice2D.data
 
-        # Run the PP save rules on the slice2D, to fill the PPField,
-        # recording the rules that were used
-        rules_result = _save_rules.verify(slice2D, pp_field)
-        verify_rules_ran = rules_result.matching_rules
-
-        # Log the rules used
-        if target is None:
-            target = 'None'
-        elif not isinstance(target, six.string_types):
-            target = target.name
-        iris.fileformats.rules.log('PP_SAVE', str(target), verify_rules_ran)
+        _save_rules.verify(slice2D, pp_field)
+#        # Run the PP save rules on the slice2D, to fill the PPField,
+#        # recording the rules that were used
+#        rules_result = _save_rules.verify(slice2D, pp_field)
+#        verify_rules_ran = rules_result.matching_rules
+#
+#        # Log the rules used
+#        if target is None:
+#            target = 'None'
+#        elif not isinstance(target, six.string_types):
+#            target = target.name
+#        iris.fileformats.rules.log('PP_SAVE', str(target), verify_rules_ran)
 
         yield (slice2D, pp_field)
 
