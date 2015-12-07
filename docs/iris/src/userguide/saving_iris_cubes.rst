@@ -66,9 +66,43 @@ for more details on supported arguments for the individual savers.
 Customising the save process
 -----------------------------
 
-When saving to GRIB or PP, the save process may be intercepted between the translation step and the file writing.  This enables customisation of the output messages, based on Cube metadata if required, over and above the translations supplied by Iris.
+When saving to GRIB or PP, the save process may be intercepted between the translation step and the file writing.
+  This enables customisation of the output messages, based on Cube metadata if required, over and above the
+ translations supplied by Iris.
 
-For example, a GRIB2 message with a particular known long_name may need to be saved to a specific parameter code and type of statistical process.  This can be achieved by::
+The pattern to follow to customise a save involves defining a function which takes a cube as an argument::
+
+        def custom_saver(cube):
+	    pass
+
+Within this function, iterate through the, cube:fileformat pairs, e.g, for grib::
+
+        def custom_saver(cube):
+            for cube, message in iris.fileformats.grib.as_pairs(cube):
+                pass     
+
+and implement any custom logic within this loop.  At a step within the loop a there is a 2D cube, sliced
+ from the input cube, and a GRIB message in scope.  Any logic check can be run on a cube here and any conditional
+ setting of metadata on the GRIB message, prior to saving can be achieved, including passing cube metadata values,
+ correctly formatted, to the message.
+
+The as_pairs iterator must yield the message/field, for every iteration of the loop, (note the indentation)::
+
+        def custom_saver(cube):
+            for cube, message in iris.fileformats.grib.as_pairs(cube):
+                pass
+            yield message
+
+This function can now be passed to the format specific save_messages function.  In this example, nothing will be
+ changed compared to the standard iris save::
+
+        iris.fileformats.grib.save_messages(custom_saver(mycube), '/tmp/agrib2.grib2')
+
+Knowledge of the GRIB or PP metadata and the constraints assocaited is important here, as poorly formed results and
+ exceptions can result.
+
+For example, a GRIB2 message with a particular known long_name may need to be saved to a specific parameter code
+ and type of statistical process.  This can be achieved by::
 
         def tweaked_messages(cube):
             for cube, grib_message in iris.fileformats.grib.as_pairs(cube):
@@ -91,6 +125,21 @@ Similarly a PP field may need to be written out with a specific value for LBEXP.
 		    field.lbexp = 'meaxr'
                 yield field
         iris.fileformats.pp.save_fields(tweaked_fields(cube), '/tmp/app.pp')
+
+In another example, a cube may exist without a forecast_period coordinate, but such information may need to be
+ derived for a downstream processing requirement for a set of PP fields::
+
+       def ancil_forecast_period_save(cube):
+            for cube, ppfield in iris.fileformats.pp.as_pairs(cube):
+	        if iris.rules.scalar_coord(cm, 'forecast_period') is None:
+		    ppfield.t1 = iris.rules.scalar_coord(cm, 'time').units.num2date(scalar_coord(cm, 'time').points[0])
+		    ppfield.t2 = iris.rules.scalar_coord(cm, 'time').units.num2date(scalar_coord(cm, 'time').points[0])
+    		    ppfield.lbft = 0.0
+    		    ppfield.lbtim.ia = 0
+    		    ppfield.lbtim.ib = 0
+    		    ppfield.lbtim.ic = 1
+                yield field
+        iris.fileformats.pp.save_fields(ancil_forecast_period_save(cube), '/tmp/app.pp')
 
 
 netCDF
