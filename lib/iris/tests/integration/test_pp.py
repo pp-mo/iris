@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2015, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -527,6 +527,20 @@ class TestCoordinateForms(tests.IrisTest):
         self.assertEqual(pp_field.bdx, 0.0)
         self.assertArrayAllClose(pp_field.x, x_values)
         self.assertEqual(pp_field.lbnpt, nx)
+
+
+@tests.skip_data
+class TestAsCubes(tests.IrisTest):
+    def test_pseudo_level_filter(self):
+        dpath = tests.get_data_path(['PP', 'meanMaxMin',
+                                     '200806081200__qwpb.T24.pp'])
+        ppfs = iris.fileformats.pp.load(dpath)
+        chosen_ppfs = []
+        for ppf in ppfs:
+            if ppf.lbuser[4] == 3:
+                chosen_ppfs.append(ppf)
+        cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs))
+        self.assertEqual(len(cubes), 8)
 
 
 if __name__ == "__main__":

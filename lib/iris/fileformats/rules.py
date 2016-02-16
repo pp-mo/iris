@@ -934,7 +934,8 @@ def _make_cube(field, converter):
     return cube, metadata.factories, metadata.references
 
 
-def _resolve_references(results_needing_reference, concrete_reference_targets):
+def _resolve_references(results_needing_reference, concrete_reference_targets,
+                        filenames=''):
     regrid_cache = {}
     for cube, factories in results_needing_reference:
         for factory in factories:
@@ -1024,5 +1025,5 @@ def load_cubes(filenames, user_callback, loader, filter_function=None):
                 yield cube
 
     for cube in _resolve_references(results_needing_reference,
-                                    concrete_reference_targets):
+                                    concrete_reference_targets, filenames):
         yield cube
