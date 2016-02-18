@@ -961,7 +961,7 @@ def as_cubes(fields, converter, callback=None):
         # Convert the field to a Cube.
         cube, factories, references = _make_cube(field, converter)
 
-        cube = iris.io.run_callback(user_callback, cube, field, filename)
+        cube = iris.io.run_callback(callback, cube, field, None)
 
         # Cross referencing
         for reference in references:
