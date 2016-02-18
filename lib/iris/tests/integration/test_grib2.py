@@ -31,9 +31,15 @@ import iris
 from iris import FUTURE, load_cube, save
 from iris.coords import CellMethod
 from iris.coord_systems import RotatedGeogCS
-from iris.fileformats.grib import as_cubes, messages_from_filename
 from iris.fileformats.pp import EARTH_RADIUS as UM_DEFAULT_EARTH_RADIUS
 from iris.util import is_regular
+
+# gribapi is an optional dependency
+try:
+    import gribapi
+    from iris.fileformats.grib import as_cubes, messages_from_filename
+except ImportError:
+    pass
 
 
 @tests.skip_data
