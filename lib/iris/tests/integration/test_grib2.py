@@ -31,6 +31,7 @@ import iris
 from iris import FUTURE, load_cube, save
 from iris.coords import CellMethod
 from iris.coord_systems import RotatedGeogCS
+from iris.fileformats.grib import as_cubes, messages_from_filename
 from iris.fileformats.pp import EARTH_RADIUS as UM_DEFAULT_EARTH_RADIUS
 from iris.util import is_regular
 
@@ -279,6 +280,33 @@ class TestDRT3(tests.IrisTest):
         with FUTURE.context(strict_grib_load=True):
             cube = load_cube(path)
         self.assertCMLApproxData(cube)
+
+
+@tests.skip_data
+@tests.skip_grib
+class TestAsCubes(tests.IrisTest):
+    def setUp(self):
+        # Load from the test file.
+        self.file_path = tests.get_data_path(('GRIB', 'time_processed',
+                                              'time_bound.grib2'))
+
+    def test_year_filter(self):
+        msgs = messages_from_filename(self.file_path)
+        chosen_messages = []
+        for gmsg in msgs:
+            if gmsg.sections[1]['year'] == 1998:
+                chosen_messages.append(gmsg)
+        cubes = list(as_cubes(chosen_messages))
+        self.assertEqual(len(cubes), 1)
+
+    def test_year_filter_none(self):
+        msgs = messages_from_filename(self.file_path)
+        chosen_messages = []
+        for gmsg in msgs:
+            if gmsg.sections[1]['year'] == 1958:
+                chosen_messages.append(gmsg)
+        cubes = list(as_cubes(chosen_messages))
+        self.assertEqual(len(cubes), 0)
 
 
 if __name__ == '__main__':

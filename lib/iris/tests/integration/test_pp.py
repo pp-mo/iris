@@ -542,6 +542,17 @@ class TestAsCubes(tests.IrisTest):
         cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs))
         self.assertEqual(len(cubes), 8)
 
+    def test_pseudo_level_filter_none(self):
+        dpath = tests.get_data_path(['PP', 'meanMaxMin',
+                                     '200806081200__qwpb.T24.pp'])
+        ppfs = iris.fileformats.pp.load(dpath)
+        chosen_ppfs = []
+        for ppf in ppfs:
+            if ppf.lbuser[4] == 30:
+                chosen_ppfs.append(ppf)
+        cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs))
+        self.assertEqual(len(cubes), 0)
+
 
 if __name__ == "__main__":
     tests.main()

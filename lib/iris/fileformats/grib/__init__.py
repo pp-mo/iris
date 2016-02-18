@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2015, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -909,6 +909,58 @@ def load_cubes(filenames, callback=None, auto_regularise=True):
             grib_generator, {'auto_regularise': auto_regularise},
             iris.fileformats.grib.load_rules.convert)
     return iris.fileformats.rules.load_cubes(filenames, callback, grib_loader)
+
+
+def messages_from_filename(filename):
+    """
+    Return a generator of :class:`iris.fileformats.grib._message._GribMessage`
+    instances; one for each message in the supplied GRIB file.
+
+    Args:
+
+    * filename (string):
+        Name of the file to generate fields from.
+
+    """
+    return _GribMessage.messages_from_filename(filename)
+
+
+def as_cubes(grib_messages):
+    """
+    Convert an iterable of GRIB messages into an iterable of Cubes.
+
+    Args:
+
+    * grib_messages:
+        An iterable of :class:`iris.fileformats.grib._message._GribMessage`.
+
+    Returns:
+        An iterable of :class:`iris.cube.Cube`s.
+
+    This capability can be used to filter out fields before they are passed to
+    the load pipeline, using GRIB metadata conditions.  Where this filtering
+    removes a significant number of fields, the speed up to load can be
+    significant::
+
+        filtered_messages = []
+        for message in iris.fileformats.grib.messages_from_filename(filename):
+            if message == 3:
+                filtered_messages.append(field)
+        cubes = list(iris.fileformats.grib.as_cubes(filtered_fields))
+
+    This capability can also be used to alter fields before they are passed to
+    the load pipeline.  Fields with out of specification header elements can
+    be cleaned up this way and cubes created::
+
+        cleaned_msgs = iris.fileformats.grib.messages_from_filename(filename)
+        for message in cleaned_msgs:
+            if message.productionStatusOfProcessedData == 1:
+                message.productionStatusOfProcessedData = 4
+        cubes = list(iris.fileformats.grib.as_cubes(cleaned_fields))
+
+    """
+    grib_conv = iris.fileformats.grib._load_convert.convert
+    return iris.fileformats.rules.as_cubes(grib_messages, grib_conv)
 
 
 def save_grib2(cube, target, append=False, **kwargs):

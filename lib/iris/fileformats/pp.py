@@ -2152,6 +2152,27 @@ def as_cubes(pp_fields):
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
 
+    This capability can be used to filter out fields before they are passed to
+    the load pipeline, using PP metadata conditions.  Where this filtering
+    removes a significant number of fields, the speed up to load can be
+    significant::
+
+        filtered_fields = []
+        for field in iris.fileformats.pp.load(filename):
+            if field.lbuser[4] == 3:
+                filtered_fields.append(field)
+        cubes = list(iris.fileformats.pp.as_cubes(filtered_fields))
+
+    This capability can also be used to alter fields before they are passed to
+    the load pipeline.  Fields with out of specification header elements can
+    be cleaned up this way and cubes created::
+
+        cleaned_fields = iris.fileformats.pp.load(filename)
+        for field in cleaned_fields:
+            if field.lbrel == 0:
+                field.lbrel = 3
+        cubes = list(iris.fileformats.pp.as_cubes(cleaned_fields))
+
     """
     return iris.fileformats.rules.as_cubes(pp_fields,
                                            iris.fileformats.pp_rules.convert)
