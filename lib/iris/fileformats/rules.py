@@ -953,13 +953,15 @@ def _resolve_references(results_needing_reference, concrete_reference_targets,
         yield cube
 
 
-def as_cubes(fields, converter):
+def as_cubes(fields, converter, callback=None):
     concrete_reference_targets = {}
     results_needing_reference = []
 
     for field in fields:
         # Convert the field to a Cube.
         cube, factories, references = _make_cube(field, converter)
+
+        cube = iris.io.run_callback(user_callback, cube, field, filename)
 
         # Cross referencing
         for reference in references:
