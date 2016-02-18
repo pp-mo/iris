@@ -925,7 +925,7 @@ def messages_from_filename(filename):
     return _GribMessage.messages_from_filename(filename)
 
 
-def as_cubes(grib_messages):
+def as_cubes(grib_messages, callback=None):
     """
     Convert an iterable of GRIB messages into an iterable of Cubes.
 
@@ -960,7 +960,8 @@ def as_cubes(grib_messages):
 
     """
     grib_conv = iris.fileformats.grib._load_convert.convert
-    return iris.fileformats.rules.as_cubes(grib_messages, grib_conv)
+    return iris.fileformats.rules.as_cubes(grib_messages, grib_conv,
+                                           callback=callback)
 
 
 def save_grib2(cube, target, append=False, **kwargs):

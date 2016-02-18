@@ -2140,7 +2140,7 @@ def load_cubes(filenames, callback=None, constraints=None):
                                        constraints=constraints)
 
 
-def as_cubes(pp_fields):
+def as_cubes(pp_fields, callback=None):
     """
     Convert an iterable of PP fields into an iterable of Cubes.
 
@@ -2148,6 +2148,9 @@ def as_cubes(pp_fields):
 
     * pp_fields:
         An iterable of :class:`iris.fileformats.pp.PPField`.
+
+    * callback - a function which can be passed on to
+                 :func:`iris.io.run_callback`
 
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
@@ -2175,7 +2178,8 @@ def as_cubes(pp_fields):
 
     """
     return iris.fileformats.rules.as_cubes(pp_fields,
-                                           iris.fileformats.pp_rules.convert)
+                                           iris.fileformats.pp_rules.convert,
+                                           callback=callback)
 
 
 def _load_cubes_variable_loader(filenames, callback, loading_function,
