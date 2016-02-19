@@ -314,6 +314,20 @@ class TestAsCubes(tests.IrisTest):
         cubes = list(as_cubes(chosen_messages))
         self.assertEqual(len(cubes), 0)
 
+    def test_year_filter_callback(self):
+        msgs = messages_from_filename(self.file_path)
+        chosen_messages = []
+        for gmsg in msgs:
+            if gmsg.sections[1]['year'] == 1998:
+                chosen_messages.append(gmsg)
+
+        def acallback(cube, field, filename):
+            if gmsg.sections[1]['year'] == 1998:
+                cube.attributes['the year is'] = gmsg.sections[1]['year']
+        cubes = list(as_cubes(chosen_messages, acallback))
+        self.assertEqual(len(cubes), 1)
+        self.assertEqual(cubes[0].attributes['the year is'], 1998)
+
 
 if __name__ == '__main__':
     tests.main()

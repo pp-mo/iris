@@ -954,6 +954,27 @@ def _resolve_references(results_needing_reference, concrete_reference_targets,
 
 
 def as_cubes(fields, converter, callback=None):
+    """
+    Convert an iterable of fields into an iterable of Cubes using the
+    provided convertor.
+
+    Args:
+
+    * fields:
+        An iterable of fields.
+
+    * convertor:
+        An Iris convertor function, suitable for use with the supplied fields.
+
+    * callback - a function which can be passed on to
+                 :func:`iris.io.run_callback`, although the
+                 filename argument will always be None.
+
+    Returns:
+        An iterable of :class:`iris.cube.Cube`s.
+
+    """
+
     concrete_reference_targets = {}
     results_needing_reference = []
 

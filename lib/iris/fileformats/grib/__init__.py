@@ -934,6 +934,10 @@ def as_cubes(grib_messages, callback=None):
     * grib_messages:
         An iterable of :class:`iris.fileformats.grib._message._GribMessage`.
 
+    * callback - a function which can be passed on to
+                 :func:`iris.io.run_callback`, although the
+                 filename argument will always be None.
+
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
 

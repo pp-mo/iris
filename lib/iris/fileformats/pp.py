@@ -2150,7 +2150,8 @@ def as_cubes(pp_fields, callback=None):
         An iterable of :class:`iris.fileformats.pp.PPField`.
 
     * callback - a function which can be passed on to
-                 :func:`iris.io.run_callback`
+                 :func:`iris.io.run_callback`, although the
+                 filename argument will always be None.
 
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
