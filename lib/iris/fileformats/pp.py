@@ -1910,7 +1910,9 @@ def _ensure_save_rules_loaded():
     if _save_rules is None:
         # Load the pp save rules
         rules_filename = os.path.join(iris.config.CONFIG_PATH, 'pp_save_rules.txt')
-        _save_rules = iris.fileformats.rules.RulesContainer(rules_filename, iris.fileformats.rules.ProcedureRule)
+        with iris.fileformats.rules._disable_deprecation_warnings():
+            _save_rules = iris.fileformats.rules.RulesContainer(
+                rules_filename, iris.fileformats.rules.ProcedureRule)
 
 
 def add_save_rules(filename):
@@ -2180,7 +2182,9 @@ def as_pairs(cube, field_coords=None, target=None):
             target = 'None'
         elif not isinstance(target, six.string_types):
             target = target.name
-        iris.fileformats.rules.log('PP_SAVE', str(target), verify_rules_ran)
+
+        with iris.fileformats.rules._disable_deprecation_warnings():
+            iris.fileformats.rules.log('PP_SAVE', str(target), verify_rules_ran)
 
         yield (slice2D, pp_field)
 

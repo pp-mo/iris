@@ -47,13 +47,19 @@ defined by :mod:`ConfigParser`.
     :func:`iris.fileformats.pp.load()` and
     :func:`iris.fileformats.pp.save()`.
 
+    .. deprecated:: 1.10
+
 .. py:data:: iris.config.RULE_LOG_IGNORE
 
     The [optional] list of users to ignore when logging rules.
 
+    .. deprecated:: 1.10
+
 .. py:data:: iris.config.IMPORT_LOGGER
 
     The [optional] name of the logger to notify when first imported.
+
+    .. deprecated:: 1.10
 
 ----------
 """
