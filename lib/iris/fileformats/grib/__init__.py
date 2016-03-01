@@ -925,7 +925,12 @@ def messages_from_filename(filename):
     return _GribMessage.messages_from_filename(filename)
 
 
-def as_cubes(grib_messages, callback=None):
+def as_cubes(grib_messages):
+    for cube, message in as_load_pairs(grib_messages):
+        yield cube
+
+
+def as_load_pairs(grib_messages):
     """
     Convert an iterable of GRIB messages into an iterable of Cubes.
 
@@ -933,10 +938,6 @@ def as_cubes(grib_messages, callback=None):
 
     * grib_messages:
         An iterable of :class:`iris.fileformats.grib._message._GribMessage`.
-
-    * callback - a function which can be passed on to
-                 :func:`iris.io.run_callback`, although the
-                 filename argument will always be None.
 
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
@@ -964,8 +965,7 @@ def as_cubes(grib_messages, callback=None):
 
     """
     grib_conv = iris.fileformats.grib._load_convert.convert
-    return iris.fileformats.rules.as_cubes(grib_messages, grib_conv,
-                                           callback=callback)
+    return iris.fileformats.rules.as_load_pairs(grib_messages, grib_conv)
 
 
 def save_grib2(cube, target, append=False, **kwargs):
@@ -993,6 +993,10 @@ def save_grib2(cube, target, append=False, **kwargs):
 
 
 def as_pairs(cube):
+    return as_save_pairs(cube)
+
+
+def as_save_pairs(cube):
     """
     Convert one or more cubes to (2D cube, GRIB message) pairs.
     Returns an iterable of tuples each consisting of one 2D cube and

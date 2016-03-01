@@ -2140,7 +2140,11 @@ def load_cubes(filenames, callback=None, constraints=None):
                                        constraints=constraints)
 
 
-def as_cubes(pp_fields, callback=None):
+def as_cubes(pp_fields):
+    for cube, message in as_load_pairs(pp_fields):
+        yield cube
+
+def as_load_pairs(pp_fields):
     """
     Convert an iterable of PP fields into an iterable of Cubes.
 
@@ -2148,10 +2152,6 @@ def as_cubes(pp_fields, callback=None):
 
     * pp_fields:
         An iterable of :class:`iris.fileformats.pp.PPField`.
-
-    * callback - a function which can be passed on to
-                 :func:`iris.io.run_callback`, although the
-                 filename argument will always be None.
 
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
@@ -2178,9 +2178,8 @@ def as_cubes(pp_fields, callback=None):
         cubes = list(iris.fileformats.pp.as_cubes(cleaned_fields))
 
     """
-    return iris.fileformats.rules.as_cubes(pp_fields,
-                                           iris.fileformats.pp_rules.convert,
-                                           callback=callback)
+    return iris.fileformats.rules.as_load_pairs(pp_fields,
+                                                iris.fileformats.pp_rules.convert)
 
 
 def _load_cubes_variable_loader(filenames, callback, loading_function,
@@ -2228,6 +2227,10 @@ def save(cube, target, append=False, field_coords=None):
 
 
 def as_pairs(cube, field_coords=None, target=None):
+    return as_save_pairs(cube, field_coords=None, target=None)
+
+
+def as_save_pairs(cube, field_coords=None, target=None):
     """
     Use the PP saving rules (and any user rules) to convert a cube to
     an iterable of (2D cube, PP field) pairs.

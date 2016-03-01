@@ -953,7 +953,7 @@ def _resolve_references(results_needing_reference, concrete_reference_targets,
         yield cube
 
 
-def as_cubes(fields, converter, callback=None):
+def as_load_pairs(fields, converter):
     """
     Convert an iterable of fields into an iterable of Cubes using the
     provided convertor.
@@ -966,10 +966,6 @@ def as_cubes(fields, converter, callback=None):
     * convertor:
         An Iris convertor function, suitable for use with the supplied fields.
 
-    * callback - a function which can be passed on to
-                 :func:`iris.io.run_callback`, although the
-                 filename argument will always be None.
-
     Returns:
         An iterable of :class:`iris.cube.Cube`s.
 
@@ -977,12 +973,11 @@ def as_cubes(fields, converter, callback=None):
 
     concrete_reference_targets = {}
     results_needing_reference = []
+    results_needing_reference_fields = []
 
     for field in fields:
         # Convert the field to a Cube.
         cube, factories, references = _make_cube(field, converter)
-
-        cube = iris.io.run_callback(callback, cube, field, None)
 
         # Cross referencing
         for reference in references:
@@ -997,12 +992,14 @@ def as_cubes(fields, converter, callback=None):
 
         if factories:
             results_needing_reference.append((cube, factories))
+            results_needing_reference_fields.append(field)
         else:
-            yield cube
+            yield (cube, field)
 
-    for cube in _resolve_references(results_needing_reference,
-                                    concrete_reference_targets):
-        yield cube
+    for (cube, field) in zip(_resolve_references(results_needing_reference,
+                                    concrete_reference_targets),
+                             results_needing_reference_fields):
+        yield cube, field
 
 
 def load_cubes(filenames, user_callback, loader, filter_function=None):

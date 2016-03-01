@@ -553,19 +553,16 @@ class TestAsCubes(tests.IrisTest):
         cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs))
         self.assertEqual(len(cubes), 0)
 
-    def test_pseudo_level_filter_callback(self):
+    def test_as_pairs(self):
         dpath = tests.get_data_path(['PP', 'meanMaxMin',
                                      '200806081200__qwpb.T24.pp'])
         ppfs = iris.fileformats.pp.load(dpath)
-        chosen_ppfs = []
-        for ppf in ppfs:
+        cube_ppf_pairs = iris.fileformats.pp.as_load_pairs(ppfs)
+        cubes = []
+        for cube, ppf in cube_ppf_pairs:
             if ppf.lbuser[4] == 3:
-                chosen_ppfs.append(ppf)
-
-        def acallback(cube, field, filename):
-            if field.lbuser[4] == 3:
-                cube.attributes['pseudo level'] = field.lbuser[4]
-        cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs, acallback))
+                cube.attributes['pseudo level'] = ppf.lbuser[4]
+                cubes.append(cube)
         for cube in cubes:
             self.assertEqual(cube.attributes['pseudo level'], 3)
 

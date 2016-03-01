@@ -37,7 +37,8 @@ from iris.util import is_regular
 # gribapi is an optional dependency
 try:
     import gribapi
-    from iris.fileformats.grib import as_cubes, messages_from_filename
+    from iris.fileformats.grib import (as_cubes, messages_from_filename,
+                                       as_load_pairs)
 except ImportError:
     pass
 
@@ -314,17 +315,14 @@ class TestAsCubes(tests.IrisTest):
         cubes = list(as_cubes(chosen_messages))
         self.assertEqual(len(cubes), 0)
 
-    def test_year_filter_callback(self):
-        msgs = messages_from_filename(self.file_path)
-        chosen_messages = []
-        for gmsg in msgs:
-            if gmsg.sections[1]['year'] == 1998:
-                chosen_messages.append(gmsg)
-
-        def acallback(cube, field, filename):
+    def test_as_pairs(self):
+        messages = messages_from_filename(self.file_path)
+        cubes = []
+        cube_msg_pairs = as_load_pairs(messages)
+        for cube, gmsg in cube_msg_pairs:
             if gmsg.sections[1]['year'] == 1998:
                 cube.attributes['the year is'] = gmsg.sections[1]['year']
-        cubes = list(as_cubes(chosen_messages, acallback))
+                cubes.append(cube)
         self.assertEqual(len(cubes), 1)
         self.assertEqual(cubes[0].attributes['the year is'], 1998)
 
