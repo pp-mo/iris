@@ -48,7 +48,8 @@ from iris.fileformats.grib._message import _GribMessage
 import iris.fileformats.grib.load_rules
 
 
-__all__ = ['as_messages', 'as_pairs', 'grib_generator', 'load_cubes',
+__all__ = ['as_messages', 'as_load_pairs', 'as_pairs', 'as_save_pairs',
+           'as_cubes''grib_generator', 'load_cubes',
            'reset_load_rules', 'save_grib2', 'save_messages', 'GribWrapper',
            'hindcast_workaround']
 
