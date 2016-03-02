@@ -2141,10 +2141,6 @@ def load_cubes(filenames, callback=None, constraints=None):
 
 
 def as_cubes(pp_fields):
-    for cube, message in as_load_pairs(pp_fields):
-        yield cube
-
-def as_load_pairs(pp_fields):
     """
     Convert an iterable of PP fields into an iterable of Cubes.
 
@@ -2178,8 +2174,39 @@ def as_load_pairs(pp_fields):
         cubes = list(iris.fileformats.pp.as_cubes(cleaned_fields))
 
     """
-    return iris.fileformats.rules.as_load_pairs(pp_fields,
-                                                iris.fileformats.pp_rules.convert)
+    for cube, message in as_load_pairs(pp_fields):
+        yield cube
+
+def as_load_pairs(pp_fields):
+    """
+    Convert an iterable of PP fields into an iterable of tuples of
+    (Cubes, PPField).
+
+    Args:
+
+    * pp_fields:
+        An iterable of :class:`iris.fileformats.pp.PPField`.
+
+    Returns:
+        An iterable of :class:`iris.cube.Cube`s.
+
+    This capability can be used to filter out fields before they are passed to
+    the load pipeline, and amend the cubes once they are created, using
+    PP metadata conditions.  Where this filtering
+    removes a significant number of fields, the speed up to load can be
+    significant::
+
+        filtered_fields = []
+        for field in iris.fileformats.pp.load(filename):
+            if field.lbuser[4] == 3:
+                filtered_fields.append(field)
+        cube_fields = iris.fileformats.pp.as_cubes(filtered_fields)
+        for cube, field in cube_fields:
+            cube.attributes['lbproc'] = field.lbproc
+
+    """
+    as_load_pairs = iris.fileformats.rules.as_load_pairs
+    return as_load_pairs(pp_fields, iris.fileformats.pp_rules.convert)
 
 
 def _load_cubes_variable_loader(filenames, callback, loading_function,
@@ -2229,6 +2256,8 @@ def save(cube, target, append=False, field_coords=None):
 def as_pairs(cube, field_coords=None, target=None):
     """
     .. deprecated:: 1.10
+    Please use :func:`iris.fileformats.pp.as_load_pairs` for the same
+    functionality.
 
     """
     warnings.warn('as_pairs is deprecated in v1.10; please use'
@@ -2238,8 +2267,8 @@ def as_pairs(cube, field_coords=None, target=None):
 
 def as_save_pairs(cube, field_coords=None, target=None):
     """
-    Use the PP saving rules (and any user rules) to convert a cube to
-    an iterable of (2D cube, PP field) pairs.
+    Use the PP saving rules (and any user rules) to convert a cube or
+    iterable of cubes to an iterable of (2D cube, PP field) pairs.
 
     Args:
 

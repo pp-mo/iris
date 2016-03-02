@@ -967,7 +967,7 @@ def as_load_pairs(fields, converter):
         An Iris convertor function, suitable for use with the supplied fields.
 
     Returns:
-        An iterable of :class:`iris.cube.Cube`s.
+        An iterable of :class:`iris.cube.Cube` s.
 
     """
 
