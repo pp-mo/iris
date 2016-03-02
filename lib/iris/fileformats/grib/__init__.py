@@ -1031,8 +1031,6 @@ def as_pairs(cube):
     """
     warnings.warn('as_pairs is deprecated in v1.10; please use'
                   ' as_save_pairs instead.')
-    return as_save_pairs(cube, field_coords=field_coords, target=target)
-
     return as_save_pairs(cube)
 
 
