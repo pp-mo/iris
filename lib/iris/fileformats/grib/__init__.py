@@ -994,6 +994,14 @@ def save_grib2(cube, target, append=False, **kwargs):
 
 
 def as_pairs(cube):
+    """
+    .. deprecated:: 1.10
+
+    """
+    warnings.warn('as_pairs is deprecated in v1.10; please use'
+                  ' as_save_pairs instead.')
+    return as_save_pairs(cube, field_coords=field_coords, target=target)
+
     return as_save_pairs(cube)
 
 

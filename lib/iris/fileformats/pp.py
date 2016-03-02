@@ -2227,7 +2227,13 @@ def save(cube, target, append=False, field_coords=None):
 
 
 def as_pairs(cube, field_coords=None, target=None):
-    return as_save_pairs(cube, field_coords=None, target=None)
+    """
+    .. deprecated:: 1.10
+
+    """
+    warnings.warn('as_pairs is deprecated in v1.10; please use'
+                  ' as_save_pairs instead.')
+    return as_save_pairs(cube, field_coords=field_coords, target=target)
 
 
 def as_save_pairs(cube, field_coords=None, target=None):
