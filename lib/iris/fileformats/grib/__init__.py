@@ -48,8 +48,8 @@ from iris.fileformats.grib._message import _GribMessage
 import iris.fileformats.grib.load_rules
 
 
-__all__ = ['as_cubes', 'as_messages', 'as_load_pairs', 'as_pairs',
-           'as_save_pairs', 'grib_generator', 'load_cubes', 'reset_load_rules',
+__all__ = ['as_messages', 'load_pairs_from_fields', 'as_pairs',
+           'save_pairs_from_cubes', 'grib_generator', 'load_cubes', 'reset_load_rules',
            'save_grib2', 'save_messages', 'GribWrapper', 'hindcast_workaround']
 
 
@@ -925,45 +925,7 @@ def messages_from_filename(filename):
     return _GribMessage.messages_from_filename(filename)
 
 
-def as_cubes(grib_messages):
-    """
-    Convert an iterable of GRIB messages into an iterable of Cubes.
-
-    Args:
-
-    * grib_messages:
-        An iterable of :class:`iris.fileformats.grib._message._GribMessage`.
-
-    Returns:
-        An iterable of :class:`iris.cube.Cube`s.
-
-    This capability can be used to filter out fields before they are passed to
-    the load pipeline, using GRIB metadata conditions.  Where this filtering
-    removes a significant number of fields, the speed up to load can be
-    significant::
-
-        filtered_messages = []
-        for message in iris.fileformats.grib.messages_from_filename(filename):
-            if message == 3:
-                filtered_messages.append(field)
-        cubes = list(iris.fileformats.grib.as_cubes(filtered_fields))
-
-    This capability can also be used to alter fields before they are passed to
-    the load pipeline.  Fields with out of specification header elements can
-    be cleaned up this way and cubes created::
-
-        cleaned_msgs = iris.fileformats.grib.messages_from_filename(filename)
-        for message in cleaned_msgs:
-            if message.productionStatusOfProcessedData == 1:
-                message.productionStatusOfProcessedData = 4
-        cubes = list(iris.fileformats.grib.as_cubes(cleaned_fields))
-
-    """
-    for cube, message in as_load_pairs(grib_messages):
-        yield cube
-
-
-def as_load_pairs(grib_messages):
+def load_pairs_from_fields(grib_messages):
     """
     Convert an iterable of GRIB messages into an iterable of
     (Cube, Grib message) tuples.
@@ -987,14 +949,24 @@ def as_load_pairs(grib_messages):
         for message in iris.fileformats.grib.messages_from_filename(filename):
             if message == 3:
                 filtered_messages.append(field)
-        cubes_messages = iris.fileformats.grib.as_load_pairs(filtered_fields)
+        cubes_messages = iris.fileformats.grib.load_pairs_from_fields(filtered_fields)
         for cube, message in cubes_messages:
             prod_stat = message.productionStatusOfProcessedData
             cube.attributes['productionStatusOfProcessedData'] = prod_stat
 
+    This capability can also be used to alter fields before they are passed to
+    the load pipeline.  Fields with out of specification header elements can
+    be cleaned up this way and cubes created::
+
+        cleaned_msgs = iris.fileformats.grib.messages_from_filename(filename)
+        for message in cleaned_msgs:
+            if message.productionStatusOfProcessedData == 1:
+                message.productionStatusOfProcessedData = 4
+        cubes = list(iris.fileformats.grib.load_pairs_from_fields(cleaned_fields))
+
     """
     grib_conv = iris.fileformats.grib._load_convert.convert
-    return iris.fileformats.rules.as_load_pairs(grib_messages, grib_conv)
+    return iris.fileformats.rules.load_pairs_from_fields(grib_messages, grib_conv)
 
 
 def save_grib2(cube, target, append=False, **kwargs):
@@ -1024,17 +996,17 @@ def save_grib2(cube, target, append=False, **kwargs):
 def as_pairs(cube):
     """
     .. deprecated:: 1.10
-    Please use :func:`iris.fileformats.grib.as_load_pairs` for the same
+    Please use :func:`iris.fileformats.grib.load_pairs_from_fields` for the same
     functionality.
 
 
     """
     warnings.warn('as_pairs is deprecated in v1.10; please use'
-                  ' as_save_pairs instead.')
-    return as_save_pairs(cube)
+                  ' save_pairs_from_cubes instead.')
+    return save_pairs_from_cubes(cube)
 
 
-def as_save_pairs(cube):
+def save_pairs_from_cubes(cube):
     """
     Convert one or more cubes to (2D cube, GRIB message) pairs.
     Returns an iterable of tuples each consisting of one 2D cube and

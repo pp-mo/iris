@@ -56,8 +56,8 @@ except ImportError:
 
 
 __all__ = ['load', 'save', 'load_cubes', 'PPField',
-           'reset_load_rules', 'add_save_rules', 'as_cubes',
-           'as_fields', 'as_load_pairs', 'as_pairs', 'as_save_pairs',
+           'reset_load_rules', 'add_save_rules',
+           'as_fields', 'load_pairs_from_fields', 'as_pairs', 'save_pairs_from_cubes',
            'reset_save_rules', 'save_fields', 'STASH', 'EARTH_RADIUS']
 
 
@@ -2140,44 +2140,7 @@ def load_cubes(filenames, callback=None, constraints=None):
                                        constraints=constraints)
 
 
-def as_cubes(pp_fields):
-    """
-    Convert an iterable of PP fields into an iterable of Cubes.
-
-    Args:
-
-    * pp_fields:
-        An iterable of :class:`iris.fileformats.pp.PPField`.
-
-    Returns:
-        An iterable of :class:`iris.cube.Cube`s.
-
-    This capability can be used to filter out fields before they are passed to
-    the load pipeline, using PP metadata conditions.  Where this filtering
-    removes a significant number of fields, the speed up to load can be
-    significant::
-
-        filtered_fields = []
-        for field in iris.fileformats.pp.load(filename):
-            if field.lbuser[4] == 3:
-                filtered_fields.append(field)
-        cubes = list(iris.fileformats.pp.as_cubes(filtered_fields))
-
-    This capability can also be used to alter fields before they are passed to
-    the load pipeline.  Fields with out of specification header elements can
-    be cleaned up this way and cubes created::
-
-        cleaned_fields = iris.fileformats.pp.load(filename)
-        for field in cleaned_fields:
-            if field.lbrel == 0:
-                field.lbrel = 3
-        cubes = list(iris.fileformats.pp.as_cubes(cleaned_fields))
-
-    """
-    for cube, message in as_load_pairs(pp_fields):
-        yield cube
-
-def as_load_pairs(pp_fields):
+def load_pairs_from_fields(pp_fields):
     """
     Convert an iterable of PP fields into an iterable of tuples of
     (Cubes, PPField).
@@ -2200,13 +2163,23 @@ def as_load_pairs(pp_fields):
         for field in iris.fileformats.pp.load(filename):
             if field.lbuser[4] == 3:
                 filtered_fields.append(field)
-        cube_fields = iris.fileformats.pp.as_cubes(filtered_fields)
+        cube_fields = iris.fileformats.pp.load_pairs_from_fields(filtered_fields)
         for cube, field in cube_fields:
             cube.attributes['lbproc'] = field.lbproc
 
+    This capability can also be used to alter fields before they are passed to
+    the load pipeline.  Fields with out of specification header elements can
+    be cleaned up this way and cubes created::
+
+        cleaned_fields = iris.fileformats.pp.load(filename)
+        for field in cleaned_fields:
+            if field.lbrel == 0:
+                field.lbrel = 3
+        (cubes, fields) = list(iris.fileformats.pp.load_pairs_from_fields(cleaned_fields))
+
     """
-    as_load_pairs = iris.fileformats.rules.as_load_pairs
-    return as_load_pairs(pp_fields, iris.fileformats.pp_rules.convert)
+    load_pairs_from_fields = iris.fileformats.rules.load_pairs_from_fields
+    return load_pairs_from_fields(pp_fields, iris.fileformats.pp_rules.convert)
 
 
 def _load_cubes_variable_loader(filenames, callback, loading_function,
@@ -2256,16 +2229,16 @@ def save(cube, target, append=False, field_coords=None):
 def as_pairs(cube, field_coords=None, target=None):
     """
     .. deprecated:: 1.10
-    Please use :func:`iris.fileformats.pp.as_load_pairs` for the same
+    Please use :func:`iris.fileformats.pp.load_pairs_from_fields` for the same
     functionality.
 
     """
     warnings.warn('as_pairs is deprecated in v1.10; please use'
-                  ' as_save_pairs instead.')
-    return as_save_pairs(cube, field_coords=field_coords, target=target)
+                  ' save_pairs_from_cubes instead.')
+    return save_pairs_from_cubes(cube, field_coords=field_coords, target=target)
 
 
-def as_save_pairs(cube, field_coords=None, target=None):
+def save_pairs_from_cubes(cube, field_coords=None, target=None):
     """
     Use the PP saving rules (and any user rules) to convert a cube or
     iterable of cubes to an iterable of (2D cube, PP field) pairs.

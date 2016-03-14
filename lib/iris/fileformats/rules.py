@@ -953,7 +953,7 @@ def _resolve_references(results_needing_reference, concrete_reference_targets,
         yield cube
 
 
-def as_load_pairs(fields, converter):
+def load_pairs_from_fields(fields, converter):
     """
     Convert an iterable of fields into an iterable of Cubes using the
     provided convertor.
