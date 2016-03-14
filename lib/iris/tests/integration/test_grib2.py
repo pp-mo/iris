@@ -37,8 +37,8 @@ from iris.util import is_regular
 # gribapi is an optional dependency
 try:
     import gribapi
-    from iris.fileformats.grib import (as_cubes, messages_from_filename,
-                                       as_load_pairs)
+    from iris.fileformats.grib import (messages_from_filename,
+                                       load_pairs_from_fields)
 except ImportError:
     pass
 
@@ -303,8 +303,8 @@ class TestAsCubes(tests.IrisTest):
         for gmsg in msgs:
             if gmsg.sections[1]['year'] == 1998:
                 chosen_messages.append(gmsg)
-        cubes = list(as_cubes(chosen_messages))
-        self.assertEqual(len(cubes), 1)
+        cubes_msgs = list(load_pairs_from_fields(chosen_messages))
+        self.assertEqual(len(cubes_msgs), 1)
 
     def test_year_filter_none(self):
         msgs = messages_from_filename(self.file_path)
@@ -312,13 +312,13 @@ class TestAsCubes(tests.IrisTest):
         for gmsg in msgs:
             if gmsg.sections[1]['year'] == 1958:
                 chosen_messages.append(gmsg)
-        cubes = list(as_cubes(chosen_messages))
-        self.assertEqual(len(cubes), 0)
+        cubes_msgs = list(load_pairs_from_fields(chosen_messages))
+        self.assertEqual(len(cubes_msgs), 0)
 
     def test_as_pairs(self):
         messages = messages_from_filename(self.file_path)
         cubes = []
-        cube_msg_pairs = as_load_pairs(messages)
+        cube_msg_pairs = load_pairs_from_fields(messages)
         for cube, gmsg in cube_msg_pairs:
             if gmsg.sections[1]['year'] == 1998:
                 cube.attributes['the year is'] = gmsg.sections[1]['year']

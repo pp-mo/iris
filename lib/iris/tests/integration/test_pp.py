@@ -31,6 +31,7 @@ from iris.cube import Cube
 import iris.fileformats.pp
 import iris.fileformats.pp_rules
 from iris.tests import mock
+from iris.fileformats.pp import load_pairs_from_fields
 
 
 class TestVertical(tests.IrisTest):
@@ -539,8 +540,8 @@ class TestAsCubes(tests.IrisTest):
         for ppf in ppfs:
             if ppf.lbuser[4] == 3:
                 chosen_ppfs.append(ppf)
-        cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs))
-        self.assertEqual(len(cubes), 8)
+        cubes_fields = list(load_pairs_from_fields(chosen_ppfs))
+        self.assertEqual(len(cubes_fields), 8)
 
     def test_pseudo_level_filter_none(self):
         dpath = tests.get_data_path(['PP', 'meanMaxMin',
@@ -550,14 +551,14 @@ class TestAsCubes(tests.IrisTest):
         for ppf in ppfs:
             if ppf.lbuser[4] == 30:
                 chosen_ppfs.append(ppf)
-        cubes = list(iris.fileformats.pp.as_cubes(chosen_ppfs))
+        cubes = list(load_pairs_from_fields(chosen_ppfs))
         self.assertEqual(len(cubes), 0)
 
     def test_as_pairs(self):
         dpath = tests.get_data_path(['PP', 'meanMaxMin',
                                      '200806081200__qwpb.T24.pp'])
         ppfs = iris.fileformats.pp.load(dpath)
-        cube_ppf_pairs = iris.fileformats.pp.as_load_pairs(ppfs)
+        cube_ppf_pairs = load_pairs_from_fields(ppfs)
         cubes = []
         for cube, ppf in cube_ppf_pairs:
             if ppf.lbuser[4] == 3:

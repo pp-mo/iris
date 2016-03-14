@@ -57,8 +57,9 @@ except ImportError:
 
 __all__ = ['load', 'save', 'load_cubes', 'PPField',
            'reset_load_rules', 'add_save_rules',
-           'as_fields', 'load_pairs_from_fields', 'as_pairs', 'save_pairs_from_cubes',
-           'reset_save_rules', 'save_fields', 'STASH', 'EARTH_RADIUS']
+           'as_fields', 'load_pairs_from_fields', 'as_pairs',
+           'save_pairs_from_cubes', 'reset_save_rules',
+           'save_fields', 'STASH', 'EARTH_RADIUS']
 
 
 EARTH_RADIUS = 6371229.0
@@ -2159,11 +2160,12 @@ def load_pairs_from_fields(pp_fields):
     removes a significant number of fields, the speed up to load can be
     significant::
 
+        from iris.fileformats.pp import load_pairs_from_fields
         filtered_fields = []
         for field in iris.fileformats.pp.load(filename):
             if field.lbuser[4] == 3:
                 filtered_fields.append(field)
-        cube_fields = iris.fileformats.pp.load_pairs_from_fields(filtered_fields)
+        cube_fields = load_pairs_from_fields(filtered_fields)
         for cube, field in cube_fields:
             cube.attributes['lbproc'] = field.lbproc
 
@@ -2171,11 +2173,12 @@ def load_pairs_from_fields(pp_fields):
     the load pipeline.  Fields with out of specification header elements can
     be cleaned up this way and cubes created::
 
+        from iris.fileformats.pp import load_pairs_from_fields
         cleaned_fields = iris.fileformats.pp.load(filename)
         for field in cleaned_fields:
             if field.lbrel == 0:
                 field.lbrel = 3
-        (cubes, fields) = list(iris.fileformats.pp.load_pairs_from_fields(cleaned_fields))
+        (cubes, fields) = list(load_pairs_from_fields(cleaned_fields))
 
     """
     load_pairs_from_fields = iris.fileformats.rules.load_pairs_from_fields
@@ -2235,7 +2238,8 @@ def as_pairs(cube, field_coords=None, target=None):
     """
     warnings.warn('as_pairs is deprecated in v1.10; please use'
                   ' save_pairs_from_cubes instead.')
-    return save_pairs_from_cubes(cube, field_coords=field_coords, target=target)
+    return save_pairs_from_cubes(cube, field_coords=field_coords,
+                                 target=target)
 
 
 def save_pairs_from_cubes(cube, field_coords=None, target=None):
