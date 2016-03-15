@@ -934,23 +934,68 @@ def _make_cube(field, converter):
     return cube, metadata.factories, metadata.references
 
 
-def _resolve_references(results_needing_reference, concrete_reference_targets,
-                        filenames=''):
+def _resolve_factory_references(cube, factories, concrete_reference_targets,
+                                regrid_cache={}, message_format_kwargs={}):
+    # Attach the factories for a cube, building them from references.
+    # Note: the regrid_cache argument lets us share and reuse regridded data
+    # across multiple result cubes.
+    for factory in factories:
+        try:
+            args = _dereference_args(factory, concrete_reference_targets,
+                                     regrid_cache, cube)
+        except _ReferenceError as e:
+            msg = 'Unable to create instance of {factory}. ' + str(e)
+            factory_name = factory.factory_class.__name__
+            warnings.warn(msg.format(factory=factory_name,
+                                     **message_format_kwargs))
+        else:
+            aux_factory = factory.factory_class(*args)
+            cube.add_aux_factory(aux_factory)
+
+
+def _load_pairs_from_fields_and_filenames(fields_and_filenames, converter,
+                                          user_callback=None):
+    # The underlying mechanism for the public 'load_pairs_from_fields' and
+    # 'load_cubes'.
+    # Slightly more complicated than 'load_pairs_from_fields', only because it
+    # needs a filename associated with each field to support the load callback.
+    concrete_reference_targets = {}
+    results_needing_reference = []
+    # Make a no-duplicates list of filenames in the order originally seen.
+    # (using the keys of an OrderedDict as an efficient "OrderedSet").
+    all_filenames_dict = collections.OrderedDict()
+    for field, filename in fields_and_filenames:
+        # Add filename into the no-duplicates list of all filenames.
+        all_filenames_dict[filename] = None
+        # Convert the field to a Cube, passing down the 'converter' function.
+        cube, factories, references = _make_cube(field, converter)
+
+        # Post modify the new cube with a user-callback.
+        # This an ordinary Iris load callback, so it takes the filename.
+        cube = iris.io.run_callback(user_callback, cube, field, filename)
+
+        # Cross referencing
+        for reference in references:
+            name = reference.name
+            # Register this cube as a source cube for the named reference.
+            target = concrete_reference_targets.get(name)
+            if target is None:
+                target = ConcreteReferenceTarget(name, reference.transform)
+                concrete_reference_targets[name] = target
+            target.add_cube(cube)
+
+        if factories:
+            results_needing_reference.append((cube, factories, field))
+        else:
+            yield (cube, field)
+
     regrid_cache = {}
-    for cube, factories in results_needing_reference:
-        for factory in factories:
-            try:
-                args = _dereference_args(factory, concrete_reference_targets,
-                                         regrid_cache, cube)
-            except _ReferenceError as e:
-                msg = 'Unable to create instance of {factory}. ' + str(e)
-                factory_name = factory.factory_class.__name__
-                warnings.warn(msg.format(filenames=filenames,
-                                         factory=factory_name))
-            else:
-                aux_factory = factory.factory_class(*args)
-                cube.add_aux_factory(aux_factory)
-        yield cube
+    message_kwargs = {'filenames': all_filenames_dict.keys()}
+    for (cube, factories, field) in results_needing_reference:
+        _resolve_factory_references(
+            cube, factories, concrete_reference_targets, regrid_cache,
+            message_format_kwargs=message_kwargs)
+        yield (cube, field)
 
 
 def load_pairs_from_fields(fields, converter):
@@ -965,85 +1010,46 @@ def load_pairs_from_fields(fields, converter):
 
     * convertor:
         An Iris convertor function, suitable for use with the supplied fields.
+        See the description in :class:`iris.fileformats.rules.Loader`.
 
     Returns:
-        An iterable of :class:`iris.cube.Cube` s.
+        An iterable of (:class:`iris.cube.Cube`, field) pairs.
 
     """
-
-    concrete_reference_targets = {}
-    results_needing_reference = []
-    results_needing_reference_fields = []
-
-    for field in fields:
-        # Convert the field to a Cube.
-        cube, factories, references = _make_cube(field, converter)
-
-        # Cross referencing
-        for reference in references:
-            name = reference.name
-            # Register this cube as a source cube for the named
-            # reference.
-            target = concrete_reference_targets.get(name)
-            if target is None:
-                target = ConcreteReferenceTarget(name, reference.transform)
-                concrete_reference_targets[name] = target
-            target.add_cube(cube)
-
-        if factories:
-            results_needing_reference.append((cube, factories))
-            results_needing_reference_fields.append(field)
-        else:
-            yield (cube, field)
-
-    for (cube, field) in zip(_resolve_references(results_needing_reference,
-                                    concrete_reference_targets),
-                             results_needing_reference_fields):
-        yield cube, field
+    return _load_pairs_from_fields_and_filenames(
+        ((field, None) for field in fields),
+        converter=converter,
+        user_callback=None)
 
 
 def load_cubes(filenames, user_callback, loader, filter_function=None):
-    concrete_reference_targets = {}
-    results_needing_reference = []
-
     if isinstance(filenames, six.string_types):
         filenames = [filenames]
 
-    for filename in filenames:
-        for field in loader.field_generator(filename, **loader.field_generator_kwargs):
-            # evaluate field against format specific desired attributes
-            # load if no format specific desired attributes are violated
-            if filter_function is not None and not filter_function(field):
-                continue
-            # Convert the field to a Cube.
-            cube, factories, references = _make_cube(field, loader.converter)
+    def _generate_all_fields_and_filenames():
+        for filename in filenames:
+            for field in loader.field_generator(
+                filename, **loader.field_generator_kwargs):
+                # evaluate field against format specific desired attributes
+                # load if no format specific desired attributes are violated
+                if filter_function is None or filter_function(field):
+                    yield (field, filename)
 
-            # Run any custom user-provided rules.
-            if loader.legacy_custom_rules:
-                warnings.warn('The `legacy_custom_rules` attribute of '
-                              'the `loader` is deprecated.')
-                loader.legacy_custom_rules.verify(cube, field)
+    def loadcubes_user_callback_wrapper(cube, field, filename):
+        # First run any custom user-provided rules.
+        if loader.legacy_custom_rules:
+            warnings.warn('The `legacy_custom_rules` attribute of '
+                          'the `loader` is deprecated.')
+            loader.legacy_custom_rules.verify(cube, field)
 
-            cube = iris.io.run_callback(user_callback, cube, field, filename)
+        # Then also run user-provided original callback function.
+        cube = iris.io.run_callback(user_callback, cube, field, filename)
+        return cube
 
-            if cube is None:
-                continue
-            # Cross referencing
-            for reference in references:
-                name = reference.name
-                # Register this cube as a source cube for the named
-                # reference.
-                target = concrete_reference_targets.get(name)
-                if target is None:
-                    target = ConcreteReferenceTarget(name, reference.transform)
-                    concrete_reference_targets[name] = target
-                target.add_cube(cube)
-
-            if factories:
-                results_needing_reference.append((cube, factories))
-            else:
-                yield cube
-
-    for cube in _resolve_references(results_needing_reference,
-                                    concrete_reference_targets, filenames):
+    all_fields_and_filenames = _generate_all_fields_and_filenames()
+    for cube, field in _load_pairs_from_fields_and_filenames(
+            all_fields_and_filenames,
+            converter=loader.converter,
+            user_callback=loadcubes_user_callback_wrapper):
         yield cube
+
