@@ -774,8 +774,8 @@ def _dereference_args(factory, reference_targets, regrid_cache, cube):
                     raise _ReferenceError('Unable to regrid reference for'
                                           ' {!r}'.format(arg.name))
             else:
-                raise _ReferenceError("The file(s) {{filenames}} don't contain"
-                                      " field(s) for {!r}.".format(arg.name))
+                raise _ReferenceError("The source data contains no "
+                                      "field(s) for {!r}.".format(arg.name))
         else:
             # If it wasn't a Reference, then arg is a dictionary
             # of keyword arguments for cube.coord(...).
@@ -935,7 +935,7 @@ def _make_cube(field, converter):
 
 
 def _resolve_factory_references(cube, factories, concrete_reference_targets,
-                                regrid_cache={}, message_format_kwargs={}):
+                                regrid_cache={}):
     # Attach the factories for a cube, building them from references.
     # Note: the regrid_cache argument lets us share and reuse regridded data
     # across multiple result cubes.
@@ -946,8 +946,7 @@ def _resolve_factory_references(cube, factories, concrete_reference_targets,
         except _ReferenceError as e:
             msg = 'Unable to create instance of {factory}. ' + str(e)
             factory_name = factory.factory_class.__name__
-            warnings.warn(msg.format(factory=factory_name,
-                                     **message_format_kwargs))
+            warnings.warn(msg.format(factory=factory_name))
         else:
             aux_factory = factory.factory_class(*args)
             cube.add_aux_factory(aux_factory)
@@ -961,12 +960,7 @@ def _load_pairs_from_fields_and_filenames(fields_and_filenames, converter,
     # needs a filename associated with each field to support the load callback.
     concrete_reference_targets = {}
     results_needing_reference = []
-    # Make a no-duplicates list of filenames in the order originally seen.
-    # (using the keys of an OrderedDict as an efficient "OrderedSet").
-    all_filenames_dict = collections.OrderedDict()
     for field, filename in fields_and_filenames:
-        # Add filename into the no-duplicates list of all filenames.
-        all_filenames_dict[filename] = None
         # Convert the field to a Cube, passing down the 'converter' function.
         cube, factories, references = _make_cube(field, converter)
 
@@ -990,11 +984,9 @@ def _load_pairs_from_fields_and_filenames(fields_and_filenames, converter,
             yield (cube, field)
 
     regrid_cache = {}
-    message_kwargs = {'filenames': all_filenames_dict.keys()}
     for (cube, factories, field) in results_needing_reference:
         _resolve_factory_references(
-            cube, factories, concrete_reference_targets, regrid_cache,
-            message_format_kwargs=message_kwargs)
+            cube, factories, concrete_reference_targets, regrid_cache)
         yield (cube, field)
 
 
@@ -1018,8 +1010,7 @@ def load_pairs_from_fields(fields, converter):
     """
     return _load_pairs_from_fields_and_filenames(
         ((field, None) for field in fields),
-        converter=converter,
-        user_callback=None)
+        converter)
 
 
 def load_cubes(filenames, user_callback, loader, filter_function=None):

@@ -359,7 +359,7 @@ class TestVertical(tests.IrisTest):
             data_cube, = iris.fileformats.pp.load_cubes('DUMMY')
 
         msg = "Unable to create instance of HybridHeightFactory. " \
-              "The file(s) ['DUMMY'] don't contain field(s) for 'orography'."
+              "The source data contains no field(s) for 'orography'."
         warn.assert_called_once_with(msg)
 
         # Check the data cube is set up to use hybrid height.
