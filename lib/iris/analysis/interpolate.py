@@ -404,6 +404,34 @@ def regrid(source_cube, grid_cube, mode='bilinear', **kwargs):
 `~iris.experimental.regrid.regrid_bilinear_rectilinear_src_and_grid`
         for regrid support with mask awareness.
 
+    .. deprecated:: 1.10
+
+        Please use :meth:`iris.cube.Cube.regrid` instead, with an appropriate
+        regridding scheme:
+
+        *   For mode='bilinear', simply use the :class:`~iris.analysis.Linear`
+            scheme.
+
+        *   For mode='nearest', use the :class:`~iris.analysis.Nearest` scheme,
+            with extrapolation_mode='extrapolate', but be aware of the
+            following possible differences:
+
+            *   Any missing result points, i.e. those which match source points
+                which are masked or NaN, are returned as as NaN values by this
+                routine.  The 'Nearest' scheme, however, represents missing
+                results as masked points in a masked array.
+                *Which* points are missing is unchanged.
+
+            *   Longitude wrapping for this routine is controlled by the
+                'circular' property of the x coordinate.
+                The 'Nearest' scheme, however, *always* wraps any coords with
+                modular units, such as (correctly formed) longitudes.
+                Thus, behaviour can be different if "x_coord.circular" is
+                False :  In that case, if the original non-longitude-wrapped
+                operation is required, it can be replicated by converting all
+                X and Y coordinates' units to '1' and removing their coordinate
+                systems.
+
     """
     if mode == 'bilinear':
         scheme = iris.analysis.Linear(**kwargs)
