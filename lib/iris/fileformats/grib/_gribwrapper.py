@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2015, Met Office
+# (C) British Crown Copyright 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -108,12 +108,10 @@ class GribWrapper(object):
     Contains a pygrib object plus some extra keys of our own.
 
     """
-    def __init__(self, grib_message, grib_fh=None, auto_regularise=True,
-                 hindcast_workaround = False):
+    def __init__(self, grib_message, grib_fh=None, auto_regularise=True):
         """Store the grib message and compute our extra keys."""
         self.grib_message = grib_message
         deferred = grib_fh is not None
-        self.hindcast_workaround = hindcast_workaround
 
         # Store the file pointer and message length from the current
         # grib message before it's changed by calls to the grib-api.
@@ -273,7 +271,8 @@ class GribWrapper(object):
 
             # Workaround grib api's assumption that forecast time is positive.
             # Handles correctly encoded -ve forecast times up to one -1 billion.
-            if self.hindcast_workaround:
+            from iris.fileformats.grib import hindcast_workaround
+            if hindcast_workaround:
                 if 2 * BILL < uft < 3 * BILL:
                     msg = "Re-interpreting negative forecastTime from " \
                             + str(forecastTime)
@@ -645,7 +644,7 @@ class GribWrapper(object):
                 unit.date2num(self._periodEndDateTime)]
 
 
-def grib_generator(filename, auto_regularise=True, hindcast_workaround=False):
+def grib_generator(filename, auto_regularise=True):
     """
     Returns a generator of :class:`~iris.fileformats.grib.GribWrapper`
     fields from the given filename.
@@ -671,8 +670,7 @@ def grib_generator(filename, auto_regularise=True, hindcast_workaround=False):
             if grib_message is None:
                 break
 
-            grib_wrapper = GribWrapper(grib_message, grib_fh, auto_regularise,
-                                       hindcast_workaround)
+            grib_wrapper = GribWrapper(grib_message, grib_fh, auto_regularise)
 
             yield grib_wrapper
 

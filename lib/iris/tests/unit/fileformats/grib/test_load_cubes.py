@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014 - 2015, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -45,8 +45,7 @@ class TestToggle(tests.IrisTest):
                 if mode:
                     kw_args = {}
                 else:
-                    kw_args = {'hindcast_workaround': False,
-                               'auto_regularise': mock.sentinel.REGULARISE}
+                    kw_args = {'auto_regularise': mock.sentinel.REGULARISE}
                 loader = iris.fileformats.rules.Loader(
                     generator, kw_args,
                     converter, None)
