@@ -1087,13 +1087,16 @@ def _regrid_weighted_curvilinear_to_rectilinear__perform(
     sparse_matrix, sum_weights, rows, grid_cube = regrid_info
 
     # Calculate the numerator of the weighted mean (M, 1).
-    if not ma.isMaskedArray(src_cube.data):
+    is_masked = ma.isMaskedArray(src_cube.data)
+    if not is_masked:
         data = src_cube.data
     else:
         # Use raw data array
         data = src_cube.data.data
-        # Zero any masked source points so they add nothing in output sums.
-        if np.ma.is_masked(src_cube.data):
+        # Check if there is any real masking to handle.
+        is_masked = np.ma.is_masked(src_cube.data)
+        if is_masked:
+            # Zero any masked source points so they add nothing in output sums.
             mask = src_cube.data.mask
             data[mask] = 0.0
 
@@ -1105,18 +1108,27 @@ def _regrid_weighted_curvilinear_to_rectilinear__perform(
     weighted_mean = ma.masked_all(numerator.shape, dtype=numerator.dtype)
 
     # Account for any missing input data points.
-    if np.ma.is_masked(src_cube.data):
+    if is_masked:
         # Calculate a new 'sum_weights' to account for missing source points.
         valid_src_cells = ~mask.flat[:]
         src_cell_validity_factors = sparse_diags(
             np.array(valid_src_cells, dtype=int),
             0)
         valid_weights = sparse_matrix * src_cell_validity_factors
-        sum_weights = valid_weights.sum(axis=1)
-        sum_weights = np.maximum(1, sum_weights).getA()
+        sum_weights_including_zeros = valid_weights.sum(axis=1).getA()
+        # Ensure we can divide by the main 'sum_weights' array.
+        sum_weights = np.maximum(1, sum_weights_including_zeros)
 
     # Calculate final results in all relevant places.
     weighted_mean[rows] = numerator[rows] / sum_weights[rows]
+    if is_masked:
+        # Ensure masked points where all source data was absent.
+        empty_result_cells = sum_weights_including_zeros == 0.0
+        if np.any(empty_result_cells):
+            # Make masked if it wasn't.
+            weighted_mean = np.ma.asarray(weighted_mean)
+            # Mask where contributing sums were zero.
+            weighted_mean[empty_result_cells] = np.ma.masked
 
     # Construct the final regridded weighted mean cube.
     tx = grid_cube.coord(axis='x', dim_coords=True)
