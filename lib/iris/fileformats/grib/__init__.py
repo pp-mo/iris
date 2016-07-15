@@ -59,6 +59,8 @@ warn_deprecated(
     "The module iris.fileformats.grib is deprecated since v1.10. "
     "Please install the package 'iris_grib' package instead.")
 
+raise Exception('ARRGH')
+
 
 __all__ = ['load_cubes', 'save_grib2', 'load_pairs_from_fields',
            'save_pairs_from_cube', 'save_messages', 'GribWrapper',

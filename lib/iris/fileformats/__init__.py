@@ -29,7 +29,29 @@ from . import abf
 from . import um
 try:
     import iris_grib as grib
+    # On success, modify the import so that any attempts to import from
+    # "iris.fileformats.grib" go to the iris_grib module instead.
+    import sys
+    class ImportSpecialiser(object):
+        _catch_name = 'iris.fileformats.grib'
+
+        def find_module(self, fullname, path=None):
+            if fullname == self._catch_name:
+                result = self
+            else:
+                result = None
+            return result
+
+        def load_module(self, name):
+            if name in sys.modules:
+                result = sys.modules[name]
+            sys.modules[name] = grib
+            return grib
+
+    sys.meta_path.append(ImportSpecialiser())
+
 except ImportError:
+    # Could't import 'iris_grib' : use old 'iris.fileformats.grib' instead.
     try:
         from . import grib
     except ImportError:
