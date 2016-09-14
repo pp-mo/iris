@@ -38,7 +38,9 @@ class Test_regridder(tests.IrisTest):
 
         ecr.assert_called_once_with(mock.sentinel.src,
                                     mock.sentinel.target,
-                                    mock.sentinel.weights)
+                                    mock.sentinel.weights,
+                                    use_python=False,
+                                    use_numba=False)
         self.assertIs(regridder, mock.sentinel.regridder)
 
 
