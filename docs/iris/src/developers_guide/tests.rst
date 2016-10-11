@@ -125,3 +125,19 @@ developers locate relevant tests. It is recommended they are named
 according to the capabilities under test, e.g.
 `metadata/test_pp_preservation.py`, and not named according to the
 module(s) under test.
+
+
+Graphics tests
+=================
+Certain Iris tests rely on testing plotted results.
+This is required for testing the modules :mod:`iris.plot` and
+:mod:`iris.quickplot`, but is also used for some other legacy and integration
+tests.
+
+Prior to Iris version 1.10, a single reference image for each test was stored
+in the main Iris repository, and a 'tolerant' test was performed against this.
+
+From version 1.11 onwards, all these tests perform exact comparison against a
+set of known-good image *hashes*, while the actual corresponding reference
+images, required for human-eyes evaluation, are stored elsewhere.
+See :ref:`graphics_tests`.
