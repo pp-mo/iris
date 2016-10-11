@@ -1,3 +1,5 @@
+.. _developer_tests:
+
 Testing
 *******
 
@@ -140,4 +142,4 @@ in the main Iris repository, and a 'tolerant' test was performed against this.
 From version 1.11 onwards, all these tests perform exact comparison against a
 set of known-good image *hashes*, while the actual corresponding reference
 images, required for human-eyes evaluation, are stored elsewhere.
-See :ref:`graphics_tests`.
+See :ref:`developer_graphics_tests`.
