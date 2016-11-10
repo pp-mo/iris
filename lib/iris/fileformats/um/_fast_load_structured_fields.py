@@ -209,8 +209,68 @@ class FieldCollation(object):
         self._vector_dims_shape = dims_shape
         self._primary_dimension_elements = primary_elements
         self._element_arrays_and_dims = vector_element_arrays_and_dims
+
+        # Do a fast low-level equivalence check on all the header words we
+        # think should *not* vary within a phenomenon
+        _check_all_scalar_words_equal(self.fields)
+
         # Do all this only once.
         self._structure_calculated = True
+
+
+# Whether we have initialised the PP indices global variables.
+# A global flag provides a minimum-time-overhead test to initialise these
+# only once, when they are first needed.
+_PP_INDS_FETCHED = False
+
+
+def _fetch_pp_inds():
+    """Setup the PP indices global variables."""
+    # We define global variables to encode fast access to specific PP header
+    # words, because this method provides the fastest access.
+    # Awkwardly, we must defer setting these up, to avoid circular imports.
+    import iris.fileformats.pp as ifpp
+    # Get a dictionary lookup version of pp-header
+    # N.B. use version 3 -- version does not affect the ones we need.
+    hdr = dict(ifpp.UM_HEADER_3)
+
+    # Record the header indices of specific words for fast access by the
+    # phenomenon collation function.
+    global _PP_LBUSER4_INDEX, _PP_LBPROC_INDEX, _PP_LBUSER7_INDEX
+    _PP_LBUSER4_INDEX = hdr['lbuser'][3] - ifpp.UM_TO_PP_HEADER_OFFSET
+    _PP_LBPROC_INDEX = hdr['lbproc'][0] - ifpp.UM_TO_PP_HEADER_OFFSET
+    _PP_LBUSER7_INDEX = hdr['lbuser'][6] - ifpp.UM_TO_PP_HEADER_OFFSET
+
+    # Record which header indices "ought" to be the same throughout a collated
+    # phenomenon
+    global _PP_STATIC_NAMES_AND_INDICES, _PP_STATIC_INDICES
+    _PP_STATIC_NAMES_AND_INDICES = [
+        # Likely problems
+        ('lbuser', 4),  # pseudo-level
+        # Less likely problems
+        ('lbrsvd', 3),  # realisation
+        ('lbfc', None),  # alternative phenom coding
+        ('lbexp', None),  # experiment
+        # Encoding types
+        ('lbtim', None),  # time coding + period type
+        ('lbcode', None),  # grid type
+        ('lbvc', None), #vertical coordinate type
+        ('lbhem', None),  # hemisphere
+        ('lbproj', None),  # map projection
+        ('bplat', None),  # rotated pole
+        ('bplon', None),  # rotated pole
+        ('bgor', None),  # rotated pole
+        # Stable data aspects
+        ('lbrow', None),  # field dims
+        ('lbnpt', None),  # field dims
+        # Unknown
+        ('lbrvc', None),  # ??
+        ('lbtyp', None),  # ??
+        ]
+    _PP_STATIC_INDICES = [hdr[name][ind or 0] - ifpp.UM_TO_PP_HEADER_OFFSET
+                          for name, ind in _PP_STATIC_NAMES_AND_INDICES]
+    # Record that the deferred init is done.
+    _PP_INDS_FETCHED = True
 
 
 def _um_collation_key_function(field):
@@ -221,7 +281,58 @@ def _um_collation_key_function(field):
     'phenomenon', as described for :meth:`group_structured_fields`.
 
     """
-    return (field.lbuser[3], field.lbproc, field.lbuser[6])
+    result = (field.lbuser[3], int(field.lbproc), field.lbuser[6])
+
+    if not _PP_INDS_FETCHED:
+        # A global flag provides the minimum-time-overhead means of setting up
+        # the PP access indices only once, when we first need them.
+        _fetch_pp_inds()
+
+    # Use raw header access for speed.
+    test = (field._raw_header[_PP_LBUSER4_INDEX],
+            field._raw_header[_PP_LBPROC_INDEX],
+            field._raw_header[_PP_LBUSER7_INDEX]
+            )
+    assert test == result
+
+    return result
+
+
+def _check_all_scalar_words_equal(fields):
+    """
+    Check that key header words are the same throughout a list of fields.
+
+    The header words are accessed from the raw headers for speed.
+
+    """
+    # Which words to tested is defined by a global variable.
+    # This has deferred initialisation, because it needs a deferred import.
+    if not _PP_INDS_FETCHED:
+        # A global flag provides the minimum-time-overhead means of setting up
+        # the PP access indices only once, when we first need them.
+        _fetch_pp_inds()
+
+    # Uses raw header access for speed.
+    mechanism_1 = True
+    if mechanism_1:
+        values = np.array([[field._raw_header[ind]
+                            for ind in _PP_STATIC_INDICES]
+                           for field in fields])
+    else:
+        # Alternative mechanism...
+        values = np.array([field._raw_header for field in fields])
+        values = values[:, _PP_STATIC_INDICES]
+
+    all_same = np.all(values[1:] == values[0])
+    if not all_same:
+        msg = 'Phenomenon fields have different header elements:'
+        for ind, (name, array_ind) in enumerate(_PP_STATIC_NAMES_AND_INDICES):
+            name = (name if array_ind is None else
+                    '{}{}'.format(name, array_ind+1))
+            element_values_set = set(values[:, ind])
+            if len(element_values_set) > 1:
+                msg += '\n {} values : {}'.format(name, tuple(element_values_set))
+        raise ValueError(msg)
 
 
 def group_structured_fields(field_iterator):
