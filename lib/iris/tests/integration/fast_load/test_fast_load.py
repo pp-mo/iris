@@ -35,12 +35,13 @@ import numpy as np
 import six
 
 import iris.coords
-from iris.coords import DimCoord, AuxCoord
+from iris.coords import DimCoord, AuxCoord, CellMethod
 from iris.coord_systems import GeogCS
 from iris.cube import Cube, CubeList
+from iris.exceptions import IgnoreCubeException
 from iris.fileformats.pp import EARTH_RADIUS, STASH
 
-from iris import load as iris_load
+import iris
 from iris.fileformats.um import structured_um_loading
 
 
@@ -79,25 +80,61 @@ class Mixin_FieldTest(object):
         # Return data from "iris.load", using either 'normal' or 'fast' method
         # as selected by the test class.
         if self.load_type == 'iris':
-            return iris_load(*args, **kwargs)
+            return iris.load(*args, **kwargs)
         elif self.load_type == 'fast':
             with structured_um_loading():
-                return iris_load(*args, **kwargs)
+                return iris.load(*args, **kwargs)
+
+    def load_cube_function(self, *args, **kwargs):
+        # Return data from "iris.load_cube".
+        if self.load_type == 'iris':
+            return iris.load_cube(*args, **kwargs)
+        elif self.load_type == 'fast':
+            with structured_um_loading():
+                return iris.load_cube(*args, **kwargs)
+
+    def load_cubes_function(self, *args, **kwargs):
+        # Return data from "iris.load_cubes".
+        if self.load_type == 'iris':
+            return iris.load_cubes(*args, **kwargs)
+        elif self.load_type == 'fast':
+            with structured_um_loading():
+                return iris.load_cubes(*args, **kwargs)
+
+    def load_raw_function(self, *args, **kwargs):
+        # Return data from "iris.load_raw".
+        if self.load_type == 'iris':
+            return iris.load_raw(*args, **kwargs)
+        elif self.load_type == 'fast':
+            with structured_um_loading():
+                return iris.load_raw(*args, **kwargs)
 
     # Reference values for making coordinate contents.
     time_unit = 'hours since 1970-01-01'
     period_unit = 'hours'
-    time_values = 24.0 * np.arange(5)
-    height_values = [100.0, 200.0, 300.0, 400.0]
-    pressure_values = [300.0, 500.0, 850.0, 1000.0]
-    # NOTE: in order to write/readback as identical, these test phenomena
-    # settings also provide the canonical unit and a matching STASH attribute.
+    time_values = 24.0 * np.arange(10)
+    height_values = 100.0 * np.arange(1, 11)
+    pressure_values = [100.0, 150.0, 200.0, 250.0, 300.0, 500.0, 850.0, 1000.0]
+
+    # Phenomenon test values.
+    # NOTE: in order to write/readback as identical, these include the
+    # canonical unit and a matching STASH attribute.
     # These could in principle be looked up, but it's a bit awkward.
     phenomena = [
         ('air_temperature', 'K', 'm01s01i004'),
         ('x_wind', 'm s-1', 'm01s00i002'),
         ('y_wind', 'm s-1', 'm01s00i003'),
         ('specific_humidity', 'kg kg-1', 'm01s00i010'),
+        ]
+
+    # Cell method test values.
+    # NOTE: if you add an *interval* to any of these cell-methods, it is not
+    # saved into the PP file (?? or maybe not loaded back again ??).
+    # This could be a PP save/load bug, or maybe just because no bounds ??
+    cell_method_values = [
+        CellMethod('mean', 'time'),
+        CellMethod('maximum', 'time'),
+        CellMethod('minimum', 'time'),
         ]
 
     def fields(self, c_t=None, cft=None, ctp=None,
@@ -203,6 +240,9 @@ class Mixin_FieldTest(object):
             for coord in coords:
                 if coord:
                     coord.rename(name)
+                    # Also fix heights to match what comes from a PP file.
+                    if name == 'height':
+                        coord.attributes['positive'] = 'up'
             return coords
 
         def add_arg_coords(arg, name, unit, vals=None):
@@ -218,24 +258,23 @@ class Mixin_FieldTest(object):
         add_arg_coords(c_h, 'height', 'm', self.height_values)
         add_arg_coords(c_p, 'pressure', 'hPa', self.pressure_values)
 
+        # Add cell methods as required.
+        methods = arg_vals(mmm, self.cell_method_values)
+        for cube, method in zip(cubes, methods):
+            if method:
+                cube.add_cell_method(method)
+
         return cubes
 
 
 class MixinBasic(Mixin_FieldTest):
-    # A set of tests that can be applied to *either* standard iris load
-    # functions, for confirmation of test results, or to fast-load.
-    # "Real" tests for each interface inherit this.
-
-    def _debug(self, expected, results):
-        def pcubes(name, cubes):
-            print('\n\n{}:\n'.format(name), cubes)
-            for i, cube in enumerate(cubes):
-                print('@{}'.format(i))
-                print(cube)
-        pcubes('expected', expected)
-        pcubes('results', results)
+    # A mixin of tests that can be applied to *either* standard or fast load.
+    # "Real" test classes inherit this + define 'self.load_type'.
+    #
+    # Basic functional tests.
 
     def test_basic(self):
+        # Show that basic load merging works.
         flds = self.fields(c_t='123', cft='000', ctp='123', c_p=0)
         file = self.save_fieldcubes(flds)
         results = self.load_function(file)
@@ -243,6 +282,7 @@ class MixinBasic(Mixin_FieldTest):
         self.assertEqual(results, expected)
 
     def test_phenomena(self):
+        # Show that different phenomena are merged into distinct cubes.
         flds = self.fields(c_t='1122', phn='0101')
         file = self.save_fieldcubes(flds)
         results = self.load_function(file)
@@ -288,17 +328,18 @@ class MixinBasic(Mixin_FieldTest):
         self.assertEqual(results, expected)
 
     def test_cross_file_concatenate(self):
-        per_file_cubes = [self.fields(c_t=times)
-                          for times in ('12', '34')]
-        files = [self.save_fieldcubes(flds)
-                 for flds in per_file_cubes]
-        results = self.load_function(files)
-        expected = CubeList(fld_cube
-                            for cubes in per_file_cubes
-                            for fld_cube in cubes).merge()
+        # Combine vector dimensions (i.e. concatenate) across multiple files.
+        fldset_1 = self.fields(c_t='12')
+        fldset_2 = self.fields(c_t='34')
+        file_1 = self.save_fieldcubes(fldset_1)
+        file_2 = self.save_fieldcubes(fldset_2)
+        results = self.load_function((file_1, file_2))
+        expected = CubeList(fldset_1 + fldset_2).merge()
         self.assertEqual(results, expected)
 
     def test_FAIL_scalar_vector_concatenate(self):
+        # Structured load can produce a scalar coordinate from one file, and a
+        # matching vector one from another file, but these won't "combine".
         # We'd really like to fix this one...
         single_timepoint_fld, = self.fields(c_t='1')
         multi_timepoint_flds = self.fields(c_t='23')
@@ -313,24 +354,262 @@ class MixinBasic(Mixin_FieldTest):
             expected = CubeList(multi_timepoint_flds +
                                 [single_timepoint_fld]).merge()
         else:
+            # This is what we ACTUALLY get at present.
+            # It can't combine the scalar and vector time coords.
+            expected = CubeList([CubeList(multi_timepoint_flds).merge_cube(),
+                                 single_timepoint_fld])
             # NOTE: in this case, we need to sort the results to ensure a
             # repeatable ordering, because ??somehow?? the random temporary
             # directory name affects the ordering of the cubes in the result !
             results = CubeList(sorted(results,
                                       key=lambda cube: cube.shape))
-            # This is what we ACTUALLY get at present.
-            # It can't combine the scalar and vector time coords.
-            expected = CubeList([CubeList(multi_timepoint_flds).merge_cube(),
-                                 single_timepoint_fld])
+
+        self.assertEqual(results, expected)
+
+    def test_cell_method(self):
+        # Check that cell methods (i.e. LBPROC values) produce distinct
+        # phenomena.
+        flds = self.fields(c_t='000111222',
+                           mmm='-01-01-01')
+        file = self.save_fieldcubes(flds)
+        results = self.load_function(file)
+        expected = CubeList(CubeList(flds[i_start::3]).merge_cube()
+                            for i_start in range(3))
+        self.assertEqual(results, expected)
+
+
+class MixinCallDetails(Mixin_FieldTest):
+    # A mixin of tests that can be applied to *either* standard or fast load.
+    # "Real" test classes inherit this + define 'self.load_type'.
+    #
+    # Tests for different load calls and load-call arguments.
+
+    def test_stash_constraint(self):
+        # Check that an attribute constraint functions correctly.
+        # Note: this is a special case in "fileformats.pp".
+        flds = self.fields(c_t='1122', phn='0101')
+        file = self.save_fieldcubes(flds)
+        airtemp_flds = [fld for fld in flds
+                        if fld.name() == 'air_temperature']
+        stash_attribute = airtemp_flds[0].attributes['STASH']
+        results = self.load_function(
+            file,
+            iris.AttributeConstraint(STASH=stash_attribute))
+        expected = CubeList(airtemp_flds).merge()
+        self.assertEqual(results, expected)
+
+    def test_ordinary_constraint(self):
+        # Check that a 'normal' constraint functions correctly.
+        # Note: *should* be independent of structured loading.
+        flds = self.fields(c_h='0123')
+        file = self.save_fieldcubes(flds)
+        height_constraint = iris.Constraint(
+            height=lambda h: 150.0 < h < 350.0)
+        results = self.load_function(file, height_constraint)
+        expected = CubeList(flds[1:3]).merge()
+        self.assertEqual(results, expected)
+
+    def test_callback(self):
+        # Use 2 timesteps each of (air-temp on height) and (rh on pressure).
+        flds = self.fields(c_t='0011',
+                           phn='0303',
+                           c_h='0-1-',
+                           c_p='-2-3')
+        file = self.save_fieldcubes(flds)
+
+        if self.load_type == 'iris':
+            def callback(cube, field, filename):
+                self.assertEqual(filename, file)
+                lbvc = field.lbvc
+                if lbvc == 1:
+                    # reject the height level data (accept only pressure).
+                    raise IgnoreCubeException()
+                else:
+                    # Record the LBVC value.
+                    cube.attributes['LBVC'] = lbvc
+        else:
+            def callback(cube, collation, filename):
+                self.assertEqual(filename, file)
+                lbvcs = [fld.lbvc
+                         for fld in collation.fields]
+                if lbvcs[0] == 1:
+                    # reject the height level data (accept only pressure).
+                    raise IgnoreCubeException()
+                else:
+                    # Record the LBVC values.
+                    cube.attributes['A_LBVC'] = lbvcs
+
+        results = self.load_function(file, callback=callback)
+
+        # Make an 'expected' from selected fields, with the expected attribute.
+        expected = CubeList([flds[1], flds[3]]).merge()
+        if self.load_type == 'iris':
+            expected[0].attributes['LBVC'] = 8
+        else:
+            expected[0].attributes['A_LBVC'] = [8, 8]
+
+        self.assertEqual(results, expected)
+
+    def test_load_cube(self):
+        flds = self.fields(c_t='123', cft='000', ctp='123', c_p=0)
+        file = self.save_fieldcubes(flds)
+        results = self.load_cube_function(file)
+        expected = CubeList(flds).merge_cube()
+        self.assertEqual(results, expected)
+
+    def test_load_cubes(self):
+        flds = self.fields(c_h='0123')
+        file = self.save_fieldcubes(flds)
+        height_constraints = [
+            iris.Constraint(height=300.0),
+            iris.Constraint(height=lambda h: 150.0 < h < 350.0),
+            iris.Constraint('air_temperature')]
+        results = self.load_cubes_function(file, height_constraints)
+        expected = CubeList([flds[2],
+                             CubeList(flds[1:3]).merge_cube(),
+                             CubeList(flds).merge_cube()])
+        self.assertEqual(results, expected)
+
+    def test_load_raw(self):
+        fldset_1 = self.fields(c_t='015', phn='001')
+        fldset_2 = self.fields(c_t='234')
+        file_1 = self.save_fieldcubes(fldset_1)
+        file_2 = self.save_fieldcubes(fldset_2)
+        results = self.load_raw_function((file_1, file_2))
+        if self.load_type == 'iris':
+            # Each 'raw' cube is just one field.
+            expected = CubeList(fldset_1 + fldset_2)
+        else:
+            # 'Raw' cubes have combined (vector) times within each file.
+            # The 'other' phenomenon appears seperately.
+            expected = CubeList([
+                CubeList(fldset_1[:2]).merge_cube(),
+                CubeList(fldset_2).merge_cube(),
+                fldset_1[2],
+                ])
+
+        # Again here, the order of these results is not stable :
+        # It varies with random characters in the temporary filepath.
+        #
+        # *****************************************************************
+        # *** Here, this is clearly ALSO the case for "standard" loads. ***
+        # *****************************************************************
+        #
+        # E.G. run "test_fast_load.py -v TestCallDetails__Iris.test_load_raw" :
+        # If you remove the sort operations, this fails "sometimes".
+        #
+        # To fix this, sort both expected and results by (first) timepoint
+        # - for which purpose we made all the time values different.
+
+        def timeorder(cube):
+            return cube.coord('time').points[0]
+
+        expected = sorted(expected, key=timeorder)
+        results = sorted(results, key=timeorder)
 
         self.assertEqual(results, expected)
 
 
-class TestBasicIris(MixinBasic, tests.IrisTest):
+class MixinDimsAndOrdering(Mixin_FieldTest):
+    # A mixin of tests that can be applied to *either* standard or fast load.
+    # "Real" test classes inherit this + define 'self.load_type'.
+    #
+    # Tests for multidimensional results and dimension orderings.
+
+    def test_multidim(self):
+        # Check that a full 2-phenom * 2d structure all works properly.
+        flds = self.fields(c_t='00001111',
+                           c_h='00110011',
+                           phn='01010101')
+        file = self.save_fieldcubes(flds)
+        results = self.load_function(file)
+        expected = CubeList(flds).merge()
+        self.assertEqual(results, expected)
+
+    def test_odd_order(self):
+        # Show that an erratic interleaving of phenomena fields still works.
+        # N.B. field sequences *within* each phenomenon are properly ordered.
+        flds = self.fields(c_t='00010111',
+                           c_h='00101101',
+                           phn='01001011')
+        file = self.save_fieldcubes(flds)
+        results = self.load_function(file)
+        expected = CubeList(flds).merge()
+        self.assertEqual(results, expected)
+
+    def test_v_t_order(self):
+        # With height varying faster than time, first dimension is time,
+        # which matches the 'normal' load behaviour.
+        flds = self.fields(c_t='000111',
+                           c_h='012012')
+        file = self.save_fieldcubes(flds)
+        results = self.load_function(file)
+        expected = CubeList(flds).merge()
+        # Order is (t, h, y, x), which is "standard".
+        self.assertEqual(expected[0].coord_dims('time'), (0,))
+        self.assertEqual(expected[0].coord_dims('height'), (1,))
+        self.assertEqual(results, expected)
+
+    def test_t_v_order(self):
+        # With time varying faster than height, first dimension is height,
+        # which does not match the 'normal' load.
+        flds = self.fields(c_t='010101',
+                           c_h='001122')
+        file = self.save_fieldcubes(flds)
+        results = self.load_function(file)
+        expected = CubeList(flds).merge()
+        if self.load_type == 'iris':
+            # Order is (t, h, y, x), which is "standard".
+            self.assertEqual(results[0].coord_dims('time'), (0,))
+            self.assertEqual(results[0].coord_dims('height'), (1,))
+        else:
+            # Order is (h, t, y, x), which is *not* "standard".
+            self.assertEqual(results[0].coord_dims('time'), (1,))
+            self.assertEqual(results[0].coord_dims('height'), (0,))
+            expected[0].transpose((1, 0, 2, 3))
+        self.assertEqual(results, expected)
+
+    def test_missing_combination(self):
+        # A case where one field is 'missing' to make a 2d result.
+        flds = self.fields(c_t='00011',
+                           c_h='01202')
+        file = self.save_fieldcubes(flds)
+        results = self.load_function(file)
+        expected = CubeList(flds).merge()
+        self.assertEqual(expected[0].coord_dims('time'), (0,))
+        self.assertEqual(expected[0].coord_dims('height'), (0,))
+        if self.load_type == 'fast':
+            # Something a bit weird happens to the 'height' coordinate in this
+            # case (and not for standard load).
+            for cube in expected:
+                cube.coord('height').points = np.array(
+                    cube.coord('height').points,
+                    dtype=np.float32)
+                cube.coord('height').attributes = {}
+        self.assertEqual(results, expected)
+
+
+class TestBasic__Iris(MixinBasic, tests.IrisTest):
     load_type = 'iris'
 
 
-class TestBasicFast(MixinBasic, tests.IrisTest):
+class TestBasic__Fast(MixinBasic, tests.IrisTest):
+    load_type = 'fast'
+
+
+class TestCallDetails__Iris(MixinCallDetails, tests.IrisTest):
+    load_type = 'iris'
+
+
+class TestCallDetails__Fast(MixinCallDetails, tests.IrisTest):
+    load_type = 'fast'
+
+
+class TestDimsAndOrdering__Iris(MixinDimsAndOrdering, tests.IrisTest):
+    load_type = 'iris'
+
+
+class TestDimsAndOrdering__Fast(MixinDimsAndOrdering, tests.IrisTest):
     load_type = 'fast'
 
 
