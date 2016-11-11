@@ -210,9 +210,9 @@ class FieldCollation(object):
         self._primary_dimension_elements = primary_elements
         self._element_arrays_and_dims = vector_element_arrays_and_dims
 
-        # Do a fast low-level equivalence check on all the header words we
-        # think should *not* vary within a phenomenon
-        _check_all_scalar_words_equal(self.fields)
+#        # Do a fast low-level equivalence check on all the header words we
+#        # think should *not* vary within a phenomenon
+#        _check_all_scalar_words_equal(self.fields)
 
         # Do all this only once.
         self._structure_calculated = True
@@ -230,6 +230,7 @@ def _fetch_pp_inds():
     # words, because this method provides the fastest access.
     # Awkwardly, we must defer setting these up, to avoid circular imports.
     import iris.fileformats.pp as ifpp
+
     # Get a dictionary lookup version of pp-header
     # N.B. use version 3 -- version does not affect the ones we need.
     hdr = dict(ifpp.UM_HEADER_3)
@@ -237,18 +238,24 @@ def _fetch_pp_inds():
     # Record the header indices of specific words for fast access by the
     # phenomenon collation function.
     global _PP_LBUSER4_INDEX, _PP_LBPROC_INDEX, _PP_LBUSER7_INDEX
-    _PP_LBUSER4_INDEX = hdr['lbuser'][3] - ifpp.UM_TO_PP_HEADER_OFFSET
     _PP_LBPROC_INDEX = hdr['lbproc'][0] - ifpp.UM_TO_PP_HEADER_OFFSET
+    # LBUSER4 is the minor stash word
+    _PP_LBUSER4_INDEX = hdr['lbuser'][3] - ifpp.UM_TO_PP_HEADER_OFFSET
+    # LBUSER5 is a pseudo-level code
+    _PP_LBUSER5_INDEX = hdr['lbuser'][4] - ifpp.UM_TO_PP_HEADER_OFFSET
+    # LBUSER7 is the major stash word
     _PP_LBUSER7_INDEX = hdr['lbuser'][6] - ifpp.UM_TO_PP_HEADER_OFFSET
 
-    # Record which header indices "ought" to be the same throughout a collated
-    # phenomenon
+    # Define which header words we think "ought" to be the same throughout a
+    # collated phenomenon.
     global _PP_STATIC_NAMES_AND_INDICES, _PP_STATIC_INDICES
+
+    # Record the 'static' header words, as found in the PP header definition.
     _PP_STATIC_NAMES_AND_INDICES = [
-        # Likely problems
-        ('lbuser', 4),  # pseudo-level
+#        # Likely problems
+#        ('lbuser', 4),  # pseudo-level = LBUSER5
         # Less likely problems
-        ('lbrsvd', 3),  # realisation
+        ('lbrsvd', 3),  # realisation = LBRSVD4
         ('lbfc', None),  # alternative phenom coding
         ('lbexp', None),  # experiment
         # Encoding types
@@ -267,9 +274,12 @@ def _fetch_pp_inds():
         ('lbrvc', None),  # ??
         ('lbtyp', None),  # ??
         ]
+
+    # Record the corresponding raw header indices, for fast access.
     _PP_STATIC_INDICES = [hdr[name][ind or 0] - ifpp.UM_TO_PP_HEADER_OFFSET
                           for name, ind in _PP_STATIC_NAMES_AND_INDICES]
-    # Record that the deferred init is done.
+
+    # Record that our deferred init is done.
     _PP_INDS_FETCHED = True
 
 
@@ -281,19 +291,22 @@ def _um_collation_key_function(field):
     'phenomenon', as described for :meth:`group_structured_fields`.
 
     """
-    result = (field.lbuser[3], int(field.lbproc), field.lbuser[6])
+    return (field.lbuser[3], field.lbproc, field.lbuser[6])
 
-    if not _PP_INDS_FETCHED:
-        # A global flag provides the minimum-time-overhead means of setting up
-        # the PP access indices only once, when we first need them.
-        _fetch_pp_inds()
+#    # Use INT lbproc (should be faster)
+#    result = (field.lbuser[3], int(field.lbproc), field.lbuser[6])
 
-    # Use raw header access for speed.
-    test = (field._raw_header[_PP_LBUSER4_INDEX],
-            field._raw_header[_PP_LBPROC_INDEX],
-            field._raw_header[_PP_LBUSER7_INDEX]
-            )
-    assert test == result
+#    if not _PP_INDS_FETCHED:
+#        # A global flag provides the minimum-time-overhead means of setting up
+#        # the PP access indices only once, when we first need them.
+#        _fetch_pp_inds()
+#
+#    # Use raw header access for speed.
+#    result = (field._raw_header[_PP_LBUSER4_INDEX],  # minor stash word
+#              field._raw_header[_PP_LBPROC_INDEX],  # statistics
+#              field._raw_header[_PP_LBUSER7_INDEX],  # major stash word
+##              field._raw_header[_PP_LBUSER5_INDEX],  # pseudo-level number
+#              )
 
     return result
 
