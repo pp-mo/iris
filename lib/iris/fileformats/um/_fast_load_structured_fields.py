@@ -219,20 +219,24 @@ class FieldCollation(object):
 
 
 # Whether we have initialised the PP indices global variables.
-# A global flag provides a minimum-time-overhead test to initialise these
-# only once, when they are first needed.
 _PP_INDS_FETCHED = False
+# Note: used to initialise these only once, when they are first needed.
+# A global flag provides a minimum-time-overhead test for it.
 
 
 def _fetch_pp_inds():
-    """Setup the PP indices global variables."""
-    # We define global variables to encode fast access to specific PP header
-    # words, because this method provides the fastest access.
+    """
+    Setup the PP indices global variables.
+
+    Set global variables to the raw-header indices of specific PP header words,
+    because this method provides the fastest access.
+
+    """
     # Awkwardly, we must defer setting these up, to avoid circular imports.
     import iris.fileformats.pp as ifpp
 
-    # Get a dictionary lookup version of pp-header
-    # N.B. use version 3 -- version does not affect the ones we need.
+    # Get a dictionary version of the pp-header words lookup.
+    # N.B. use header version 3 -- version is not relevant to the ones we want.
     hdr = dict(ifpp.UM_HEADER_3)
 
     # Record the header indices of specific words for fast access by the
@@ -243,23 +247,26 @@ def _fetch_pp_inds():
     # LBUSER4 is the minor stash word
     _PP_LBUSER4_INDEX = hdr['lbuser'][3] - ifpp.UM_TO_PP_HEADER_OFFSET
     # LBUSER5 is a pseudo-level code
+    # NOTE: **this is a kludge** lbuser5 really needs proper handling as a
+    # vector coordinate.  Instead, this approach treats fields with different
+    # pseudo-levels like separate phenomena (and hopes to merge them later).
     _PP_LBUSER5_INDEX = hdr['lbuser'][4] - ifpp.UM_TO_PP_HEADER_OFFSET
     # LBUSER7 is the major stash word
     _PP_LBUSER7_INDEX = hdr['lbuser'][6] - ifpp.UM_TO_PP_HEADER_OFFSET
 
-    # Define which header words we think "ought" to be the same throughout a
-    # collated phenomenon.
+    # Work out the indices of header words which we think "ought" to be the
+    # same throughout a collated phenomenon.
     global _PP_STATIC_NAMES_AND_INDICES, _PP_STATIC_INDICES
 
-    # Record the 'static' header words, as found in the PP header definition.
+    # Define 'static' element names and their sub-indices.
+    # Note: this list is a result of careful analysis, as the UM documentation
+    # does not provide definitive information on usage of all possible words.
     _PP_STATIC_NAMES_AND_INDICES = [
-        #   # Likely problems
-        #   ('lbuser', 4),  # pseudo-level = LBUSER5
-        # Less likely problems
-        ('lbrsvd', 3),  # realisation = LBRSVD4
-        ('lbfc', None),  # alternative phenom coding
-        ('lbexp', None),  # experiment
-        # Encoding types
+        # Less likely problems : not *expected* to vary within a phenomenon.
+        ('lbrsvd', 3),  # LBRSVD4 = realisation
+        ('lbfc', None),  # phenomenon coding in absence of normal STASH coding
+        ('lbexp', None),  # experiment number
+        # Encoding types.
         ('lbtim', None),  # time coding + period type
         ('lbcode', None),  # grid type
         ('lbvc', None),  # vertical coordinate type
@@ -268,10 +275,10 @@ def _fetch_pp_inds():
         ('bplat', None),  # rotated pole
         ('bplon', None),  # rotated pole
         ('bgor', None),  # rotated pole
-        # Stable data aspects
+        # Data dimensions, expected to be stable.
         ('lbrow', None),  # field dims
         ('lbnpt', None),  # field dims
-        # Unknown
+        # Possibly-dangerous words with ill-defined usage.
         ('lbrvc', None),  # ??
         ('lbtyp', None),  # ??
         ]
@@ -292,11 +299,6 @@ def _um_collation_key_function(field):
     'phenomenon', as described for :meth:`group_structured_fields`.
 
     """
-#    return (field.lbuser[3], field.lbproc, field.lbuser[6])
-
-#    # Use INT lbproc (should be faster)
-#    result = (field.lbuser[3], int(field.lbproc), field.lbuser[6])
-
     if not _PP_INDS_FETCHED:
         # A global flag provides the minimum-time-overhead means of setting up
         # the PP access indices only once, when we first need them.
@@ -306,7 +308,8 @@ def _um_collation_key_function(field):
     result = (field._raw_header[_PP_LBUSER4_INDEX],  # minor stash word
               field._raw_header[_PP_LBPROC_INDEX],  # statistics
               field._raw_header[_PP_LBUSER7_INDEX],  # major stash word
-              field._raw_header[_PP_LBUSER5_INDEX],  # pseudo-level number
+              field._raw_header[_PP_LBUSER4_INDEX],  # pseudo-level
+              # Note: this last is a temporary kludge, as noted elsewhere.
               )
 
     return result
@@ -319,25 +322,16 @@ def _check_all_scalar_words_equal(fields):
     The header words are accessed from the raw headers for speed.
 
     """
-    # Which words to tested is defined by a global variable.
-    # This has deferred initialisation, because it needs a deferred import.
+    # Ensure initialisation of the global defining which indices to check.
     if not _PP_INDS_FETCHED:
         # A global flag provides the minimum-time-overhead means of setting up
         # the PP access indices only once, when we first need them.
         _fetch_pp_inds()
 
-    # Uses raw header access for speed.
-    mechanism_1 = True
-    if mechanism_1:
-        # THIS IS BETTER : no slower (it seems), and uses less memory.
-        values = np.array([[field._raw_header[ind]
-                            for ind in _PP_STATIC_INDICES]
-                           for field in fields])
-    else:
-        # Alternative mechanism...
-        values = np.array([field._raw_header for field in fields])
-        values = values[:, _PP_STATIC_INDICES]
-
+    # Use raw header access for speed.
+    values = np.array([[field._raw_header[ind]
+                        for ind in _PP_STATIC_INDICES]
+                       for field in fields])
     all_same = np.all(values[1:] == values[0])
     if not all_same:
         msg = 'Phenomenon fields have different header elements:'
@@ -362,7 +356,8 @@ def group_structured_fields(field_iterator):
         A source of PP or FF fields.  N.B. order is significant.
 
     The function sorts and collates on phenomenon-relevant metadata only,
-    defined as the field components: 'lbuser[3]', 'lbuser[6]' and 'lbproc'.
+    defined as the field components: 'lbuser[3]' (stash), 'lbuser[6]' (model),
+    and 'lbproc' (statistics type).
     Each distinct combination of these defines a specific phenomenon (or
     statistical aggregation of one), and those fields appear as a single
     iteration result.
