@@ -623,6 +623,34 @@ class MixinFailCases(object):
 
         self.assertEqual(results, expected)
 
+    def test_FAIL_varying_lbvc(self):
+        # Combine data on height-levels with data on pressure, for the same
+        # phenomenon.  This causes LBVC to vary within a phenomenon, which
+        # structured loading does not anticipate...
+        flds = self.fields(c_t='0011',
+                           c_h='0-1-',
+                           c_p='-2-3')
+        file = self.save_fieldcubes(flds)
+        results = iris.load(file)
+        if not self.do_fast_loads:
+            expected = CubeList(flds).merge()
+            self.assertEqual(results, expected)
+        else:
+            # The variation in LBVC is not captured.
+            # We get a single cube with four height *and* pressure points
+            # mapped onto a common dimension.
+            self.assertEqual(len(results), 1)
+            cube = results[0]
+            self.assertEqual(cube.shape, (4, 3, 5))
+            self.assertEqual(cube.coords(dimensions=0, dim_coords=True),
+                             [])
+            self.assertEqual(sorted(co.name()
+                                    for co in cube.coords(dimensions=0)),
+                             ['height', 'time'])
+            self.assertArrayAlmostEqual(cube.coord('height').points,
+                                        [100.0, 200.0, 200.0, 250.0])
+            self.assertArrayAlmostEqual(cube.coord('time').points,
+                                        [0.0, 0.0, 24.0, 24.0])
 
 class TestBasic__Iris(Mixin_FieldTest, MixinBasic, tests.IrisTest):
     # Finally, an actual test-class (unittest.TestCase) :
