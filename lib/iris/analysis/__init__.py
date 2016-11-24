@@ -2340,6 +2340,7 @@ class Nearest(object):
         return RectilinearRegridder(src_grid, target_grid, 'nearest',
                                     self.extrapolation_mode)
 
+
 class UnstructuredNearest(object):
     """
     This is a nearest-neighbour interpolation and regridding scheme for
