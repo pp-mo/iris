@@ -165,9 +165,20 @@ class TestTrajectory(tests.IrisTest):
                 ('grid_longitude', [31, 32, 33, 34]))
         xsec = iris.analysis.trajectory.interpolate(cube, traj, method='nearest')
 
-        # Check that creating the trajectory hasn't led to the original
-        # data being loaded.
-        self.assertTrue(cube.has_lazy_data())
+        #
+        # NOTE: this is temporarily disabled, since we changed the code to
+        # fetch all data, because our unstructured-regrid is much faster that
+        # way (~3x).
+        # This is subject to review :  There *is* a problem with fetching all
+        # the data, which we may need to resolve, but we probably **don't**
+        # want to construct a new cube for every extracted point, as the
+        # original code did.
+        # I think we *could* have the best of both, but only at the cost of
+        # making the code biggus-aware.
+        #
+        #    # Check that creating the trajectory hasn't led to the original
+        #    # data being loaded.
+        #    self.assertTrue(cube.has_lazy_data())
         self.assertCML([cube, xsec], ('trajectory', 'hybrid_height.cml'))
 
 

@@ -237,27 +237,42 @@ def interpolate(cube, sample_points, method=None):
     # Use a cache with _nearest_neighbour_indices_ndcoords()
     cache = {}
 
-    data = new_cube.data
+    new_data = new_cube.data
+    if method == "nearest":
+        # NOTE: changed for speed in this case, so for now, we *are* fetching
+        # all the source data.
+        old_data = cube.data
+        old_and_new_coords = [
+            (coord, new_cube.coord(coord.name()))
+            for coord in cube.dim_coords + cube.aux_coords
+            if not squish_my_dims.isdisjoint(cube.coord_dims(coord))]
     for i in range(trajectory_size):
         point = [(coord, values[i]) for coord, values in sample_points]
 
         if method in ["linear", None]:
             column = linear_regrid(cube, point)
-            data[..., i] = column.data
+            new_data[..., i] = column.data
+            # Fill in the empty squashed (non derived) coords.
+            for column_coord in column.dim_coords + column.aux_coords:
+                src_dims = cube.coord_dims(column_coord)
+                if not squish_my_dims.isdisjoint(src_dims):
+                    if len(column_coord.points) != 1:
+                        msg = "Expected to find exactly one point. Found {:d}"
+                        raise Exception(msg.format(len(column_coord.points)))
+                    new_cube.coord(column_coord.name()).points[i] = \
+                        column_coord.points[0]
+
         elif method == "nearest":
             column_index = _nearest_neighbour_indices_ndcoords(cube, point, cache=cache)
-            data[..., i] = cube.data[column_index]
+            new_data[..., i] = old_data[column_index]
+            # Fill in the empty squashed (non derived) coords.
+            for old_coord, new_coord in old_and_new_coords:
+                coord_indices = tuple(
+                    [column_index[cube_dim]
+                     for cube_dim in cube.coord_dims(old_coord)])
+                new_coord.points[i] = old_coord.points[coord_indices]
 
-        column = cube[column_index]
-        # Fill in the empty squashed (non derived) coords.
-        for column_coord in column.dim_coords + column.aux_coords:
-            src_dims = cube.coord_dims(column_coord)
-            if not squish_my_dims.isdisjoint(src_dims):
-                if len(column_coord.points) != 1:
-                    raise Exception("Expected to find exactly one point. Found %d" % len(column_coord.points))
-                new_cube.coord(column_coord.name()).points[i] = column_coord.points[0]
-
-    new_cube.data = data
+    new_cube.data = new_data
 
     return new_cube
 
