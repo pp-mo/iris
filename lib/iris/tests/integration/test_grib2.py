@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,25 +17,39 @@
 """Integration tests for loading and saving GRIB2 files."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-import numpy.ma as ma
-
-from iris import FUTURE, load_cube
-
 from subprocess import check_output
 
+from cf_units import Unit
+import numpy.ma as ma
+
+import iris
 from iris import FUTURE, load_cube, save
-from iris.coords import CellMethod
+from iris.coords import CellMethod, DimCoord
 from iris.coord_systems import RotatedGeogCS
 from iris.fileformats.pp import EARTH_RADIUS as UM_DEFAULT_EARTH_RADIUS
+import iris.tests.stock as stock
 from iris.util import is_regular
+
+# Grib support is optional.
+if tests.GRIB_AVAILABLE:
+    try:
+        # Try to load the independent 'iris_grib' package.
+        from iris_grib import load_pairs_from_fields
+        from iris_grib.message import GribMessage
+    except ImportError:
+        # Try to load old inbuilt module instead.
+        from iris.fileformats.grib import load_pairs_from_fields
+        from iris.fileformats.grib.message import GribMessage
 
 
 @tests.skip_data
+@tests.skip_grib
 class TestImport(tests.IrisTest):
     def test_gdt1(self):
         with FUTURE.context(strict_grib_load=True):
@@ -62,6 +76,7 @@ class TestImport(tests.IrisTest):
 
 
 @tests.skip_data
+@tests.skip_grib
 class TestPDT8(tests.IrisTest):
     def setUp(self):
         # Load from the test file.
@@ -102,7 +117,58 @@ class TestPDT8(tests.IrisTest):
 
 
 @tests.skip_data
-class TestGDT5(tests.IrisTest):
+@tests.skip_grib
+class TestPDT11(tests.TestGribMessage):
+    def test_perturbation(self):
+        path = tests.get_data_path(('NetCDF', 'global', 'xyt',
+                                    'SMALL_hires_wind_u_for_ipcc4.nc'))
+        cube = load_cube(path)
+        # trim to 1 time and regular lats
+        cube = cube[0, 12:144, :]
+        crs = iris.coord_systems.GeogCS(6371229)
+        cube.coord('latitude').coord_system = crs
+        cube.coord('longitude').coord_system = crs
+        # add a realization coordinate
+        cube.add_aux_coord(iris.coords.DimCoord(points=1,
+                                                standard_name='realization',
+                                                units='1'))
+        with self.temp_filename('testPDT11.GRIB2') as temp_file_path:
+            iris.save(cube, temp_file_path)
+
+            # Check that various aspects of the saved file are as expected.
+            expect_values = (
+                (0, 'editionNumber',  2),
+                (3, 'gridDefinitionTemplateNumber', 0),
+                (4, 'productDefinitionTemplateNumber', 11),
+                (4, 'perturbationNumber', 1),
+                (4, 'typeOfStatisticalProcessing', 0),
+                (4, 'numberOfForecastsInEnsemble', 255))
+            self.assertGribMessageContents(temp_file_path, expect_values)
+
+
+@tests.skip_grib
+class TestPDT40(tests.IrisTest):
+    def test_save_load(self):
+        cube = stock.lat_lon_cube()
+        cube.rename('atmosphere_mole_content_of_ozone')
+        cube.units = Unit('Dobson')
+        tcoord = DimCoord(23, 'time',
+                          units=Unit('days since epoch', calendar='standard'))
+        fpcoord = DimCoord(24, 'forecast_period', units=Unit('hours'))
+        cube.add_aux_coord(tcoord)
+        cube.add_aux_coord(fpcoord)
+        cube.attributes['WMO_constituent_type'] = 0
+
+        with self.temp_filename('test_grib_pdt40.grib2') as temp_file_path:
+            save(cube, temp_file_path)
+            with FUTURE.context(strict_grib_load=True):
+                loaded = load_cube(temp_file_path)
+            self.assertEqual(loaded.attributes, cube.attributes)
+
+
+@tests.skip_data
+@tests.skip_grib
+class TestGDT5(tests.TestGribMessage):
     def test_save_load(self):
         # Load sample UKV data (variable-resolution rotated grid).
         path = tests.get_data_path(('PP', 'ukV1', 'ukVpmslont.pp'))
@@ -125,30 +191,25 @@ class TestGDT5(tests.IrisTest):
         self.assertIsInstance(x_coord.coord_system, RotatedGeogCS)
         self.assertFalse(is_regular(x_coord))
 
-        # Write to temporary file, check grib_dump output, and load back in.
+        # Write to temporary file, check that key contents are in the file,
+        # then load back in.
         with self.temp_filename('ukv_sample.grib2') as temp_file_path:
             save(cube, temp_file_path)
 
-            # Get a grib_dump of the output file.
-            dump_text = check_output(('grib_dump -O -wcount=1 ' +
-                                      temp_file_path),
-                                     shell=True)
-
             # Check that various aspects of the saved file are as expected.
-            expect_strings = (
-                'editionNumber = 2',
-                'gridDefinitionTemplateNumber = 5',
-                'Ni = {:d}'.format(cube.shape[-1]),
-                'Nj = {:d}'.format(cube.shape[-2]),
-                'shapeOfTheEarth = 1',
-                'scaledValueOfRadiusOfSphericalEarth = {:d}'.format(
-                    int(UM_DEFAULT_EARTH_RADIUS)),
-                'resolutionAndComponentFlags = 0',
-                'latitudeOfSouthernPole = -37500000',
-                'longitudeOfSouthernPole = 357500000',
-                'angleOfRotation = 0')
-            for expect in expect_strings:
-                self.assertIn(expect, dump_text)
+            expect_values = (
+                (0, 'editionNumber', 2),
+                (3, 'gridDefinitionTemplateNumber', 5),
+                (3, 'Ni', cube.shape[-1]),
+                (3, 'Nj', cube.shape[-2]),
+                (3, 'shapeOfTheEarth', 1),
+                (3, 'scaledValueOfRadiusOfSphericalEarth',
+                 int(UM_DEFAULT_EARTH_RADIUS)),
+                (3, 'resolutionAndComponentFlags', 0),
+                (3, 'latitudeOfSouthernPole', -37500000),
+                (3, 'longitudeOfSouthernPole', 357500000),
+                (3, 'angleOfRotation', 0))
+            self.assertGribMessageContents(temp_file_path, expect_values)
 
             # Load the Grib file back into a new cube.
             with FUTURE.context(strict_grib_load=True):
@@ -211,6 +272,84 @@ class TestGDT5(tests.IrisTest):
 
         # Check that main data array also matches.
         self.assertArrayAllClose(cube.data, cube_loaded_from_saved.data)
+
+
+@tests.skip_data
+@tests.skip_grib
+class TestGDT30(tests.IrisTest):
+
+    def test_lambert(self):
+        path = tests.get_data_path(('GRIB', 'lambert', 'lambert.grib2'))
+        with FUTURE.context(strict_grib_load=True):
+            cube = load_cube(path)
+        self.assertCMLApproxData(cube)
+
+
+@tests.skip_data
+@tests.skip_grib
+class TestGDT40(tests.IrisTest):
+
+    def test_regular(self):
+        path = tests.get_data_path(('GRIB', 'gaussian', 'regular_gg.grib2'))
+        with FUTURE.context(strict_grib_load=True):
+            cube = load_cube(path)
+        self.assertCMLApproxData(cube)
+
+    def test_reduced(self):
+        path = tests.get_data_path(('GRIB', 'reduced', 'reduced_gg.grib2'))
+        with FUTURE.context(strict_grib_load=True):
+            cube = load_cube(path)
+        self.assertCMLApproxData(cube)
+
+
+@tests.skip_data
+@tests.skip_grib
+class TestDRT3(tests.IrisTest):
+
+    def test_grid_complex_spatial_differencing(self):
+        path = tests.get_data_path(('GRIB', 'missing_values',
+                                    'missing_values.grib2'))
+        with FUTURE.context(strict_grib_load=True):
+            cube = load_cube(path)
+        self.assertCMLApproxData(cube)
+
+
+@tests.skip_data
+@tests.skip_grib
+class TestAsCubes(tests.IrisTest):
+    def setUp(self):
+        # Load from the test file.
+        self.file_path = tests.get_data_path(('GRIB', 'time_processed',
+                                              'time_bound.grib2'))
+
+    def test_year_filter(self):
+        msgs = GribMessage.messages_from_filename(self.file_path)
+        chosen_messages = []
+        for gmsg in msgs:
+            if gmsg.sections[1]['year'] == 1998:
+                chosen_messages.append(gmsg)
+        cubes_msgs = list(load_pairs_from_fields(chosen_messages))
+        self.assertEqual(len(cubes_msgs), 1)
+
+    def test_year_filter_none(self):
+        msgs = GribMessage.messages_from_filename(self.file_path)
+        chosen_messages = []
+        for gmsg in msgs:
+            if gmsg.sections[1]['year'] == 1958:
+                chosen_messages.append(gmsg)
+        cubes_msgs = list(load_pairs_from_fields(chosen_messages))
+        self.assertEqual(len(cubes_msgs), 0)
+
+    def test_as_pairs(self):
+        messages = GribMessage.messages_from_filename(self.file_path)
+        cubes = []
+        cube_msg_pairs = load_pairs_from_fields(messages)
+        for cube, gmsg in cube_msg_pairs:
+            if gmsg.sections[1]['year'] == 1998:
+                cube.attributes['the year is'] = gmsg.sections[1]['year']
+                cubes.append(cube)
+        self.assertEqual(len(cubes), 1)
+        self.assertEqual(cubes[0].attributes['the year is'], 1998)
 
 
 if __name__ == '__main__':

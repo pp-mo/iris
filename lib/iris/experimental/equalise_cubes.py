@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Experimental cube-adjusting functions to assist merge operations.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import numpy as np
 
@@ -39,16 +40,16 @@ def equalise_attributes(cubes):
 
     """
     # Work out which attributes are identical across all the cubes.
-    common_keys = cubes[0].attributes.keys()
+    common_keys = list(cubes[0].attributes.keys())
     for cube in cubes[1:]:
-        cube_keys = cube.attributes.keys()
+        cube_keys = list(cube.attributes.keys())
         common_keys = [
             key for key in common_keys
-            if key in cube_keys
-            and np.all(cube.attributes[key] == cubes[0].attributes[key])]
+            if (key in cube_keys and
+                np.all(cube.attributes[key] == cubes[0].attributes[key]))]
 
     # Remove all the other attributes.
     for cube in cubes:
-        for key in cube.attributes.keys():
+        for key in list(cube.attributes.keys()):
             if key not in common_keys:
                 del cube.attributes[key]

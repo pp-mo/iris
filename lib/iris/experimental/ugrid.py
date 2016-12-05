@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,12 +21,9 @@ Ugrid functions.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import iris
-
-# Import pyugrid via iris.proxy, just so we can build the docs with no pyugrid.
-import iris.proxy
-iris.proxy.apply_proxy('pyugrid', globals())
 
 
 def ugrid(location, name):
@@ -53,6 +50,8 @@ def ugrid(location, name):
         bound to an attribute of the cube called "mesh"
 
     """
+    # Lazy import so we can build the docs with no pyugrid.
+    import pyugrid
 
     cube = iris.load_cube(location, name)
     ug = pyugrid.ugrid.UGrid.from_ncfile(location)

@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,7 @@
 """A collection of helpers for interpolation."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 from collections import namedtuple
 from itertools import product
@@ -100,27 +101,10 @@ def extend_circular_data(data, coord_dim):
     coord_slice_in_cube = [slice(None)] * data.ndim
     coord_slice_in_cube[coord_dim] = slice(0, 1)
 
-    # TODO: Restore this code after resolution of the following issue:
-    # https://github.com/numpy/numpy/issues/478
-    # data = np.append(cube.data,
-    #                  cube.data[tuple(coord_slice_in_cube)],
-    #                  axis=sample_dim)
-    # This is the alternative, temporary workaround.
-    # It doesn't use append on an nD mask.
-    if not (isinstance(data, ma.MaskedArray) and
-            not isinstance(data.mask, np.ndarray)) or \
-            len(data.mask.shape) == 0:
-        data = np.append(data,
-                         data[tuple(coord_slice_in_cube)],
-                         axis=coord_dim)
-    else:
-        new_data = np.append(data.data,
-                             data.data[tuple(coord_slice_in_cube)],
-                             axis=coord_dim)
-        new_mask = np.append(data.mask,
-                             data.mask[tuple(coord_slice_in_cube)],
-                             axis=coord_dim)
-        data = ma.array(new_data, mask=new_mask)
+    mod = ma if isinstance(data, ma.MaskedArray) else np
+    data = mod.concatenate((data,
+                            data[tuple(coord_slice_in_cube)]),
+                           axis=coord_dim)
     return data
 
 
@@ -142,14 +126,41 @@ def get_xy_dim_coords(cube):
         A tuple containing the cube's x and y dimension coordinates.
 
     """
-    x_coords = cube.coords(axis='x', dim_coords=True)
-    if len(x_coords) != 1:
+    return get_xy_coords(cube, dim_coords=True)
+
+
+def get_xy_coords(cube, dim_coords=False):
+    """
+    Return the x and y coordinates from a cube.
+
+    This function raises a ValueError if the cube does not contain one and
+    only one set of x and y coordinates. It also raises a ValueError
+    if the identified x and y coordinates do not have coordinate systems that
+    are equal.
+
+    Args:
+
+    * cube:
+        An instance of :class:`iris.cube.Cube`.
+
+    Kwargs:
+
+    * dim_coords:
+        Set this to True to only return dimension coordinates. Defaults to
+        False.
+
+    Returns:
+        A tuple containing the cube's x and y dimension coordinates.
+
+    """
+    x_coords = cube.coords(axis='x', dim_coords=dim_coords)
+    if len(x_coords) != 1 or x_coords[0].ndim != 1:
         raise ValueError('Cube {!r} must contain a single 1D x '
                          'coordinate.'.format(cube.name()))
     x_coord = x_coords[0]
 
-    y_coords = cube.coords(axis='y', dim_coords=True)
-    if len(y_coords) != 1:
+    y_coords = cube.coords(axis='y', dim_coords=dim_coords)
+    if len(y_coords) != 1 or y_coords[0].ndim != 1:
         raise ValueError('Cube {!r} must contain a single 1D y '
                          'coordinate.'.format(cube.name()))
     y_coord = y_coords[0]
@@ -164,7 +175,7 @@ def get_xy_dim_coords(cube):
 
 def snapshot_grid(cube):
     """
-    Helper function that returns deep copies of lateral dimension coordinates
+    Helper function that returns deep copies of lateral (dimension) coordinates
     from a cube.
 
     """
@@ -421,8 +432,8 @@ class RectilinearInterpolator(object):
                 # Only DimCoords can be circular.
                 if circular:
                     coord_points = extend_circular_coord(coord, coord_points)
-                offset = ((coord_points.max() + coord_points.min() - modulus)
-                          * 0.5)
+                offset = 0.5 * (coord_points.max() + coord_points.min() -
+                                modulus)
                 self._circulars.append((circular, modulus,
                                         index, coord_dims[0],
                                         offset))
@@ -500,7 +511,7 @@ class RectilinearInterpolator(object):
             instance of the interpolated data.
 
         """
-        dims = range(self._src_cube.ndim)
+        dims = list(range(self._src_cube.ndim))
         data_dims = data_dims or dims
 
         if len(data_dims) != data.ndim:
@@ -514,7 +525,7 @@ class RectilinearInterpolator(object):
             raise NotImplementedError(msg)
 
         # Broadcast the data into the shape of the original cube.
-        if data_dims != range(self._src_cube.ndim):
+        if data_dims != list(range(self._src_cube.ndim)):
             strides = list(data.strides)
             for dim in range(self._src_cube.ndim):
                 if dim not in data_dims:
@@ -650,8 +661,8 @@ class RectilinearInterpolator(object):
             return new_coord, dims
 
         def gen_new_cube():
-            if (isinstance(new_coord, DimCoord) and len(dims) > 0
-                    and dims[0] not in dims_with_dim_coords):
+            if (isinstance(new_coord, DimCoord) and len(dims) > 0 and
+                    dims[0] not in dims_with_dim_coords):
                 new_cube._add_unique_dim_coord(new_coord, dims)
                 dims_with_dim_coords.append(dims[0])
             else:

@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,6 +16,7 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import contextlib
 import os.path
@@ -80,7 +81,8 @@ class PPTest(object):
             for pp_field in pp_fields:
                 pp_field.data
 
-            reference = ''.join(open(reference_txt_path, 'r'))
+            with open(reference_txt_path, 'r') as reference_fh:
+                reference = ''.join(reference_fh)
             self._assert_str_same(reference + '\n', str(pp_fields) + '\n',
                                     reference_txt_path, type_comparison_name='PP files')
         finally:

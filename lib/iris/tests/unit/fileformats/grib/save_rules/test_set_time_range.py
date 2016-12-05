@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,17 +21,21 @@ Unit tests for
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
+import warnings
+
+from cf_units import Unit
 import gribapi
-import mock
 
 from iris.coords import DimCoord
-from iris.unit import Unit
 from iris.fileformats.grib._save_rules import set_time_range
+from iris.tests import mock
 
 
 class Test(tests.IrisTest):
@@ -87,11 +91,13 @@ class Test(tests.IrisTest):
         lower = 10.0
         upper = 20.9
         self.coord.bounds = [lower, upper]
-        with mock.patch('warnings.warn') as warn:
+        with warnings.catch_warnings(record=True) as warn:
+            warnings.simplefilter("always")
             set_time_range(self.coord, mock.sentinel.grib)
-        msg = 'Truncating floating point lengthOfTimeRange 10.9 ' \
+        self.assertEqual(len(warn), 1)
+        msg = 'Truncating floating point lengthOfTimeRange 10\.8?9+ ' \
               'to integer value 10'
-        warn.assert_called_once_with(msg)
+        six.assertRegex(self, str(warn[0].message), msg)
         mock_set_long.assert_any_call(mock.sentinel.grib,
                                       'indicatorOfUnitForTimeRange', 1)
         mock_set_long.assert_any_call(mock.sentinel.grib,

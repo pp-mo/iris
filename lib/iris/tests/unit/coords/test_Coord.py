@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2015, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,7 @@
 """Unit tests for the :class:`iris.coords.Coord` class."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
@@ -24,10 +25,11 @@ import iris.tests as tests
 
 import collections
 
-import mock
 import numpy as np
 
+import iris
 from iris.coords import DimCoord, AuxCoord, Coord
+from iris.tests import mock
 
 
 Pair = collections.namedtuple('Pair', 'points bounds')
@@ -157,6 +159,80 @@ class Test_guess_bounds(tests.IrisTest):
         self.assertArrayEqual(target, self.coord.bounds)
 
 
+class Test_guess_bounds__default_latitude_clipping(tests.IrisTest):
+    def test_all_inside(self):
+        lat = DimCoord([-10, 0, 20], units='degree', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-15, -5], [-5, 10], [10, 30]])
+
+    def test_points_inside_bounds_outside(self):
+        lat = DimCoord([-80, 0, 70], units='degree', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-120, -40], [-40, 35], [35, 105]])
+
+    def test_points_to_edges_bounds_outside(self):
+        lat = DimCoord([-90, 0, 90], units='degree', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-135, -45], [-45, 45], [45, 135]])
+
+    def test_points_outside(self):
+        lat = DimCoord([-100, 0, 120], units='degree',
+                       standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-150, -50], [-50, 60], [60, 180]])
+
+
+class Test_guess_bounds__enabled_latitude_clipping(tests.IrisTest):
+    def setUp(self):
+        iris.FUTURE.clip_latitudes = True
+
+    def tearDown(self):
+        iris.FUTURE.clip_latitudes = False
+
+    def test_all_inside(self):
+        lat = DimCoord([-10, 0, 20], units='degree', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-15, -5], [-5, 10], [10, 30]])
+
+    def test_points_inside_bounds_outside(self):
+        lat = DimCoord([-80, 0, 70], units='degree', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-90, -40], [-40, 35], [35, 90]])
+
+    def test_points_inside_bounds_outside_grid_latitude(self):
+        lat = DimCoord([-80, 0, 70], units='degree',
+                       standard_name='grid_latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-90, -40], [-40, 35], [35, 90]])
+
+    def test_points_to_edges_bounds_outside(self):
+        lat = DimCoord([-90, 0, 90], units='degree', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-90, -45], [-45, 45], [45, 90]])
+
+    def test_points_outside(self):
+        lat = DimCoord([-100, 0, 120], units='degree',
+                       standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-150, -50], [-50, 60], [60, 180]])
+
+    def test_points_inside_bounds_outside_wrong_unit(self):
+        lat = DimCoord([-80, 0, 70], units='feet', standard_name='latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-120, -40], [-40, 35], [35, 105]])
+
+    def test_points_inside_bounds_outside_wrong_name(self):
+        lat = DimCoord([-80, 0, 70], units='degree', standard_name='longitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-120, -40], [-40, 35], [35, 105]])
+
+    def test_points_inside_bounds_outside_wrong_name_2(self):
+        lat = DimCoord([-80, 0, 70], units='degree',
+                       long_name='other_latitude')
+        lat.guess_bounds()
+        self.assertArrayEqual(lat.bounds, [[-120, -40], [-40, 35], [35, 105]])
+
+
 class Test_cell(tests.IrisTest):
     def _mock_coord(self):
         coord = mock.Mock(spec=Coord, ndim=1,
@@ -171,8 +247,8 @@ class Test_cell(tests.IrisTest):
         coord = self._mock_coord()
         cell = Coord.cell(coord, 0)
         self.assertIs(cell.point, mock.sentinel.time)
-        self.assertEquals(cell.bound,
-                          (mock.sentinel.lower, mock.sentinel.upper))
+        self.assertEqual(cell.bound,
+                         (mock.sentinel.lower, mock.sentinel.upper))
 
     def test_time_as_object(self):
         # When iris.FUTURE.cell_datetime_objects is True, ensure
@@ -186,9 +262,9 @@ class Test_cell(tests.IrisTest):
         with mock.patch('iris.FUTURE', cell_datetime_objects=True):
             cell = Coord.cell(coord, 0)
         self.assertIs(cell.point, mock.sentinel.datetime)
-        self.assertEquals(cell.bound,
-                          (mock.sentinel.datetime_lower,
-                           mock.sentinel.datetime_upper))
+        self.assertEqual(cell.bound,
+                         (mock.sentinel.datetime_lower,
+                          mock.sentinel.datetime_upper))
         self.assertEqual(coord.units.num2date.call_args_list,
                          [mock.call((mock.sentinel.time,)),
                           mock.call((mock.sentinel.lower,
@@ -204,6 +280,8 @@ class Test_collapsed(tests.IrisTest):
                                 ['three', 'five'],
                                 ['five', 'seven'],
                                 ['seven', 'nine']]))
+        string_nobounds = Pair(np.array(['ecks', 'why', 'zed']),
+                               None)
         string_multi = Pair(np.array(['three', 'six', 'nine']),
                             np.array([['one', 'two', 'four', 'five'],
                                       ['four', 'five', 'seven', 'eight'],
@@ -213,15 +291,17 @@ class Test_collapsed(tests.IrisTest):
             return '|'.join(str(item) for item in data.flatten())
 
         for units in ['unknown', 'no_unit']:
-            for points, bounds in [string, string_multi]:
+            for points, bounds in [string, string_nobounds, string_multi]:
                 coord = AuxCoord(points=points, bounds=bounds, units=units)
                 collapsed_coord = coord.collapsed()
                 self.assertArrayEqual(collapsed_coord.points,
                                       _serialize(points))
-                for index in np.ndindex(bounds.shape[1:]):
-                    index_slice = (slice(None),) + tuple(index)
-                    self.assertArrayEqual(collapsed_coord.bounds[index_slice],
-                                          _serialize(bounds[index_slice]))
+                if bounds is not None:
+                    for index in np.ndindex(bounds.shape[1:]):
+                        index_slice = (slice(None),) + tuple(index)
+                        self.assertArrayEqual(
+                            collapsed_coord.bounds[index_slice],
+                            _serialize(bounds[index_slice]))
 
     def test_dim_1d(self):
         # Numeric coords should not be serialised.
@@ -270,7 +350,7 @@ class Test_is_compatible(tests.IrisTest):
 
 class Test_DimCoord_copy(tests.IrisTest):
     def test_writable_points(self):
-        coord1 = DimCoord(range(5),
+        coord1 = DimCoord(np.arange(5),
                           bounds=[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5]])
         coord2 = coord1.copy()
         msg = 'destination is read-only'

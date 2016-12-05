@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,18 +17,30 @@
 """Integration tests for loading UM FieldsFile variants."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
 import shutil
+import tempfile
+import unittest
 
 import numpy as np
 
 from iris.experimental.um import (Field, Field2, Field3, FieldsFileVariant,
                                   FixedLengthHeader)
 
+try:
+    import mo_pack
+except ImportError:
+    # Disable all these tests if mo_pack is not installed.
+    mo_pack = None
+
+skip_mo_pack = unittest.skipIf(mo_pack is None,
+                               'Test(s) require "mo_pack", '
+                               'which is not available.')
 
 IMDI = -32768
 RMDI = -1073741824.0
@@ -100,6 +112,7 @@ class TestRead(tests.IrisTest):
         ffv = self.load()
         self.assertEqual(ffv.fields[0].lbfc, 16)
 
+    @skip_mo_pack
     def test_fields__data_wgdos(self):
         ffv = self.load()
         data = ffv.fields[0].get_data()
@@ -253,6 +266,187 @@ class TestUpdate(tests.IrisTest):
             field = ffv.fields[0]
             self.assertArrayEqual(field.get_data()[0, 604:607], [10, 11, 11])
 
+    def test_large_lookup(self):
+        # Check more space is allocated for the lookups when a lot of blank
+        # lookups are added.
+        src_path = tests.get_data_path(('FF', 'ancillary', 'qrparm.mask'))
+        with self.temp_filename() as temp_path:
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+            field = ffv.fields[0]
+            original_field_data = field.get_data()
+            blank_int_headers = field.int_headers.copy()
+            blank_real_headers = field.real_headers.copy()
+            blank_int_headers[:] = -99  # The 'invalid' signature
+            blank_real_headers[:] = 0.0
+            # Work out how many lookups fills a file 'sector'.
+            lookups_per_sector = ffv._WORDS_PER_SECTOR / field.num_values()
+            # Make a new fields list with many "blank" and one "real" field.
+            n_blank_lookups = 2 * int(np.ceil(lookups_per_sector))
+            new_fields = [Field(int_headers=blank_int_headers,
+                                real_headers=blank_real_headers,
+                                data_provider=None)
+                          for _ in range(n_blank_lookups)]
+            new_fields.append(field)
+            ffv.fields = new_fields
+            ffv.close()
+
+            ffv = FieldsFileVariant(temp_path)
+            self.assertEqual(len(ffv.fields), n_blank_lookups + 1)
+            # Check that the data of the last ("real") field is correct.
+            field = ffv.fields[-1]
+            self.assertArrayEqual(field.get_data(), original_field_data)
+
+    def test_getdata_while_open(self):
+        # Check that data is read from the original file if it is still open.
+        src_path = tests.get_data_path(('FF', 'ancillary', 'qrparm.mask'))
+        with self.temp_filename() as temp_path:
+            # Make a copy and open for UPDATE (maybe not strictly necessary?)
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+            test_field = ffv.fields[0]
+            original_file = test_field._data_provider.source
+            # Fetch data.
+            test_field.get_data()
+            # Check that it used the existing open file.
+            last_used_file = ffv.fields[0]._data_provider.source
+            self.assertEqual(last_used_file, original_file)
+            self.assertFalse(original_file.closed)
+            ffv.close()
+
+    def test_getdata_after_close(self):
+        # Check that data is read from a new file if the original is closed,
+        # and that it is was then closed.
+        src_path = tests.get_data_path(('FF', 'ancillary', 'qrparm.mask'))
+        with self.temp_filename() as temp_path:
+            # Make a copy and open for UPDATE (maybe not strictly necessary?)
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+            test_field = ffv.fields[0]
+            original_file = test_field._data_provider.source
+            ffv.close()
+            # Fetch data.
+            test_field.get_data()
+            # Check that it used the existing open file.
+            last_used_file = ffv.fields[0]._data_provider.source
+            self.assertNotEqual(last_used_file, original_file)
+            self.assertTrue(last_used_file.closed)
+
+    @skip_mo_pack
+    def test_save_packed_as_unpacked(self):
+        # Check that we can successfully re-save a packed datafile as unpacked.
+        src_path = tests.get_data_path(('FF', 'n48_multi_field'))
+        with self.temp_filename() as temp_path:
+            # Make a copy and open for UPDATE (maybe not strictly necessary?)
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+            self.assertEqual(ffv.fields[0].lbpack, 1)
+            old_sizes = [fld.lbnrec for fld in ffv.fields
+                         if hasattr(fld, 'lbpack')]
+            test_data_old = ffv.fields[0].get_data()
+            for fld in ffv.fields:
+                if hasattr(fld, 'lbpack'):
+                    fld.lbpack = 0
+            ffv.close()
+
+            ffv = FieldsFileVariant(temp_path)
+            new_sizes = [fld.lbnrec for fld in ffv.fields
+                         if hasattr(fld, 'lbpack')]
+            for i_field, (new_size, old_size) in enumerate(zip(new_sizes,
+                                                               old_sizes)):
+                msg = 'unpacked LBNREC({}) is <= packed({})'
+                self.assertGreater(new_size, old_size,
+                                   msg=msg.format(new_size, old_size))
+
+            test_data_new = ffv.fields[0].get_data()
+            self.assertArrayAllClose(test_data_old, test_data_new)
+
+    @skip_mo_pack
+    def test_save_packed_unchanged(self):
+        # Check that we can copy packed fields without ever unpacking them.
+        original_getdata_call = Field.get_data
+        patch_getdata_call = self.patch('iris.experimental.um.Field.get_data')
+        src_path = tests.get_data_path(('FF', 'n48_multi_field'))
+        with self.temp_filename() as temp_path:
+            # Make a copy and open for UPDATE.
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+            self.assertEqual(ffv.fields[0].lbpack, 1)
+            old_size = ffv.fields[0].lbnrec
+            test_data_old = original_getdata_call(ffv.fields[0])
+            ffv.close()
+
+            ffv = FieldsFileVariant(temp_path)
+            self.assertEqual(ffv.fields[0].lbpack, 1)
+            new_size = ffv.fields[0].lbnrec
+            msg = 'unpacked LBNREC({}) is != packed({})'
+            self.assertEqual(new_size, old_size,
+                             msg=msg.format(new_size, old_size))
+            test_data_new = original_getdata_call(ffv.fields[0])
+            self.assertArrayAllClose(test_data_old, test_data_new)
+        # Finally, check we never fetched any field data.
+        self.assertEqual(patch_getdata_call.call_count, 0)
+
+    @skip_mo_pack
+    def test_save_packed_mixed(self):
+        # Check all save options, and show we can "partially" unpack a file.
+        src_path = tests.get_data_path(('FF', 'n48_multi_field'))
+        with self.temp_filename() as temp_path:
+            # Make a copy and open for UPDATE.
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+
+            # Reduce to only the first 3 fields.
+            ffv.fields = ffv.fields[:3]
+            # Check that these fields are all WGDOS packed.
+            self.assertTrue(all(fld.lbpack == 1 for fld in ffv.fields))
+
+            # Modify the fields to exercise all 3 saving 'styles'.
+            # Field#0 : store packed as unpacked.
+            data_0 = ffv.fields[0].get_data()
+            ffv.fields[0].lbpack = 2000
+            # Field#1 : pass-through packed as packed.
+            data_1 = ffv.fields[1].get_data()
+            # Field#2 : save array as unpacked.
+            shape2 = (ffv.fields[2].lbrow, ffv.fields[2].lbnpt)
+            data_2 = np.arange(np.prod(shape2)).reshape(shape2)
+            ffv.fields[2].set_data(data_2)
+            ffv.fields[2].lbpack = 3000
+            ffv.close()
+
+            # Read the test file back in, and check all is as expected.
+            ffv = FieldsFileVariant(temp_path)
+            self.assertEqual(len(ffv.fields), 3)
+            # Field#0.
+            self.assertEqual(ffv.fields[0].lbpack, 2000)
+            self.assertArrayAllClose(ffv.fields[0].get_data(), data_0)
+            # Field#1.
+            self.assertEqual(ffv.fields[1].lbpack, 1)
+            self.assertArrayAllClose(ffv.fields[1].get_data(), data_1)
+            # Field#2.
+            self.assertEqual(ffv.fields[2].lbpack, 3000)
+            self.assertArrayAllClose(ffv.fields[2].get_data(), data_2)
+
+    @skip_mo_pack
+    def test_fail_save_with_packing(self):
+        # Check that trying to save data as packed causes an error.
+        src_path = tests.get_data_path(('FF', 'n48_multi_field'))
+        with self.temp_filename() as temp_path:
+            # Make a copy and open for UPDATE.
+            shutil.copyfile(src_path, temp_path)
+            ffv = FieldsFileVariant(temp_path, FieldsFileVariant.UPDATE_MODE)
+
+            # Reduce to just one field.
+            field = ffv.fields[0]
+            ffv.fields = [field]
+            # Actualise the data to a concrete array.
+            field.set_data(field.get_data())
+            # Attempt to save back to a packed format.
+            field.lbpack = 1
+            msg = 'Cannot save.*lbpack=1.*packing not supported'
+            with self.assertRaisesRegexp(ValueError, msg):
+                ffv.close()
+
 
 class TestCreate(tests.IrisTest):
     @tests.skip_data
@@ -304,7 +498,7 @@ class TestCreate(tests.IrisTest):
             ints[20] = 0  # LBPACK
             ints[21] = 2  # LBREL
             ints[38] = 1  # LBUSER(1)
-            reals = range(19)
+            reals = list(range(19))
             src_data = np.arange(20, dtype='f4').reshape((4, 5))
             ffv.fields = [Field2(ints, reals, src_data)]
             ffv.close()

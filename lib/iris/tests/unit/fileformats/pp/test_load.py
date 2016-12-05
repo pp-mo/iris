@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,14 +17,14 @@
 """Unit tests for the `iris.fileformats.pp.load` function."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-import mock
-
 import iris.fileformats.pp as pp
+from iris.tests import mock
 
 
 class Test_load(tests.IrisTest):
@@ -41,7 +41,8 @@ class Test_load(tests.IrisTest):
             pp.load('mock', read_data=True)
 
         interpret.assert_called_once_with(extract_result)
-        field_gen.assert_called_once_with('mock', read_data_bytes=True)
+        field_gen.assert_called_once_with('mock', read_data_bytes=True,
+                                          little_ended=False)
 
 
 if __name__ == "__main__":

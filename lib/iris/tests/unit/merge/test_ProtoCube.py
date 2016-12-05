@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,8 @@
 """Unit tests for the `iris._merge.ProtoCube` class."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
@@ -24,7 +26,6 @@ import iris.tests as tests
 
 import abc
 
-import mock
 import numpy as np
 import numpy.ma as ma
 
@@ -33,6 +34,7 @@ from iris._merge import ProtoCube
 from iris.aux_factory import HybridHeightFactory, HybridPressureFactory
 from iris.coords import DimCoord, AuxCoord
 from iris.exceptions import MergeError
+from iris.tests import mock
 
 
 def example_cube():
@@ -42,9 +44,7 @@ def example_cube():
                           units='K', attributes={'mint': 'thin'})
 
 
-class Mixin_register(object):
-    __metaclass__ = abc.ABCMeta
-
+class Mixin_register(six.with_metaclass(abc.ABCMeta, object)):
     @property
     def cube1(self):
         return example_cube()
@@ -245,24 +245,6 @@ class Test_register__data_dtype(Mixin_register, tests.IrisTest):
         return cube
 
 
-class Test_register__fill_value(Mixin_register, tests.IrisTest):
-    @property
-    def fragments(self):
-        return ['cube data fill_value', '654', '12345']
-
-    @property
-    def cube1(self):
-        cube = example_cube()
-        cube.data = ma.array(cube.data, fill_value=654)
-        return cube
-
-    @property
-    def cube2(self):
-        cube = example_cube()
-        cube.data = ma.array(cube.data, fill_value=12345)
-        return cube
-
-
 class _MergeTest(object):
     # A mixin test class for common test methods implementation.
 
@@ -276,7 +258,7 @@ class _MergeTest(object):
         return str(arc.exception)
 
     def check_fail(self, *substrs):
-        if isinstance(substrs, basestring):
+        if isinstance(substrs, six.string_types):
             substrs = [substrs]
         msg = self.check_merge_fails_with_message()
         for substr in substrs:
@@ -299,7 +281,6 @@ class Test_register__CubeSig(_MergeTest, tests.IrisTest):
         cube2 = self.cube1[1:]
         cube2.data = cube2.data.astype(np.int8)
         cube2.data = ma.array(cube2.data)
-        cube2.data.fill_value = 12345
         cube2.standard_name = "air_pressure"
         cube2.var_name = "Nudge"
         cube2.attributes['stuffed'] = 'yes'

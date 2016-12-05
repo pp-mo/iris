@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -14,9 +14,17 @@
 #
 # You should have received a copy of the GNU Lesser General Public License
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
-"""Experimental code for fast loading of structured UM data."""
+"""
+Code for fast loading of structured UM data.
+
+This module defines which pp-field elements take part in structured loading,
+and provides creation of :class:`FieldCollation` objects from lists of
+:class:`iris.fileformats.pp.PPField`.
+
+"""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import itertools
 
@@ -119,10 +127,13 @@ class FieldCollation(object):
         """Define the field components used in the structure analysis."""
         # Define functions to make t1 and t2 values as date-time tuples.
         # These depend on header version (PPField2 has no seconds values).
-        t1_fn = lambda fld: (fld.lbyr, fld.lbmon, fld.lbdat,
-                             fld.lbhr, fld.lbmin, getattr(fld, 'lbsec', 0))
-        t2_fn = lambda fld: (fld.lbyrd, fld.lbmond, fld.lbdatd,
-                             fld.lbhrd, fld.lbmind, getattr(fld, 'lbsecd', 0))
+        def t1_fn(fld):
+            return (fld.lbyr, fld.lbmon, fld.lbdat, fld.lbhr, fld.lbmin,
+                    getattr(fld, 'lbsec', 0))
+
+        def t2_fn(fld):
+            return (fld.lbyrd, fld.lbmond, fld.lbdatd, fld.lbhrd, fld.lbmind,
+                    getattr(fld, 'lbsecd', 0))
 
         # Return a list of (name, array) for the vectorizable elements.
         component_arrays = [
@@ -238,9 +249,8 @@ def group_structured_fields(field_iterator):
        :func:`iris.fileformats.pp_rules._convert_vector_time_coords`).
 
     Returns:
-        An generator of
-        :class:`~iris.experimental.fileformats.um.FieldCollation` objects,
-        each of which contains a single collated group from the input fields.
+        A generator of FieldCollation objects, each of which contains a single
+        collated group from the input fields.
 
     """
     _fields = sorted(field_iterator, key=_um_collation_key_function)

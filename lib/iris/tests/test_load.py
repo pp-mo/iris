@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Test the main loading API.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
@@ -44,8 +45,8 @@ class TestLoad(tests.IrisTest):
         )
         with self.assertRaises(IOError) as error_trap:
             cubes = iris.load(paths)
-        self.assertTrue(error_trap.exception.message.startswith(
-            'One or more of the files specified did not exist'))
+        self.assertIn('One or more of the files specified did not exist',
+                      str(error_trap.exception))
 
     def test_nonexist_wild(self):
         paths = (
@@ -54,8 +55,8 @@ class TestLoad(tests.IrisTest):
         )
         with self.assertRaises(IOError) as error_trap:
             cubes = iris.load(paths)
-        self.assertTrue(error_trap.exception.message.startswith(
-            'One or more of the files specified did not exist'))
+        self.assertIn('One or more of the files specified did not exist',
+                      str(error_trap.exception))
 
     def test_bogus(self):
         paths = (

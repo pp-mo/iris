@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Tests for :func:`iris.experimental.regrid.regrid_conservative_via_esmpy`.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
@@ -29,6 +30,7 @@ import contextlib
 import os
 import unittest
 
+import cf_units
 import numpy as np
 
 # Import ESMF if installed, else fail quietly + disable all the tests.
@@ -79,13 +81,13 @@ def _make_test_cube(shape, xlims, ylims, pole_latlon=None):
 
     co_x = iris.coords.DimCoord(xvals,
                                 standard_name=coordname_prefix + 'longitude',
-                                units=iris.unit.Unit('degrees'),
+                                units=cf_units.Unit('degrees'),
                                 coord_system=cs)
     co_x.guess_bounds()
     cube.add_dim_coord(co_x, 1)
     co_y = iris.coords.DimCoord(yvals,
                                 standard_name=coordname_prefix + 'latitude',
-                                units=iris.unit.Unit('degrees'),
+                                units=cf_units.Unit('degrees'),
                                 coord_system=cs)
     co_y.guess_bounds()
     cube.add_dim_coord(co_y, 0)
@@ -128,22 +130,6 @@ def _donothing_context_manager():
 
 @skip_esmf
 class TestConservativeRegrid(tests.IrisTest):
-    @classmethod
-    def setUpClass(cls):
-        # Pre-initialise ESMF, just to avoid warnings about no logfile.
-        # NOTE: noisy if logging is off, and no control of filepath.  Boo!!
-        if ESMF is not None:
-            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-            cls._emsf_logfile_path = os.path.join(os.getcwd(), 'ESMF_LogFile')
-            ESMF.Manager(logkind=ESMF.LogKind.SINGLE, debug=False)
-
-    @classmethod
-    def tearDownClass(cls):
-        # remove the logfile if we can, just to be tidy
-        if ESMF is not None:
-            # WARNING: nosetest calls class setUp/tearDown even when "skipped".
-            if os.path.exists(cls._emsf_logfile_path):
-                os.remove(cls._emsf_logfile_path)
 
     def setUp(self):
         # Compute basic test data cubes.
@@ -240,6 +226,7 @@ class TestConservativeRegrid(tests.IrisTest):
                                [True, False, False, False, True],
                                [True, True, True, True, True]])
 
+    @tests.skip_data
     def test_multidimensional(self):
         """
         Check valid operation on a multidimensional cube.
@@ -375,7 +362,7 @@ class TestConservativeRegrid(tests.IrisTest):
         c2.add_dim_coord(x_coord_2, 1)
 
         # NOTE: at present, this causes an error inside ESMF ...
-        context = self.assertRaises(NameError)
+        context = self.assertRaises(ValueError)
         global_cell_supported = False
         if global_cell_supported:
             context = _donothing_context_manager()
@@ -422,11 +409,11 @@ class TestConservativeRegrid(tests.IrisTest):
         ylims2 = _minmax(c2.coord(axis='y').bounds)
         x_c2x1 = iris.coords.DimCoord(xlims2[0], bounds=xlims2,
                                       standard_name='longitude',
-                                      units=iris.unit.Unit('degrees'),
+                                      units=cf_units.Unit('degrees'),
                                       coord_system=_PLAIN_GEODETIC_CS)
         y_c2x1 = iris.coords.DimCoord(ylims2[0], bounds=ylims2,
                                       standard_name='latitude',
-                                      units=iris.unit.Unit('degrees'),
+                                      units=cf_units.Unit('degrees'),
                                       coord_system=_PLAIN_GEODETIC_CS)
         c2x1_gridcube = iris.cube.Cube([[0.0]])
         c2x1_gridcube.add_dim_coord(y_c2x1, 0)

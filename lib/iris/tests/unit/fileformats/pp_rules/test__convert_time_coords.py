@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,20 +21,21 @@ Unit tests for
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-import mock
+from cf_units import Unit, CALENDAR_GREGORIAN
 from netcdftime import datetime as nc_datetime
 import numpy as np
 
 from iris.coords import DimCoord, AuxCoord
 from iris.fileformats.pp import SplittableInt
 from iris.fileformats.pp_rules import _convert_time_coords
+from iris.tests import mock
 from iris.tests.unit.fileformats import TestField
-from iris.unit import Unit, CALENDAR_GREGORIAN
 
 
 def _lbtim(ia=0, ib=0, ic=0):
@@ -119,6 +120,29 @@ class TestLBTIMx1x_Forecast(TestField):
     def test_time_cross_section(self):
         self._check_forecast(_lbcode(ix=1, iy=20), expect_match=False)
 
+    def test_exact_hours(self):
+        lbtim = _lbtim(ib=1, ic=1)
+        t1 = nc_datetime(2015, 1, 20, hour=7, minute=0, second=0)
+        t2 = nc_datetime(2015, 1, 20, hour=0, minute=0, second=0)
+        coords_and_dims = _convert_time_coords(
+            lbcode=_lbcode(1), lbtim=lbtim, epoch_hours_unit=_EPOCH_HOURS_UNIT,
+            t1=t1, t2=t2, lbft=None)
+        (fp, _), (t, _), (frt, _) = coords_and_dims
+        # These should both be exact whole numbers.
+        self.assertEqual(fp.points[0], 7)
+        self.assertEqual(t.points[0], 394927)
+
+    def test_not_exact_hours(self):
+        lbtim = _lbtim(ib=1, ic=1)
+        t1 = nc_datetime(2015, 1, 20, hour=7, minute=10, second=0)
+        t2 = nc_datetime(2015, 1, 20, hour=0, minute=0, second=0)
+        coords_and_dims = _convert_time_coords(
+            lbcode=_lbcode(1), lbtim=lbtim, epoch_hours_unit=_EPOCH_HOURS_UNIT,
+            t1=t1, t2=t2, lbft=None)
+        (fp, _), (t, _), (frt, _) = coords_and_dims
+        self.assertEqual(fp.points[0], 7.1666666641831398)
+        self.assertEqual(t.points[0], 394927.16666666418)
+
 
 class TestLBTIMx2x_TimePeriod(TestField):
     def _check_period(self, lbcode, expect_match=True):
@@ -194,6 +218,19 @@ class TestLBTIMx3x_YearlyAggregation(TestField):
         self._check_yearly(_lbcode(ix=1, iy=20), expect_match=False)
 
 
+class TestLBTIMx2x_ZeroYear(TestField):
+    def test_(self):
+        lbtim = _lbtim(ib=2, ic=1)
+        t1 = nc_datetime(0, 1, 1)
+        t2 = nc_datetime(0, 1, 31, 23, 59, 00)
+        lbft = 0
+        lbcode = _lbcode(1)
+        coords_and_dims = _convert_time_coords(
+            lbcode=lbcode, lbtim=lbtim, epoch_hours_unit=_EPOCH_HOURS_UNIT,
+            t1=t1, t2=t2, lbft=lbft)
+        self.assertEqual(coords_and_dims, [])
+
+
 class TestLBTIMxxx_Unhandled(TestField):
     def test_unrecognised(self):
         lbtim = _lbtim(ib=4, ic=1)
@@ -205,6 +242,23 @@ class TestLBTIMxxx_Unhandled(TestField):
             lbcode=lbcode, lbtim=lbtim, epoch_hours_unit=_EPOCH_HOURS_UNIT,
             t1=t1, t2=t2, lbft=lbft)
         self.assertEqual(coords_and_dims, [])
+
+
+class TestLBCODE3xx(TestField):
+    def test(self):
+        lbcode = _lbcode(value=31323)
+        lbtim = _lbtim(ib=2, ic=2)
+        t1 = nc_datetime(1970, 1, 3, hour=0, minute=0, second=0)
+        t2 = nc_datetime(1970, 1, 4, hour=0, minute=0, second=0)
+        lbft = 24 * 4
+        coords_and_dims = _convert_time_coords(
+            lbcode=lbcode, lbtim=lbtim, epoch_hours_unit=_EPOCH_HOURS_UNIT,
+            t1=t1, t2=t2, lbft=lbft)
+        t2_hours = 24 * 3
+        expected_result = [(DimCoord([t2_hours-lbft],
+                                     standard_name='forecast_reference_time',
+                                     units=_EPOCH_HOURS_UNIT), None)]
+        self.assertCoordsAndDimsListsMatch(coords_and_dims, expected_result)
 
 
 class TestArrayInputWithLBTIM_0_0_1(TestField):

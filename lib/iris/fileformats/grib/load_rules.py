@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,19 +16,21 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Historically this was auto-generated from
 # SciTools/iris-code-generators:tools/gen_rules.py
 
 import warnings
 
+from cf_units import CALENDAR_GREGORIAN, Unit
 import numpy as np
 
+from iris._deprecation import warn_deprecated
 from iris.aux_factory import HybridPressureFactory
 from iris.coords import AuxCoord, CellMethod, DimCoord
 from iris.fileformats.rules import (ConversionMetadata, Factory, Reference,
                                     ReferenceTarget)
-from iris.unit import CALENDAR_GREGORIAN, Unit
 
 
 def convert(grib):
@@ -53,6 +55,18 @@ def convert(grib):
     cell_methods = []
     dim_coords_and_dims = []
     aux_coords_and_dims = []
+
+    # deprecation warning for this code path for edition 2 messages
+    if grib.edition == 2:
+        msg = ('This GRIB loader is deprecated and will be removed in '
+              'a future release.  Please consider using the new '
+              'GRIB loader by setting the :class:`iris.Future` '
+              'option `strict_grib_load` to True; e.g.:\n'
+              'iris.FUTURE.strict_grib_load = True\n'
+              'Please report issues you experience to:\n'
+              'https://groups.google.com/forum/#!topic/scitools-iris-dev/'
+              'lMsOusKNfaU')
+        warn_deprecated(msg)
 
     if \
             (grib.gridType=="reduced_gg"):
@@ -173,6 +187,11 @@ def convert(grib):
                      points=0.5 * (t_bounds[0] + t_bounds[1]),
                      bounds=t_bounds),
             None))
+
+    if \
+            (grib.edition == 1) and \
+            (grib.timeRangeIndicator == 2):
+        add_bounded_time_coords(aux_coords_and_dims, grib)
 
     if \
             (grib.edition == 1) and \
@@ -330,10 +349,13 @@ def convert(grib):
 
     if \
             (grib.edition == 1) and \
-            (grib.levelType == 'sfc') and \
-            (grib._cf_data is not None) and \
+            (grib.levelType == 'sfc'):
+
+            if (grib._cf_data is not None) and \
             (grib._cf_data.set_height is not None):
-        aux_coords_and_dims.append((DimCoord(points=grib._cf_data.set_height,  long_name="height", units="m", attributes={'positive':'up'}), None))
+                aux_coords_and_dims.append((DimCoord(points=grib._cf_data.set_height,  long_name="height", units="m", attributes={'positive':'up'}), None))
+            elif grib.typeOfLevel == 'heightAboveGround': # required for NCAR
+                aux_coords_and_dims.append((DimCoord(points=grib.level,  long_name="height", units="m", attributes={'positive':'up'}), None))
 
     if \
             (grib.edition == 1) and \
@@ -390,7 +412,9 @@ def convert(grib):
             (grib.productDefinitionTemplateNumber == 1):
         aux_coords_and_dims.append((DimCoord(points=grib.perturbationNumber, long_name='ensemble_member', units='no_unit'), None))
 
-    if grib.productDefinitionTemplateNumber not in (0, 8):
+    if \
+            (grib.edition == 2) and \
+            grib.productDefinitionTemplateNumber not in (0, 8):
         attributes["GRIB_LOAD_WARNING"] = ("unsupported GRIB%d ProductDefinitionTemplate: #4.%d" % (grib.edition, grib.productDefinitionTemplateNumber))
 
     if \

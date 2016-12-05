@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,6 +16,7 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
@@ -24,7 +25,7 @@ import numpy as np
 
 import iris
 from iris import load_cube
-from iris.analysis.interpolate import regrid_to_max_resolution
+from iris.analysis._interpolate_private import regrid_to_max_resolution
 from iris.cube import Cube
 from iris.coords import DimCoord
 from iris.coord_systems import GeogCS

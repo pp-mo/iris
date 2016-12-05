@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -22,6 +22,7 @@ Reference Code Table 1.2.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
@@ -30,10 +31,11 @@ import iris.tests as tests
 from copy import deepcopy
 from datetime import datetime
 
+from cf_units import CALENDAR_GREGORIAN, Unit
+
 from iris.coords import DimCoord
 from iris.exceptions import TranslationError
 from iris.fileformats.grib._load_convert import reference_time_coord
-from iris.unit import CALENDAR_GREGORIAN, Unit
 
 
 class Test(tests.IrisTest):
@@ -69,7 +71,7 @@ class Test(tests.IrisTest):
 
     def test_unknown_significance(self):
         section = deepcopy(self.section)
-        section['significanceOfReferenceTime'] = 0
+        section['significanceOfReferenceTime'] = 5
         emsg = 'unsupported significance'
         with self.assertRaisesRegexp(TranslationError, emsg):
             self._check(section)

@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,15 +17,16 @@
 """Unit tests for the `iris.fileformats.pp._create_field_data` function."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
 import biggus
-import mock
 
 import iris.fileformats.pp as pp
+from iris.tests import mock
 
 
 class Test__create_field_data(tests.IrisTest):
@@ -59,7 +60,7 @@ class Test__create_field_data(tests.IrisTest):
         dtype = mock.Mock(newbyteorder=newbyteorder)
         deferred_bytes = (fname, position, n_bytes, dtype)
         field = mock.Mock(_data=deferred_bytes)
-        data_shape = (mock.sentinel.lat, mock.sentinel.lon)
+        data_shape = (100, 120)
         land_mask = mock.Mock()
         proxy = mock.Mock(dtype=mock.sentinel.dtype, shape=data_shape)
         # We can't directly inspect the concrete data source underlying

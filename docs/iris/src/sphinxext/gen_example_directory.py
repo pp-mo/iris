@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,9 +21,11 @@ Generate the rst files for the examples
 '''
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import os
 import re
+import shutil
 import sys
 
 
@@ -74,8 +76,8 @@ def generate_example_rst(app):
 
     subdirs = sorted(datad.keys())
 
-    fhindex = open(os.path.join(exampledir, 'index.rst'), 'w')
-    fhindex.write('''\
+    index = []
+    index.append('''\
 Iris examples
 =============
 
@@ -97,11 +99,9 @@ Iris examples
         if not os.path.exists(outputdir):
             os.makedirs(outputdir)
 
-        subdirIndexFile = os.path.join(rstdir, 'index.rst')
-        fhsubdirIndex = open(subdirIndexFile, 'w')
-        fhindex.write('    {}/index.rst\n'.format(subdir))
-
+        index.append('    {}/index.rst\n'.format(subdir))
         subdir_root_path = os.path.join(rootdir, subdir)
+        subdirIndex = []
 
         # Use the __init__.py file's docstring for the subdir example page (if
         # __init__ exists).
@@ -110,13 +110,13 @@ Iris examples
             mod = imp.load_source(
                 subdir,
                 os.path.join(subdir_root_path, '__init__.py'))
-            fhsubdirIndex.writelines(mod.__doc__)
+            subdirIndex.append(mod.__doc__)
         else:
             line = 'Examples in {}\n'.format(subdir)
-            fhsubdirIndex.writelines([line, '=' * len(line)])
+            subdirIndex.extend([line, '=' * len(line)])
 
         # Append the code to produce the toctree.
-        fhsubdirIndex.write('''
+        subdirIndex.append('''
 .. toctree::
     :maxdepth: 1
 
@@ -134,38 +134,48 @@ Iris examples
             rstfile = '{}.rst'.format(basename)
             outrstfile = os.path.join(rstdir, rstfile)
 
-            fhsubdirIndex.write('    {}\n'.format(rstfile))
+            subdirIndex.append('    {}\n'.format(rstfile))
 
             if not out_of_date(fullpath, outrstfile):
                 continue
 
-            fh = open(outrstfile, 'w')
-            fh.write('.. _{}-{}:\n\n'.format(subdir, basename))
+            out = []
+            out.append('.. _{}-{}:\n\n'.format(subdir, basename))
+
+            # Copy the example code to be in the src examples directory. This
+            # means we can define a simple relative path in the plot directive,
+            # which can also copy the file into the resulting build directory.
+            shutil.copy(fullpath, rstdir)
 
             docstring_results = docstring_regex.search(contents)
             if docstring_results is not None:
-                fh.write(docstring_results.group(1))
+                out.append(docstring_results.group(1))
             else:
                 title = '{} example code: {}'.format(subdir, fname)
-                fh.write(title + '\n')
-                fh.write('=' * len(title) + '\n\n')
+                out.append(title + '\n')
+                out.append('=' * len(title) + '\n\n')
 
             if not noplot_regex.search(contents):
-                fh.write('\n\n.. plot:: {}\n'.format(fullpath))
-                fh.write('    :include-source:\n\n')
+                rel_example = os.path.relpath(outputfile, app.builder.outdir)
+                out.append('\n\n.. plot:: {}\n'.format(rel_example))
+                out.append('    :include-source:\n\n')
             else:
-                fh.write('[`source code <{}>`_]\n\n'.format(fname))
-                fh.write('.. literalinclude:: {}\n\n'.format(fname))
+                out.append('[`source code <{}>`_]\n\n'.format(fname))
+                out.append('.. literalinclude:: {}\n\n'.format(fname))
                 # Write the .py file contents (we didn't need to do this for
                 # plots as the plot directive does this for us.)
                 with open(outputfile, 'w') as fhstatic:
                     fhstatic.write(contents)
 
-            fh.close()
+            with open(outrstfile, 'w') as fh:
+                fh.writelines(out)
 
-        fhsubdirIndex.close()
+        subdirIndexFile = os.path.join(rstdir, 'index.rst')
+        with open(subdirIndexFile, 'w') as fhsubdirIndex:
+            fhsubdirIndex.writelines(subdirIndex)
 
-    fhindex.close()
+    with open(os.path.join(exampledir, 'index.rst'), 'w') as fhindex:
+        fhindex.writelines(index)
 
 
 def setup(app):

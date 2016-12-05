@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,6 +21,7 @@ Test function
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
@@ -29,13 +30,13 @@ import iris.tests as tests
 from copy import deepcopy
 import warnings
 
-import mock
 import numpy as np
 
 from iris.coords import DimCoord
 from iris.fileformats.grib._load_convert import \
     grid_definition_template_4_and_5, \
     _MDI as MDI
+from iris.tests import mock
 
 
 RESOLUTION = 1e6

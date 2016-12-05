@@ -7,6 +7,7 @@ Generate a thumbnail gallery of examples.
 '''
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import os
 import glob
@@ -54,7 +55,7 @@ def gen_gallery(app, doctree):
         return
 
     outdir = app.builder.outdir
-    rootdir = 'example_code'
+    rootdir = 'examples'
 
     # Images we want to skip for the gallery because they are an unusual
     # size that doesn't layout well in a table, or because they may be
@@ -192,7 +193,7 @@ images = new Array();
         with open(gallery_path, 'w') as fh:
             fh.write(content)
 
-    for key in app.builder.status_iterator(thumbnails.iterkeys(),
+    for key in app.builder.status_iterator(thumbnails,
                                            'generating thumbnails... ',
                                            length=len(thumbnails)):
         image.thumbnail(key, thumbnails[key], 0.3)

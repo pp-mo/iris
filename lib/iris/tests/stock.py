@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,8 @@ A collection of routines which create standard Cubes for test purposes.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 import os.path
 
@@ -404,6 +406,42 @@ def simple_4d_with_hybrid_height():
     return cube
 
 
+def realistic_3d():
+    """
+    Returns a realistic 3d cube.
+
+    >>> print(repr(realistic_3d()))
+    <iris 'Cube' of air_potential_temperature (time: 7; grid_latitude: 9;
+    grid_longitude: 11)>
+
+    """
+    data = np.arange(7*9*11).reshape((7,9,11))
+    lat_pts = np.linspace(-4, 4, 9)
+    lon_pts = np.linspace(-5, 5, 11)
+    time_pts = np.linspace(394200, 394236, 7)
+    forecast_period_pts = np.linspace(0, 36, 7)
+    ll_cs = RotatedGeogCS(37.5, 177.5, ellipsoid=GeogCS(6371229.0))
+
+    lat = icoords.DimCoord(lat_pts, standard_name='grid_latitude',
+                           units='degrees', coord_system=ll_cs)
+    lon = icoords.DimCoord(lon_pts, standard_name='grid_longitude',
+                           units='degrees', coord_system=ll_cs)
+    time = icoords.DimCoord(time_pts, standard_name='time',
+                            units='hours since 1970-01-01 00:00:00')
+    forecast_period = icoords.DimCoord(forecast_period_pts,
+                                       standard_name='forecast_period',
+                                       units='hours')
+    height = icoords.DimCoord(1000.0, standard_name='air_pressure',
+                              units='Pa')
+    cube = iris.cube.Cube(data, standard_name='air_potential_temperature',
+                          units='K',
+                          dim_coords_and_dims=[(time, 0), (lat, 1), (lon, 2)],
+                          aux_coords_and_dims=[(forecast_period, 0),
+                                               (height, None)],
+                          attributes={'source': 'Iris test case'})
+    return cube
+
+
 def realistic_4d():
     """
     Returns a realistic 4d cube.
@@ -433,11 +471,12 @@ def realistic_4d():
 #    >>> arrays.append(theta.data)
 #    >>> arrays.append(theta.coord('sigma').coord_system.orography.data)
 #    >>> np.savez('stock_arrays.npz', *arrays)
-
-    data_path = os.path.join(os.path.dirname(__file__), 'stock_arrays.npz')
+    data_path = tests.get_data_path(('stock', 'stock_arrays.npz'))
+    if not os.path.isfile(data_path):
+        raise IOError('Test data is not available at {}.'.format(data_path))
     r = np.load(data_path)
     # sort the arrays based on the order they were originally given. The names given are of the form 'arr_1' or 'arr_10'
-    _, arrays =  zip(*sorted(r.iteritems(), key=lambda item: int(item[0][4:])))
+    _, arrays =  zip(*sorted(six.iteritems(r), key=lambda item: int(item[0][4:])))
 
     lat_pts, lat_bnds, lon_pts, lon_bnds, level_height_pts, \
     level_height_bnds, model_level_pts, sigma_pts, sigma_bnds, time_pts, \
@@ -488,7 +527,9 @@ def realistic_4d_no_derived():
 
 
 def realistic_4d_w_missing_data():
-    data_path = os.path.join(os.path.dirname(__file__), 'stock_mdi_arrays.npz')
+    data_path = tests.get_data_path(('stock', 'stock_mdi_arrays.npz'))
+    if not os.path.isfile(data_path):
+        raise IOError('Test data is not available at {}.'.format(data_path))
     data_archive = np.load(data_path)
     data = ma.masked_array(data_archive['arr_0'], mask=data_archive['arr_1'])
 

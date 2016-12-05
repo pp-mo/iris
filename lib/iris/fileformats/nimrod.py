@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,8 @@
 """Provides NIMROD file format capabilities."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 import glob
 import numpy as np
@@ -79,7 +81,11 @@ data_header_int16s = ("radar_num", "radars_bitmask", "more_radars_bitmask",
 def _read_chars(infile, num):
     """Read characters from the (big-endian) file."""
     instr = infile.read(num)
-    return struct.unpack(">%ds" % num, instr)[0]
+    result = struct.unpack(">%ds" % num, instr)[0]
+    if six.PY3:
+        # For Python 3, convert raw bytes into a string.
+        result = result.decode()
+    return result
 
 
 class NimrodField(object):
@@ -222,7 +228,7 @@ def load_cubes(filenames, callback=None):
         The resultant cubes may not be in the same order as in the files.
 
     """
-    if isinstance(filenames, basestring):
+    if isinstance(filenames, six.string_types):
         filenames = [filenames]
 
     for filename in filenames:

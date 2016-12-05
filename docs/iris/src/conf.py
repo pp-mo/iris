@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,6 +16,7 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # -*- coding: utf-8 -*-
 #
@@ -97,7 +98,7 @@ master_doc = 'contents'
 project = u'Iris'
 # define the copyright information for latex builds. Note, for html builds,
 # the copyright exists directly inside "_templates/layout.html"
-copyright = u'British Crown Copyright 2010 - 2014, Met Office'
+copyright = u'British Crown Copyright 2010 - 2015, Met Office'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -157,7 +158,8 @@ intersphinx_mapping = {
    'scipy': ('http://docs.scipy.org/doc/scipy/reference/', None),
    'matplotlib': ('http://matplotlib.org/', None),
    'cartopy': ('http://scitools.org.uk/cartopy/docs/latest/', None),
-   'biggus': ('http://biggus.readthedocs.org/en/latest/', None),
+   'biggus': ('https://biggus.readthedocs.io/en/latest/', None),
+   'iris-grib': ('http://iris-grib.readthedocs.io/en/latest/', None),
 }
 
 

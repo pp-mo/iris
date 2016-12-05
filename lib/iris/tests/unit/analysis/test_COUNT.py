@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,7 @@
 """Unit tests for the :data:`iris.analysis.COUNT` aggregator."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
@@ -45,6 +46,20 @@ class Test_masked(tests.IrisTest):
     def test_ma(self):
         cube = self.cube.collapsed("foo", COUNT, function=self.func)
         self.assertArrayEqual(cube.data, [2])
+
+
+class Test_name(tests.IrisTest):
+    def test(self):
+        self.assertEqual(COUNT.name(), 'count')
+
+
+class Test_aggregate_shape(tests.IrisTest):
+    def test(self):
+        shape = ()
+        kwargs = dict()
+        self.assertTupleEqual(COUNT.aggregate_shape(**kwargs), shape)
+        kwargs = dict(wibble='wobble')
+        self.assertTupleEqual(COUNT.aggregate_shape(**kwargs), shape)
 
 
 if __name__ == "__main__":

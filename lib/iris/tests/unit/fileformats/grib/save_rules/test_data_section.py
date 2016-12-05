@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,17 +21,18 @@ Unit tests for
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before
 # importing anything else
 import iris.tests as tests
 
-import mock
 import numpy as np
 
 import iris.cube
 
 from iris.fileformats.grib._save_rules import data_section
+from iris.tests import mock
 
 
 GRIB_API = 'iris.fileformats.grib._save_rules.gribapi'

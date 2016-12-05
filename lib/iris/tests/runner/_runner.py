@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Provides testing capabilities for installed copies of Iris.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Because this file is imported by setup.py, there may be additional runtime
 # imports later in the file.
@@ -28,6 +29,42 @@ import os
 import sys
 
 
+def failed_images_html():
+    """
+    Generates HTML which shows the image failures side-by-side
+    when viewed in a web browser.
+    """
+    from iris.tests.idiff import step_over_diffs
+
+    data_uri_template = '<img alt="{alt}" src="data:image/png;base64,{img}">'
+
+    def image_as_base64(fname):
+        with open(fname, "rb") as fh:
+            return fh.read().encode("base64").replace("\n", "")
+
+    html = ['<!DOCTYPE html>', '<html>', '<body>']
+    rdir = os.path.join(os.path.dirname(__file__), os.path.pardir,
+                        'result_image_comparison')
+    if not os.access(rdir, os.W_OK):
+        rdir = os.path.join(os.getcwd(), 'iris_image_test_output')
+
+    for expected, actual, diff in step_over_diffs(rdir, 'similar', False):
+        expected_html = data_uri_template.format(
+            alt='expected', img=image_as_base64(expected))
+        actual_html = data_uri_template.format(
+            alt='actual', img=image_as_base64(actual))
+        diff_html = data_uri_template.format(
+            alt='diff', img=image_as_base64(diff))
+
+        html.extend([expected, '<br>',
+                     expected_html, actual_html, diff_html,
+                     '<br><hr>'])
+
+    html.extend(['</body>', '</html>'])
+    return '\n'.join(html)
+
+
+# NOTE: Do not inherit from object as distutils does not like it.
 class TestRunner():
     """Run the Iris tests under nose and multiprocessor for performance"""
 
@@ -47,9 +84,12 @@ class TestRunner():
         ('num-processors=', 'p', 'The number of processors used for running '
                                  'the tests.'),
         ('create-missing', 'm', 'Create missing test result files.'),
+        ('print-failed-images', 'f', 'Print HTML encoded version of failed '
+                                     'images.'),
     ]
     boolean_options = ['no-data', 'system-tests', 'stop', 'example-tests',
-                       'default-tests', 'coding-tests', 'create-missing']
+                       'default-tests', 'coding-tests', 'create-missing',
+                       'print-failed-images']
 
     def initialize_options(self):
         self.no_data = False
@@ -60,13 +100,15 @@ class TestRunner():
         self.coding_tests = False
         self.num_processors = None
         self.create_missing = False
+        self.print_failed_images = False
 
     def finalize_options(self):
         # These enviroment variables will be propagated to all the
         # processes that nose.run creates.
         if self.no_data:
             print('Running tests in no-data mode...')
-            os.environ['override_test_data_repository'] = 'true'
+            import iris.config
+            iris.config.TEST_DATA_DIR = None
         if self.create_missing:
             os.environ['IRIS_TEST_CREATE_MISSING'] = 'true'
 
@@ -122,7 +164,11 @@ class TestRunner():
 
         args = ['', None, '--processes=%s' % n_processors,
                 '--verbosity=2', regexp_pat,
-                '--process-timeout=250']
+                '--process-timeout=180']
+        try:
+            import gribapi
+        except ImportError:
+            args.append('--exclude=^grib$')
         if self.stop:
             args.append('--stop')
 
@@ -137,4 +183,6 @@ class TestRunner():
             #   word Mixin.
             result &= nose.run(argv=args)
         if result is False:
+            if self.print_failed_images:
+                print(failed_images_html())
             exit(1)

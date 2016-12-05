@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,8 @@
 """A module to provide an optimal array structure calculation."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 import itertools
 
@@ -163,7 +165,7 @@ def optimal_array_structure(ordering_elements, actual_values_elements=None):
     # Filter out the trivial (scalar) ones.
     elements_and_dimensions = {
         name: (array, dims)
-        for name, (array, dims) in elements_and_dimensions.iteritems()
+        for name, (array, dims) in six.iteritems(elements_and_dimensions)
         if len(dims)}
 
     # Make a list of 'primary' elements; i.e. those in the target structure.

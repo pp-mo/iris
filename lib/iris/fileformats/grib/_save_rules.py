@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -25,16 +25,17 @@ with no public API. It is invoked from
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import warnings
 
+import cf_units
 import gribapi
 import numpy as np
 import numpy.ma as ma
 
 import iris
 import iris.exceptions
-import iris.unit
 from iris.coord_systems import GeogCS, RotatedGeogCS, TransverseMercator
 from iris.fileformats.grib import grib_phenom_translation as gptx
 from iris.fileformats.grib._load_convert import (_STATISTIC_TYPE_NAMES,
@@ -164,9 +165,18 @@ def identification(cube, grib):
     # operational product, operational test, research product, etc
     # (missing for now)
     gribapi.grib_set_long(grib, "productionStatusOfProcessedData", 255)
+
+    # Code table 1.4
     # analysis, forecast, processed satellite, processed radar,
-    # (analysis and forecast products for now)
-    gribapi.grib_set_long(grib, "typeOfProcessedData", 2)
+    if cube.coords('realization'):
+        # assume realization will always have 1 and only 1 point
+        # as cubes saving to GRIB2 a 2D horizontal slices
+        if cube.coord('realization').points[0] != 0:
+            gribapi.grib_set_long(grib, "typeOfProcessedData", 4)
+        else:
+            gribapi.grib_set_long(grib, "typeOfProcessedData", 3)
+    else:
+        gribapi.grib_set_long(grib, "typeOfProcessedData", 2)
 
 
 ###############################################################################
@@ -496,7 +506,7 @@ def grid_definition_section(cube, grib):
 
     else:
         raise ValueError('Grib saving is not supported for coordinate system: '
-                         '{:s}'.format(cs))
+                         '{}'.format(cs))
 
 
 ###############################################################################
@@ -530,8 +540,8 @@ def _non_missing_forecast_period(cube):
     # Convert fp and t to hours so we can subtract to calculate R.
     cf_fp_hrs = fp_coord.units.convert(fp_coord.points[0], 'hours')
     t_coord = cube.coord("time").copy()
-    hours_since = iris.unit.Unit("hours since epoch",
-                                 calendar=t_coord.units.calendar)
+    hours_since = cf_units.Unit("hours since epoch",
+                                calendar=t_coord.units.calendar)
     t_coord.convert_units(hours_since)
 
     rt_num = t_coord.points[0] - cf_fp_hrs
@@ -539,11 +549,11 @@ def _non_missing_forecast_period(cube):
     rt_meaning = 1  # "start of forecast"
 
     # Forecast period
-    if fp_coord.units == iris.unit.Unit("hours"):
+    if fp_coord.units == cf_units.Unit("hours"):
         grib_time_code = 1
-    elif fp_coord.units == iris.unit.Unit("minutes"):
+    elif fp_coord.units == cf_units.Unit("minutes"):
         grib_time_code = 0
-    elif fp_coord.units == iris.unit.Unit("seconds"):
+    elif fp_coord.units == cf_units.Unit("seconds"):
         grib_time_code = 13
     else:
         raise iris.exceptions.TranslationError(
@@ -584,8 +594,8 @@ def _missing_forecast_period(cube):
 
     if cube.coords('forecast_reference_time'):
         # Make copies and convert them to common "hours since" units.
-        hours_since = iris.unit.Unit('hours since epoch',
-                                     calendar=t_coord.units.calendar)
+        hours_since = cf_units.Unit('hours since epoch',
+                                    calendar=t_coord.units.calendar)
         frt_coord = cube.coord('forecast_reference_time').copy()
         frt_coord.convert_units(hours_since)
         t_coord = t_coord.copy()
@@ -646,20 +656,25 @@ def set_fixed_surfaces(cube, grib):
     # pressure
     if cube.coords("air_pressure") or cube.coords("pressure"):
         grib_v_code = 100
-        output_unit = iris.unit.Unit("Pa")
+        output_unit = cf_units.Unit("Pa")
         v_coord = (cube.coords("air_pressure") or cube.coords("pressure"))[0]
 
     # altitude
     elif cube.coords("altitude"):
         grib_v_code = 102
-        output_unit = iris.unit.Unit("m")
+        output_unit = cf_units.Unit("m")
         v_coord = cube.coord("altitude")
 
     # height
     elif cube.coords("height"):
         grib_v_code = 103
-        output_unit = iris.unit.Unit("m")
+        output_unit = cf_units.Unit("m")
         v_coord = cube.coord("height")
+
+    elif cube.coords("air_potential_temperature"):
+        grib_v_code = 107
+        output_unit = cf_units.Unit('K')
+        v_coord = cube.coord("air_potential_temperature")
 
     # unknown / absent
     else:
@@ -731,8 +746,8 @@ def set_time_range(time_coord, grib):
     # Set type to hours and convert period to this unit.
     gribapi.grib_set(grib, "indicatorOfUnitForTimeRange",
                      _TIME_RANGE_UNITS['hours'])
-    hours_since_units = iris.unit.Unit('hours since epoch',
-                                       calendar=time_coord.units.calendar)
+    hours_since_units = cf_units.Unit('hours since epoch',
+                                      calendar=time_coord.units.calendar)
     start_hours, end_hours = time_coord.units.convert(time_coord.bounds[0],
                                                       hours_since_units)
     # Cast from np.float to Python int. The lengthOfTimeRange key is a
@@ -865,6 +880,40 @@ def product_definition_template_8(cube, grib):
 
     """
     gribapi.grib_set(grib, "productDefinitionTemplateNumber", 8)
+    _product_definition_template_8_and_11(cube, grib)
+
+
+def product_definition_template_11(cube, grib):
+    """
+    Set keys within the provided grib message based on Product
+    Definition Template 4.8.
+
+    Template 4.8 is used to represent an aggregation over a time
+    interval.
+
+    """
+    gribapi.grib_set(grib, "productDefinitionTemplateNumber", 11)
+    if not (cube.coords('realization') and
+            len(cube.coord('realization').points) == 1):
+        raise ValueError("A cube 'realization' coordinate with one"
+                         "point is required, but not present")
+    gribapi.grib_set(grib, "perturbationNumber",
+                     int(cube.coord('realization').points[0]))
+    # no encoding at present in Iris, set to missing
+    gribapi.grib_set(grib, "numberOfForecastsInEnsemble", 255)
+    gribapi.grib_set(grib, "typeOfEnsembleForecast", 255)
+    _product_definition_template_8_and_11(cube, grib)
+
+
+def _product_definition_template_8_and_11(cube, grib):
+    """
+    Set keys within the provided grib message based on common aspects of
+    Product Definition Templates 4.8 and 4.11.
+
+    Templates 4.8  and 4.11 are used to represent aggregations over a time
+    interval.
+
+    """
     product_definition_template_common(cube, grib)
 
     # Check for time coordinate.
@@ -924,6 +973,22 @@ def product_definition_template_8(cube, grib):
     set_time_increment(cell_method, grib)
 
 
+def product_definition_template_40(cube, grib):
+    """
+    Set keys within the provided grib message based on Product
+    Definition Template 4.40.
+
+    Template 4.40 is used to represent an analysis or forecast at a horizontal
+    level or in a horizontal layer at a point in time for atmospheric chemical
+    constituents.
+
+    """
+    gribapi.grib_set(grib, "productDefinitionTemplateNumber", 40)
+    product_definition_template_common(cube, grib)
+    constituent_type = cube.attributes['WMO_constituent_type']
+    gribapi.grib_set(grib, "constituentType", constituent_type)
+
+
 def product_definition_section(cube, grib):
     """
     Set keys within the product definition section of the provided
@@ -931,12 +996,21 @@ def product_definition_section(cube, grib):
 
     """
     if not cube.coord("time").has_bounds():
-        # forecast (template 4.0)
-        product_definition_template_0(cube, grib)
+        if 'WMO_constituent_type' in cube.attributes:
+            # forecast for atmospheric chemical constiuent (template 4.40)
+            product_definition_template_40(cube, grib)
+        else:
+            # forecast (template 4.0)
+            product_definition_template_0(cube, grib)
     elif _cube_is_time_statistic(cube):
-        # time processed (template 4.8)
+        if cube.coords('realization'):
+            # time processed (template 4.11)
+            pdt = product_definition_template_11
+        else:
+            # time processed (template 4.8)
+            pdt = product_definition_template_8
         try:
-            product_definition_template_8(cube, grib)
+            pdt(cube, grib)
         except ValueError as e:
             raise ValueError('Saving to GRIB2 failed: the cube is not suitable'
                              ' for saving as a time processed statistic GRIB'

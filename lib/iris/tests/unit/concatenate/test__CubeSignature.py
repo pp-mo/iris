@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,18 +17,19 @@
 """Test class :class:`iris._concatenate._CubeSignature`."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
 import iris.tests as tests
 
+from cf_units import Unit
 import numpy as np
 
 import iris
 from iris._concatenate import _CubeSignature as CubeSignature
 from iris.coords import AuxCoord, DimCoord
 from iris.cube import Cube
-from iris.unit import Unit
 from iris.util import new_axis
 
 

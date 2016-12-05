@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,20 +17,28 @@
 """Unit tests for :mod:`iris.fileformats.grib._save_rules`."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
 
-import gribapi
-import numpy as np
-import mock
 import warnings
+
+import cf_units
+import numpy as np
 
 import iris.cube
 import iris.coords
-import iris.fileformats.grib._save_rules as grib_save_rules
+from iris.tests import mock
+
+if tests.GRIB_AVAILABLE:
+    import gribapi
+    import iris.fileformats.grib._save_rules as grib_save_rules
+else:
+    gribapi = None
 
 
+@tests.skip_grib
 class Test_set_fixed_surfaces(tests.IrisTest):
     @mock.patch.object(gribapi, "grib_set")
     def test_altitude_point(self, mock_set):
@@ -75,6 +83,7 @@ class Test_set_fixed_surfaces(tests.IrisTest):
         mock_set.assert_any_call(grib, "scaledValueOfSecondFixedSurface", -1)
 
 
+@tests.skip_grib
 class Test_phenomenon(tests.IrisTest):
     @mock.patch.object(gribapi, "grib_set")
     def test_phenom_unknown(self, mock_set):
@@ -118,12 +127,13 @@ class Test_phenomenon(tests.IrisTest):
         mock_set.assert_any_call(grib, "parameterNumber", 22)
 
 
+@tests.skip_grib
 class Test_type_of_statistical_processing(tests.IrisTest):
     @mock.patch.object(gribapi, "grib_set")
     def test_stats_type_min(self, mock_set):
         grib = None
         cube = iris.cube.Cube(np.array([1.0]))
-        time_unit = iris.unit.Unit('hours since 1970-01-01 00:00:00')
+        time_unit = cf_units.Unit('hours since 1970-01-01 00:00:00')
         time_coord = iris.coords.DimCoord([0.0],
                                           bounds=[0.0, 1],
                                           standard_name='time',
@@ -137,7 +147,7 @@ class Test_type_of_statistical_processing(tests.IrisTest):
     def test_stats_type_max(self, mock_set):
         grib = None
         cube = iris.cube.Cube(np.array([1.0]))
-        time_unit = iris.unit.Unit('hours since 1970-01-01 00:00:00')
+        time_unit = cf_units.Unit('hours since 1970-01-01 00:00:00')
         time_coord = iris.coords.DimCoord([0.0],
                                           bounds=[0.0, 1],
                                           standard_name='time',

@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,14 +17,14 @@
 """Unit tests for :class:`iris.fileformats.pp._LBProc`."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-import mock
-
 from iris.fileformats.pp import _LBProc
+from iris.tests import mock
 
 
 class Test___init__(tests.IrisTest):
@@ -35,11 +35,14 @@ class Test___init__(tests.IrisTest):
         _LBProc('245')
 
     def test_negative(self):
-        with self.assertRaises(ValueError):
+        msg = 'Negative numbers not supported with splittable integers object'
+        with self.assertRaisesRegexp(ValueError, msg):
             _LBProc(-1)
+        with self.assertRaisesRegexp(ValueError, msg):
+            _LBProc('-1')
 
     def test_invalid_str(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegexp(ValueError, 'invalid literal for int'):
             _LBProc('asdf')
 
 
@@ -59,7 +62,7 @@ class Test_flag1(tests.IrisTest):
         self.assertFalse(flag)
 
     def test_many(self):
-        for i in xrange(100):
+        for i in range(100):
             lbproc = _LBProc(i)
             with mock.patch('warnings.warn') as warn:
                 flag = lbproc.flag1
@@ -83,7 +86,7 @@ class Test_flag2(tests.IrisTest):
         self.assertFalse(flag)
 
     def test_many(self):
-        for i in xrange(100):
+        for i in range(100):
             lbproc = _LBProc(i)
             with mock.patch('warnings.warn') as warn:
                 flag = lbproc.flag2
@@ -107,7 +110,7 @@ class Test_flag4(tests.IrisTest):
         self.assertFalse(flag)
 
     def test_many(self):
-        for i in xrange(100):
+        for i in range(100):
             lbproc = _LBProc(i)
             with mock.patch('warnings.warn') as warn:
                 flag = lbproc.flag4
@@ -131,7 +134,7 @@ class Test_flag131072(tests.IrisTest):
         self.assertFalse(flag)
 
     def test_many(self):
-        for i in xrange(0, 260000, 1000):
+        for i in range(0, 260000, 1000):
             lbproc = _LBProc(i)
             with mock.patch('warnings.warn') as warn:
                 flag = lbproc.flag131072

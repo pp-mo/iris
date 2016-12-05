@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,17 +21,18 @@ fc_rules_cf_fc.build_cube_metadata`.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before
 # importing anything else
 import iris.tests as tests
 
 import numpy as np
-import mock
 
 from iris.cube import Cube
 from iris.fileformats._pyke_rules.compiled_krb.fc_rules_cf_fc import \
     build_cube_metadata
+from iris.tests import mock
 
 
 class TestInvalidGlobalAttributes(tests.IrisTest):

@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Test the iris.analysis.interpolate module.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris tests first so that some things can be initialised before
 # importing anything else.
@@ -27,7 +28,7 @@ import iris.tests as tests
 
 import numpy as np
 
-import iris.analysis.interpolate as interpolate
+import iris.analysis._interpolate_private as interpolate
 from iris.coords import DimCoord
 from iris.cube import Cube
 from iris.tests.test_interpolation import normalise_order
@@ -46,7 +47,7 @@ class Test_linear__circular_wrapping(tests.IrisTest):
     def test_symmetric(self):
         # Check we can interpolate from a Cube defined over [-180, 180).
         cube = self._create_cube([-180, -90, 0, 90])
-        samples = [('longitude', range(-360, 720, 45))]
+        samples = [('longitude', np.arange(-360, 720, 45))]
         result = interpolate.linear(cube, samples, extrapolation_mode='nan')
         normalise_order(result)
         self.assertCMLApproxData(result, ('analysis', 'interpolation',
@@ -56,7 +57,7 @@ class Test_linear__circular_wrapping(tests.IrisTest):
     def test_positive(self):
         # Check we can interpolate from a Cube defined over [0, 360).
         cube = self._create_cube([0, 90, 180, 270])
-        samples = [('longitude', range(-360, 720, 45))]
+        samples = [('longitude', np.arange(-360, 720, 45))]
         result = interpolate.linear(cube, samples, extrapolation_mode='nan')
         normalise_order(result)
         self.assertCMLApproxData(result, ('analysis', 'interpolation',

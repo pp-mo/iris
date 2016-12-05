@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Unit tests for :class:`iris.experimental.um.FieldsFileVariant`.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before
 # importing anything else
@@ -28,10 +29,21 @@ import iris.tests as tests
 import os.path
 import shutil
 import tempfile
+import unittest
 
 import numpy as np
 
-from iris.experimental.um import FieldsFileVariant
+from iris.experimental.um import FieldsFileVariant, Field, Field3
+
+try:
+    import mo_pack
+except ImportError:
+    # Disable all these tests if mo_pack is not installed.
+    mo_pack = None
+
+skip_mo_pack = unittest.skipIf(mo_pack is None,
+                               'Test(s) require "mo_pack", '
+                               'which is not available.')
 
 
 class Test___init__(tests.IrisTest):
@@ -74,6 +86,18 @@ class Test_filename(tests.IrisTest):
         path = tests.get_data_path(('FF', 'n48_multi_field'))
         ffv = FieldsFileVariant(path)
         self.assertEqual(ffv.filename, path)
+
+
+@tests.skip_data
+class Test_class_assignment(tests.IrisTest):
+    @skip_mo_pack
+    def test_lbrel_class(self):
+        path = tests.get_data_path(('FF', 'lbrel_test_data'))
+        ffv = FieldsFileVariant(path)
+        self.assertEqual(type(ffv.fields[0]), Field)
+        self.assertEqual(type(ffv.fields[1]), Field3)
+        self.assertEqual(ffv.fields[0].int_headers[Field.LBREL_OFFSET], -32768)
+        self.assertEqual(ffv.fields[1].int_headers[Field.LBREL_OFFSET], 3)
 
 
 class Test_mode(tests.IrisTest):

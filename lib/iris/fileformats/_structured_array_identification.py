@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -28,7 +28,7 @@ An example using numpy arrays:
 
     >>> import numpy as np
     >>> orig_x, orig_y = np.arange(2), np.arange(3)
-    >>> x, y = np.meshgrid(range(2), range(3))
+    >>> x, y = np.meshgrid(orig_x, orig_y)
 
     >>> # Remove the dimensional structure from the arrays.
     >>> x, y = x.flatten(), y.flatten()
@@ -55,6 +55,7 @@ An example using numpy arrays:
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 from collections import namedtuple
 
@@ -101,11 +102,24 @@ class ArrayStructure(namedtuple('ArrayStructure',
     2
 
     """
-    def __init__(self, *args, **kwargs):
-        #: The ``size`` attribute is the number of the unique values in
-        #: the original array. It is **not** the length of the original array.
-        self.size = len(self.unique_ordered_values)
-        super(ArrayStructure, self).__init__(self, *args, **kwargs)
+    def __new__(cls, stride, unique_ordered_values):
+        self = super(ArrayStructure, cls).__new__(cls, stride,
+                                                  unique_ordered_values)
+        return self
+
+    __slots__ = ()
+
+    @property
+    def size(self):
+        """
+        The ``size`` attribute is the number of the unique values in the
+        original array. It is **not** the length of the original array.
+
+        """
+        return len(self.unique_ordered_values)
+
+    def __hash__(self):
+        return super(ArrayStructure, self).__hash__()
 
     def __eq__(self, other):
         stride = getattr(other, 'stride', None)

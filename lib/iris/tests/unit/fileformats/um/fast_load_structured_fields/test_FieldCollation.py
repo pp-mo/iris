@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -21,6 +21,7 @@ Unit tests for the class
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised
 # before importing anything else.
@@ -110,7 +111,7 @@ class Test_element_arrays_and_dims(tests.IrisTest):
         collation = FieldCollation([_make_field(lbyr=2013),
                                     _make_field(lbyr=2014)])
         result = collation.element_arrays_and_dims
-        self.assertEqual(result.keys(), ['t1'])
+        self.assertEqual(list(result.keys()), ['t1'])
         values, dims = result['t1']
         self.assertArrayEqual(values, [datetime(2013, 1, 1),
                                        datetime(2014, 1, 1)])
@@ -158,7 +159,7 @@ class Test_element_arrays_and_dims(tests.IrisTest):
         result = collation.element_arrays_and_dims
         keys = set(['blev', 'brsvd1', 'brsvd2', 'brlev',
                     'bhrlev', 'lblev', 'bhlev'])
-        self.assertEqual(result.viewkeys(), keys)
+        self.assertEqual(set(result.keys()), keys)
         values, dims = result['blev']
         self.assertArrayEqual(values, [1, 2])
         self.assertEqual(dims, (0,))
@@ -169,7 +170,7 @@ class Test_element_arrays_and_dims(tests.IrisTest):
         result = collation.element_arrays_and_dims
         keys = set(['blev', 'brsvd1', 'brsvd2', 'brlev',
                     'bhrlev', 'lblev', 'bhlev'])
-        self.assertEqual(result.viewkeys(), keys)
+        self.assertEqual(set(result.keys()), keys)
         values, dims = result['bhlev']
         self.assertArrayEqual(values, [1, 2])
         self.assertEqual(dims, (0,))

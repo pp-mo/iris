@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -26,16 +26,17 @@ no public API.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 import warnings
 
+import cf_units
 import gribapi
 import numpy as np
 import numpy.ma as ma
 
 import iris
 import iris.exceptions
-import iris.unit
 from iris.fileformats.rules import is_regular, regular_step
 from iris.fileformats.grib import grib_phenom_translation as gptx
 
@@ -297,8 +298,8 @@ def _non_missing_forecast_period(cube):
     # Convert fp and t to hours so we can subtract to calculate R.
     cf_fp_hrs = fp_coord.units.convert(fp_coord.points[0], 'hours')
     t_coord = cube.coord("time").copy()
-    hours_since = iris.unit.Unit("hours since epoch",
-                                 calendar=t_coord.units.calendar)
+    hours_since = cf_units.Unit("hours since epoch",
+                                calendar=t_coord.units.calendar)
     t_coord.convert_units(hours_since)
 
     rt_num = t_coord.points[0] - cf_fp_hrs
@@ -306,11 +307,11 @@ def _non_missing_forecast_period(cube):
     rt_meaning = 1  # "start of forecast"
 
     # Forecast period
-    if fp_coord.units == iris.unit.Unit("hours"):
+    if fp_coord.units == cf_units.Unit("hours"):
         grib_time_code = 1
-    elif fp_coord.units == iris.unit.Unit("minutes"):
+    elif fp_coord.units == cf_units.Unit("minutes"):
         grib_time_code = 0
-    elif fp_coord.units == iris.unit.Unit("seconds"):
+    elif fp_coord.units == cf_units.Unit("seconds"):
         grib_time_code = 13
     else:
         raise iris.exceptions.TranslationError(
@@ -408,19 +409,19 @@ def non_hybrid_surfaces(cube, grib):
     # pressure
     if cube.coords("air_pressure") or cube.coords("pressure"):
         grib_v_code = 100
-        output_unit = iris.unit.Unit("Pa")
+        output_unit = cf_units.Unit("Pa")
         v_coord = (cube.coords("air_pressure") or cube.coords("pressure"))[0]
 
     # altitude
     elif cube.coords("altitude"):
         grib_v_code = 102
-        output_unit = iris.unit.Unit("m")
+        output_unit = cf_units.Unit("m")
         v_coord = cube.coord("altitude")
 
     # height
     elif cube.coords("height"):
         grib_v_code = 103
-        output_unit = iris.unit.Unit("m")
+        output_unit = cf_units.Unit("m")
         v_coord = cube.coord("height")
 
     # unknown / absent
@@ -524,8 +525,8 @@ def time_processing_period(cube, grib):
 
     # Can safely assume bounded pt.
     pt_coord = cube.coord("time")
-    end = iris.unit.num2date(pt_coord.bounds[0, 1], pt_coord.units.name,
-                             pt_coord.units.calendar)
+    end = cf_units.num2date(pt_coord.bounds[0, 1], pt_coord.units.name,
+                            pt_coord.units.calendar)
 
     gribapi.grib_set_long(grib, "yearOfEndOfOverallTimeInterval", end.year)
     gribapi.grib_set_long(grib, "monthOfEndOfOverallTimeInterval", end.month)

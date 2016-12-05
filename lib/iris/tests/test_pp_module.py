@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2014, Met Office
+# (C) British Crown Copyright 2013 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -16,6 +16,7 @@
 # along with Iris.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
@@ -26,11 +27,12 @@ from types import GeneratorType
 import unittest
 
 import biggus
-import mock
 import netcdftime
+from numpy.testing import assert_array_equal
 
 import iris.fileformats
 import iris.fileformats.pp as pp
+from iris.tests import mock
 import iris.util
 
 
@@ -87,11 +89,13 @@ class IrisPPTest(tests.IrisTest):
         test_string = str(pp_fields)
         reference_path = tests.get_result_path(reference_filename)
         if os.path.isfile(reference_path):
-            reference = ''.join(open(reference_path, 'r').readlines())
+            with open(reference_path, 'r') as reference_fh:
+                reference = ''.join(reference_fh.readlines())
             self._assert_str_same(reference+'\n', test_string+'\n', reference_filename, type_comparison_name='PP files')
         else:
             tests.logger.warning('Creating result file: %s', reference_path)
-            open(reference_path, 'w').writelines(test_string)
+            with open(reference_path, 'w') as reference_fh:
+                reference_fh.writelines(test_string)
 
 
 class TestPPHeaderDerived(unittest.TestCase):
@@ -183,7 +187,8 @@ class TestPPField_GlobalTemperature(IrisPPTest):
 
     def test_save_single(self):
         temp_filename = iris.util.create_temp_filename(".pp")
-        self.r[0].save(open(temp_filename, 'wb'))
+        with open(temp_filename, 'wb') as temp_fh:
+            self.r[0].save(temp_fh)
         self.assertEqual(self.file_checksum(temp_filename), self.file_checksum(self.original_pp_filepath))
         os.remove(temp_filename)
            
@@ -194,33 +199,55 @@ class TestPPField_GlobalTemperature(IrisPPTest):
 
         temp_filename = iris.util.create_temp_filename(".pp")
         
-        f.save(open(temp_filename, 'wb'))
+        with open(temp_filename, 'wb') as temp_fh:
+            f.save(temp_fh)
         self.assertEqual(self.file_checksum(temp_filename), self.file_checksum(filepath))
-        
+
         os.remove(temp_filename)
-    
+
 
 @tests.skip_data
 class TestPackedPP(IrisPPTest):
     def test_wgdos(self):
-        r = pp.load(tests.get_data_path(('PP', 'wgdos_packed', 'nae.20100104-06_0001.pp')))
-        
-        # Check that the result is a generator and convert to a list so that we can index and get the first one
-        self.assertEqual( type(r), GeneratorType)
+        filepath = tests.get_data_path(('PP', 'wgdos_packed',
+                                        'nae.20100104-06_0001.pp'))
+        r = pp.load(filepath)
+
+        # Check that the result is a generator and convert to a list so that we
+        # can index and get the first one
+        self.assertEqual(type(r), GeneratorType)
         r = list(r)
-        
+
         self.check_pp(r, ('PP', 'nae_unpacked.pp.txt'))
-        
-        # check that trying to save this field again raises an error (we cannot currently write WGDOS packed fields)
+
+        # check that trying to save this field again raises an error
+        # (we cannot currently write WGDOS packed fields without mo_pack)
         temp_filename = iris.util.create_temp_filename(".pp")
-        self.assertRaises(NotImplementedError, r[0].save, open(temp_filename, 'wb'))
+        with mock.patch('iris.fileformats.pp.mo_pack', None):
+            with self.assertRaises(NotImplementedError):
+                with open(temp_filename, 'wb') as temp_fh:
+                    r[0].save(temp_fh)
         os.remove(temp_filename)
-        
+
+    @unittest.skipIf(pp.mo_pack is None, 'Requires mo_pack.')
+    def test_wgdos_mo_pack(self):
+        filepath = tests.get_data_path(('PP', 'wgdos_packed',
+                                        'nae.20100104-06_0001.pp'))
+        orig_fields = pp.load(filepath)
+        with self.temp_filename('.pp') as temp_filename:
+            with open(temp_filename, 'wb') as fh:
+                for field in orig_fields:
+                    field.save(fh)
+            saved_fields = pp.load(temp_filename)
+            for orig_field, saved_field in zip(orig_fields, saved_fields):
+                assert_array_equal(orig_field.data, saved_field.data)
+
     def test_rle(self):
         r = pp.load(tests.get_data_path(('PP', 'ocean_rle', 'ocean_rle.pp')))
 
-        # Check that the result is a generator and convert to a list so that we can index and get the first one
-        self.assertEqual( type(r), GeneratorType)
+        # Check that the result is a generator and convert to a list so that we
+        # can index and get the first one
+        self.assertEqual(type(r), GeneratorType)
         r = list(r)
 
         self.check_pp(r, ('PP', 'rle_unpacked.pp.txt'))
@@ -229,7 +256,8 @@ class TestPackedPP(IrisPPTest):
         # (we cannot currently write RLE packed fields)
         with self.temp_filename('.pp') as temp_filename:
             with self.assertRaises(NotImplementedError):
-                r[0].save(open(temp_filename, 'wb'))
+                with open(temp_filename, 'wb') as temp_fh:
+                    r[0].save(temp_fh)
 
 
 @tests.skip_data
@@ -257,7 +285,8 @@ class TestPPFileExtraXData(IrisPPTest):
         f = next(pp.load(filepath))
 
         temp_filename = iris.util.create_temp_filename(".pp")
-        f.save(open(temp_filename, 'wb'))
+        with open(temp_filename, 'wb') as temp_fh:
+            f.save(temp_fh)
         
         s = next(pp.load(temp_filename))
         
@@ -296,7 +325,8 @@ class TestPPFileWithExtraCharacterData(IrisPPTest):
         f = next(pp.load(filepath))
 
         temp_filename = iris.util.create_temp_filename(".pp")
-        f.save(open(temp_filename, 'wb'))
+        with open(temp_filename, 'wb') as temp_fh:
+            f.save(temp_fh)
         
         s = next(pp.load(temp_filename))
         

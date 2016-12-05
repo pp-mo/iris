@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2015, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,8 @@
 """Unit tests for the :mod:`iris.analysis.maths` module."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
+import six
 
 from abc import ABCMeta, abstractproperty
 
@@ -27,11 +29,9 @@ from iris.cube import Cube
 import iris.tests.stock as stock
 
 
-class CubeArithmeticBroadcastingTestMixin(object):
+class CubeArithmeticBroadcastingTestMixin(six.with_metaclass(ABCMeta, object)):
     # A framework for testing the broadcasting behaviour of the various cube
     # arithmetic operations.  (A test for each operation inherits this).
-    __metaclass__ = ABCMeta
-
     @abstractproperty
     def data_op(self):
         # Define an operator to be called, I.E. 'operator.xx'.
@@ -118,11 +118,9 @@ class CubeArithmeticBroadcastingTestMixin(object):
                                   err_msg=msg.format(dim))
 
 
-class CubeArithmeticMaskingTestMixin(object):
+class CubeArithmeticMaskingTestMixin(six.with_metaclass(ABCMeta, object)):
     # A framework for testing the mask handling behaviour of the various cube
     # arithmetic operations.  (A test for each operation inherits this).
-    __metaclass__ = ABCMeta
-
     @abstractproperty
     def data_op(self):
         # Define an operator to be called, I.E. 'operator.xx'.

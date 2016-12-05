@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2014, Met Office
+# (C) British Crown Copyright 2014 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -17,6 +17,7 @@
 """Tests for NAME loading."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before
 # importing anything else
@@ -43,6 +44,11 @@ class TestLoad(tests.IrisTest):
         cubes = iris.load(tests.get_data_path(('NAME',
                                                'NAMEII_timeseries.txt')))
         self.assertCMLApproxData(cubes, ('name', 'NAMEII_timeseries.cml'))
+
+    def test_NAMEIII_version2(self):
+        cubes = iris.load(tests.get_data_path(('NAME',
+                                               'NAMEIII_version2.txt')))
+        self.assertCMLApproxData(cubes, ('name', 'NAMEIII_version2.cml'))
 
     def test_NAMEII_trajectory(self):
         cubes = iris.load(tests.get_data_path(('NAME',

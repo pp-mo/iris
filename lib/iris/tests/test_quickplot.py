@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2014, Met Office
+# (C) British Crown Copyright 2010 - 2016, Met Office
 #
 # This file is part of Iris.
 #
@@ -20,6 +20,7 @@ Tests the high-level plotting interface.
 """
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # import iris tests first so that some things can be initialised before importing anything else
 import iris.tests as tests
@@ -59,6 +60,7 @@ def _load_theta():
 @tests.skip_plot
 class TestQuickplotCoordinatesGiven(test_plot.TestPlotCoordinatesGiven):
     def setUp(self):
+        tests.GraphicsTest.setUp(self)
         filename = tests.get_data_path(('PP', 'COLPEX', 'theta_and_orog_subset.pp'))
         self.cube = test_plot.load_cube_once(filename, 'air_potential_temperature')
 
@@ -109,6 +111,7 @@ class TestQuickplotCoordinatesGiven(test_plot.TestPlotCoordinatesGiven):
 @tests.skip_plot
 class TestLabels(tests.GraphicsTest):
     def setUp(self):
+        super(TestLabels, self).setUp()
         self.theta = _load_theta()
 
     def _slice(self, coords):
@@ -183,8 +186,8 @@ class TestLabels(tests.GraphicsTest):
 @tests.skip_data
 @tests.skip_plot
 class TestTimeReferenceUnitsLabels(tests.GraphicsTest):
-
     def setUp(self):
+        super(TestTimeReferenceUnitsLabels, self).setUp()
         path = tests.get_data_path(('PP', 'aPProt1', 'rotatedMHtimecube.pp'))
         self.cube = iris.load_cube(path)[:, 0, 0]
 

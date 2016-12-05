@@ -17,14 +17,14 @@
 """Unit tests for :class:`iris.analysis.Linear`."""
 
 from __future__ import (absolute_import, division, print_function)
+from six.moves import (filter, input, map, range, zip)  # noqa
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests
 
-import mock
-
 from iris.analysis import Linear
+from iris.tests import mock
 
 
 def create_scheme(mode=None):
@@ -123,7 +123,7 @@ class Test_regridder(tests.IrisTest):
         else:
             expected_mode = mode
         lr.assert_called_once_with(mock.sentinel.src, mock.sentinel.target,
-                                   expected_mode)
+                                   'linear', expected_mode)
         self.assertIs(regridder, mock.sentinel.regridder)
 
     def test_default(self):
