@@ -15,22 +15,23 @@ At present (Iris version 1.10), such tests include the testing for modules
 'legacy' style tests (as described in :ref:`developer_tests`).
 It is conceivable that new 'graphics tests' of this sort can still be added.
 However, as graphics tests are inherently "integration" style rather than true
-unit tests, results are dependent on the installed versions of dependences (see
-below), so this is not recommended except where no alternative is practical.
+unit tests, results can differ with the installed versions of dependent
+libraries (see below), so this is not recommended except where no alternative
+is practical.
 
 Testing actual plot results introduces some significant difficulties :
  * Graphics tests are inherently 'integration' style tests, so results will
    often vary with the versions of key dependencies :  Obviously, results will
    depend on the matplotlib version, but they can also depend on numpy and
    other installed packages.
- * Although seems possible in principle to accommodate 'small' result changes
+ * Although it seems possible in principle to accommodate 'small' result changes
    by distinguishing plots which are 'nearly the same' from those which are
    'significantly different', in practice no *automatic* scheme for this can be
    perfect :  That is, any calculated tolerance in output matching will allow
    some changes which a human would judge as a significant error.
  * Storing a variety of alternative 'acceptable' results as reference images
    can easily lead to uncontrolled increases in the size of the repository,
-   given multiple indpendent sources of variation.
+   given multiple independent sources of variation.
 
 
 Graphics Testing Strategy
@@ -66,23 +67,37 @@ There should be sufficient work-flow detail here to allow an iris developer to:
 
 Basic workflow
 ==============
-#. a graphics test result has changed, following changes in Iris or
-   dependencies, so a test is failing
-#. the developer judges that the resulting, changed plot image is actually
-   "correct" (usually, by visually comparing it with previous 'good' results).
-#. a copy of the output PNG file is added to the reference image repository in
-   https://github.com/SciTools/test-images-scitools.  The file is named
-   according to the image hash value, as ``<hash>.png``.
-#. the hash value of the new result is added into the relevant set of 'valid
-   result hashes' in the image result database file,
-   ``tests/results/imagerepo.json``.
-#. the tests can now be re-run, and the 'new' result should now be accepted.
-#. a pull request is created to add this file into the test-images-scitools
-   repository
-#. a pull request is created in the Iris repository, including the change to
-   the image results database (``tests/results/imagerepo.json``) :
-   This pull request must contain a reference to the matching one in
-   test-images-scitools.
+#   If you notice that a graphics test in the Iris testing suite has failed
+    following changes in Iris or any of its dependencies, this is the process
+    you now need to follow:
+
+#1. Create a directory in iris/lib/iris/tests called 'result_image_comparison'.
+#2. From your Iris root directory, run the tests by using the command:
+    ``python setup.py test``.
+#3. Navigate to iris/lib/iris/tests and run the command: ``python idiff.py``.
+    This will open a window for you to visually inspect the changes to the
+    graphic and then either accept or reject the new result.
+#4. Upon acceptance of a change or a new image, a copy of the output PNG file
+    is added to the reference image repository in
+    https://github.com/SciTools/test-images-scitools.  The file is named
+    according to the image hash value, as ``<hash>.png``.
+#5. The hash value of the new result is added into the relevant set of 'valid
+    result hashes' in the image result database file,
+    ``tests/results/imagerepo.json``.
+#6. The tests must now be re-run, and the 'new' result should be accepted.
+    Occasionally there are several graphics checks in a single test, only the
+    first of which will be run should it fail.  If this is the case, then you
+    may well encounter further graphical test failures in your next runs, and
+    you must repeat the process until all the graphical tests pass.
+#7. To add your changes to Iris, you need to make two pull requests.  The first
+    should be made to the test-images-scitools repository, and this should
+    contain all the newly-generated png files copied into the folder named
+    'image_files'.
+#8. The second pull request should be created in the Iris repository, and should
+    only include the change to the image results database
+    (``tests/results/imagerepo.json``) :
+    This pull request must contain a reference to the matching one in
+    test-images-scitools.
 
 Note: the Iris pull-request will not test out successfully in Travis until the
 test-images-scitools pull request has been merged :  This is because there is
