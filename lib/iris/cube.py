@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2016, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -2310,6 +2310,9 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         # Cast the constraint into a proper constraint if it is not so already
         constraint = iris._constraints.as_constraint(constraint)
         return constraint.extract(self)
+
+    def cut(self, *args, **kwargs):
+        return self.extract(iris._constraints.Constraint(*args, **kwargs))
 
     def intersection(self, *args, **kwargs):
         """

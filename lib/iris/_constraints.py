@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2016, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -258,6 +258,14 @@ class _CoordConstraint(object):
         try_quick = False
         if callable(self._coord_thing):
             call_func = self._coord_thing
+            if getattr(call_func, '_cell_fn_requires_coord', False):
+                # Use an augmented function which also passes the *coord*
+                # to the underlying cell function.
+                cell_and_coord_func = call_func
+
+                def call_func(cell):
+                    return cell_and_coord_func(cell, coord)
+
         elif (isinstance(self._coord_thing, collections.Iterable) and
                 not isinstance(self._coord_thing,
                                (six.string_types, iris.coords.Cell))):
@@ -475,3 +483,66 @@ class AttributeConstraint(Constraint):
 
     def __repr__(self):
         return 'AttributeConstraint(%r)' % self._attributes
+
+
+class CoordConstraintHelper(object):
+    """TODO: MISSING DOCSTRING ..."""
+    @staticmethod
+    def __lt__(value):
+        return lambda cell: cell < value
+
+    @staticmethod
+    def __le__(value):
+        return lambda cell: cell <= value
+
+    @staticmethod
+    def __ge__(value):
+        return lambda cell: cell >= value
+
+    @staticmethod
+    def __gt__(value):
+        return lambda cell: cell > value
+
+    @staticmethod
+    def near(value):
+        def near_fn(cell, coord):
+            points = coord.points
+            nearest_value = points[np.argmin(np.abs(points - value))]
+            return cell == nearest_value
+
+        near_fn._cell_fn_requires_coord = True
+        return near_fn
+
+    @staticmethod
+    def __xor__(value):
+        return CoordConstraintHelper.near(value)
+
+    @staticmethod
+    def between(ge=None, lt=None, le=None, gt=None):
+        ops = []
+        if le is not None:
+            ops.append(lambda cell: cell <= le)
+        elif lt is not None:
+            ops.append(lambda cell: cell < lt)
+        if ge is not None:
+            ops.append(lambda cell: cell >= ge)
+        elif gt is not None:
+            ops.append(lambda cell: cell >= gt)
+
+        # Return a test which succeeds only when all the requested tests do.
+        def result_fn(cell):
+            return all(op(cell) for op in ops)
+
+        return result_fn
+
+    @staticmethod
+    def __call__(near_or_ge=None, lt=None, le=None, gt=None):
+        if lt is None:
+            return CoordConstraintHelper.near(near_or_ge)
+        else:
+            return CoordConstraintHelper.between(
+                ge=near_or_ge, lt=lt, le=le, gt=gt)
+
+
+CC = CoordConstraintHelper()
+# "from iris import CoordinateComparisonHelper as CC"

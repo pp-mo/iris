@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2016, Met Office
+# (C) British Crown Copyright 2010 - 2017, Met Office
 #
 # This file is part of Iris.
 #
@@ -138,6 +138,7 @@ if iris.config.IMPORT_LOGGER:
 
 Constraint = iris._constraints.Constraint
 AttributeConstraint = iris._constraints.AttributeConstraint
+COORD_CONSTRAINER = iris._constraints.CoordConstraintHelper()
 
 
 class Future(threading.local):
