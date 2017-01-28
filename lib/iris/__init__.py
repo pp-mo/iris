@@ -128,7 +128,7 @@ __version__ = '1.12.0-DEV'
 __all__ = ['load', 'load_cube', 'load_cubes', 'load_raw',
            'save', 'Constraint', 'AttributeConstraint', 'sample_data_path',
            'site_configuration', 'Future', 'FUTURE',
-           'IrisDeprecation']
+           'IrisDeprecation', 'COORD_CONSTRAINER']
 
 
 # When required, log the usage of Iris.

@@ -31,6 +31,8 @@ import iris.tests as tests
 import numpy as np
 
 import iris
+from iris.cube import Cube
+from iris.coords import DimCoord
 from iris.tests import get_data_path
 from iris import Constraint, COORD_CONSTRAINER as CC
 
@@ -96,6 +98,13 @@ print 'CC version'
         self.assertArrayAllClose(subcube.coord('latitude').points,
                                  [30, 20, 10,  0, -10], atol=0.01)
 
+        # Test the indexing form of the range operator.
+        msg = 'cut(lat=CC[-10:40]) :'
+        subcube = cube.cut(longitude=CC > 300, latitude=CC[-10:40])
+        self.show(subcube, msg, show_lons=False)
+        self.assertArrayAllClose(subcube.coord('latitude').points,
+                                 [30, 20, 10,  0, -10], atol=0.01)
+
         msg = 'cut(lat=CC(-10,40)) :'
         subcube = cube.cut(latitude=CC(-10, 40))
         self.show(subcube, msg, show_lons=False)
@@ -135,6 +144,42 @@ print 'CC version'
         # N.B. last point is at ~165, because it is a bit under the value.
         self.assertArrayAllClose(subcube.coord('longitude').points[-1],
                                  [164.999954])
+
+    def test_index_range(self):
+        # Test precise forms of range specifier for indexing.
+        cube = Cube(np.arange(10))
+        cube.add_dim_coord(DimCoord(np.arange(10, dtype=int), 'longitude'), 0)
+        cube.add_aux_coord(DimCoord([0], 'latitude'))
+
+        msg = '0..9, cut(lons=[3:7]) :'
+        subcube = cube.cut(longitude=CC[3:7])
+        self.show(subcube, msg, show_lats=False)
+        self.assertArrayEqual(subcube.coord('longitude').points,
+                              [3, 4, 5, 6])
+
+        msg = '0..9, cut(lons=[3:7], "[)") :'
+        subcube = cube.cut(longitude=CC[3:7, "[)"])
+        self.show(subcube, msg, show_lats=False)
+        self.assertArrayEqual(subcube.coord('longitude').points,
+                              [3, 4, 5, 6])
+
+        msg = '0..9, cut(lons=[3:7, "()"]) :'
+        subcube = cube.cut(longitude=CC[3:7, "()"])
+        self.show(subcube, msg, show_lats=False)
+        self.assertArrayEqual(subcube.coord('longitude').points,
+                              [4, 5, 6])
+
+        msg = '0..9, cut(lons=[3:7, "[]"]) :'
+        subcube = cube.cut(longitude=CC[3:7, "[]"])
+        self.show(subcube, msg, show_lats=False)
+        self.assertArrayEqual(subcube.coord('longitude').points,
+                              [3, 4, 5, 6, 7])
+
+        msg = '0..9, cut(lons=[3:7, "(]"]) :'
+        subcube = cube.cut(longitude=CC[3:7, "(]"])
+        self.show(subcube, msg, show_lats=False)
+        self.assertArrayEqual(subcube.coord('longitude').points,
+                              [4, 5, 6, 7])
 
 
 if __name__ == '__main__':

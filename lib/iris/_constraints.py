@@ -485,8 +485,73 @@ class AttributeConstraint(Constraint):
         return 'AttributeConstraint(%r)' % self._attributes
 
 
+_VALID_RANGE_TYPES = {
+    '[]': ('ge', 'le'),
+    '[)': ('ge', 'lt'),
+    '()': ('gt', 'lt'),
+    '(]': ('gt', 'le'),
+}
+
+
 class CoordConstraintHelper(object):
-    """TODO: MISSING DOCSTRING ..."""
+    """
+    Object to simplify the creation of coordinate constraints.
+
+    Contains methods to make coordinate selection functions, which are used to
+    determine which coordinate points are selected in constraint operations.
+
+    .. testsetup::
+
+        import iris
+        from iris import Constraint
+        from iris.tests import get_data_path
+
+    For example:
+        >>> from iris import COORD_CONSTRAINER as CC
+        >>> height_above_500_constraint = Constraint(height=CC > 500.0)
+        >>> uk_latitudes_constraint = Constraint(latitude=CC[51.0:57.5])
+        >>> middle_x_constraint = Constraint(longitude=CC(0.3))
+        >>>
+        >>> path = get_data_path(('PP', 'simple_pp', 'global.pp'))
+        >>> cube = iris.load_cube(path)
+        >>> region = cube.cut(longitude=CC[-6:30], latitude=CC[51:78])
+        >>> print region.shape
+        (11, 9)
+
+    Implements a number of Python 'special methods' which enable constraint
+    extractions to be coded more concisely and readably using familiar Python
+    syntax:
+
+    * comparison operators, '<', '<=', '==', '>=' and '>', produce a function
+      that compares each cell with a fixed value.
+
+      For example, `CC > 3` is equivalent to `lambda cell: cell > 3`.
+
+    * function call '(<x>)' produces a 'nearest point' function that selects
+      the coordinate point nearest to a required value.
+
+      For example, `CC(7.5)` selects the coordinate point closest to 7.5.
+
+    * indexing with a slice, '[<lower>:<upper>]' produces a function which
+      selects points within a valid range of values.
+
+      For example, `CC[3:6]` selects all cells such that 3 <= cell < 6.
+
+      A second index can also be added, one of '()', '(]' '[)' or '[]', to
+      control whether the valid range includes the test value at either end,
+      i.e. select test operations '>' or '>=', '<' or '<='.
+
+      For example, `CC[x1:x2, "[]"]` performs "x1 <= cell <= x2".
+
+      The default operation of this is '[)', i.e. "lower <= x < upper".
+
+      .. note::
+
+          The first index *must* be a slice, and the second `None` or one of
+          the four stated string values.
+          No other forms are accepted.
+
+    """
     @staticmethod
     def __lt__(value):
         return lambda cell: cell < value
@@ -527,7 +592,7 @@ class CoordConstraintHelper(object):
         if ge is not None:
             ops.append(lambda cell: cell >= ge)
         elif gt is not None:
-            ops.append(lambda cell: cell >= gt)
+            ops.append(lambda cell: cell > gt)
 
         # Return a test which succeeds only when all the requested tests do.
         def result_fn(cell):
@@ -536,13 +601,31 @@ class CoordConstraintHelper(object):
         return result_fn
 
     @staticmethod
-    def __call__(near_or_ge=None, lt=None, le=None, gt=None):
-        if lt is None:
-            return CoordConstraintHelper.near(near_or_ge)
+    def __call__(near):
+        return CoordConstraintHelper.near(near)
+
+    @staticmethod
+    def __getitem__(arg):
+        if not isinstance(arg, tuple):
+            slice_key, range_type = arg, '[)'
+        elif len(arg) == 2:
+            slice_key, range_type = arg
         else:
-            return CoordConstraintHelper.between(
-                ge=near_or_ge, lt=lt, le=le, gt=gt)
+            msg = 'Indexed by {!r} : must be from:to [, range-type].'
+            raise ValueError(msg.format(arg))
+        if (not hasattr(slice_key, 'start') or
+                not hasattr(slice_key, 'stop') or
+                slice_key.start is None or
+                slice_key.stop is None):
+            msg = 'Argument {!r} : should be a slice of the form "start:stop".'
+            raise ValueError(msg)
+        if range_type not in _VALID_RANGE_TYPES:
+            msg = 'Range type specifier {!r} must be one of {}.'
+            raise ValueError(msg.format(range_type, _VALID_RANGE_TYPES))
+        lower, upper = slice_key.start, slice_key.stop
+        between_keys = _VALID_RANGE_TYPES[range_type]
+        between_args = {between_keys[0]: lower, between_keys[1]: upper}
+        return CoordConstraintHelper.between(**between_args)
 
 
 CC = CoordConstraintHelper()
-# "from iris import CoordinateComparisonHelper as CC"
