@@ -17,7 +17,7 @@
 """
 Integration tests for :class:`iris._constraints.CoordConstraintHelper`
 
-Also exercising the new :meth:`cube.cut`.
+Also exercising the new :meth:`cube.sel`.
 
 """
 
@@ -78,10 +78,10 @@ test cube.extract :
         # Test the equivalent using the new facilities.
         #
         msg = """\
-print 'CC version'
-  = cube.cut(longitude=CC > 120.0, latitude=CC[-10:40])
+print 'CC+sel version'
+  = cube.sel(longitude=CC > 120.0, latitude=CC[-10:40])
 """
-        subcube_cc = cube.cut(longitude=CC > 120.0, latitude=CC[-10:40])
+        subcube_cc = cube.sel(longitude=CC > 120.0, latitude=CC[-10:40])
         self.show(subcube_cc, msg)
         same = subcube_cc == subcube
         print('?same? : ', same)
@@ -90,8 +90,8 @@ print 'CC version'
         subcube = cube.extract(Constraint(longitude=CC.near(130)))
         self.show(subcube, 'lons=CC.near(130)', show_lats=False)
 
-        msg = 'cut(lon=CC > 300, lat=CC.between(-10,40)) :'
-        subcube = cube.cut(longitude=CC > 300, latitude=CC.between(-10, 40))
+        msg = 'sel(lons=CC > 300, lats=CC.between(-10,40)) :'
+        subcube = cube.sel(longitude=CC > 300, latitude=CC.between(-10, 40))
         self.show(subcube, msg)
         self.assertArrayAllClose(subcube.coord('longitude').points,
                                  [315, 330, 345], atol=0.01)
@@ -99,45 +99,45 @@ print 'CC version'
                                  [30, 20, 10,  0, -10], atol=0.01)
 
         # Test the indexing form of the range operator.
-        msg = 'cut(lat=CC[-10:40]) :'
-        subcube = cube.cut(longitude=CC > 300, latitude=CC[-10:40])
+        msg = 'sel(lats=CC[-10:40]) :'
+        subcube = cube.sel(longitude=CC > 300, latitude=CC[-10:40])
         self.show(subcube, msg, show_lons=False)
         self.assertArrayAllClose(subcube.coord('latitude').points,
                                  [30, 20, 10,  0, -10], atol=0.01)
 
-        msg = 'cut(lat=CC[-10:40]) :'
-        subcube = cube.cut(latitude=CC[-10:40])
+        msg = 'sel(lats=CC[-10:40]) :'
+        subcube = cube.sel(latitude=CC[-10:40])
         self.show(subcube, msg, show_lons=False)
         self.assertArrayAllClose(subcube.coord('latitude').points,
                                  [30, 20, 10,  0, -10], atol=0.01)
 
-        subcube = cube.cut(longitude=164.99995422)
-        msg = 'cut(lon=164.99995422):'
+        subcube = cube.sel(longitude=164.99995422)
+        msg = 'sel(lons=164.99995422):'
         self.show(subcube, msg, show_cube=True, show_coords=False)
         self.assertIsNone(subcube)
 
-        msg = 'cut(lon=CC(165)):'
-        subcube = cube.cut(longitude=CC(165))
+        msg = 'sel(lons=CC(165)):'
+        subcube = cube.sel(longitude=CC(165))
         self.show(subcube, msg, show_lats=False)
         self.assertArrayAllClose(subcube.coord('longitude').points,
                                  [164.999954])
 
-        msg = 'cut(lon=CC ^ 165, lat=CC ^ 100):'
-        subcube = cube.cut(longitude=CC ^ 165, latitude=CC ^ 100)
+        msg = 'sel(lons=CC ^ 165, lats=CC ^ 100):'
+        subcube = cube.sel(longitude=CC ^ 165, latitude=CC ^ 100)
         self.show(subcube, msg)
         self.assertArrayAllClose(subcube.coord('longitude').points,
                                  [165], atol=0.01)
         self.assertArrayAllClose(subcube.coord('latitude').points,
                                  [90], atol=0.01)
 
-        msg = 'cut(lon=CC >= 165):'
-        subcube = cube.cut(longitude=CC >= 165)
+        msg = 'sel(lons=CC >= 165):'
+        subcube = cube.sel(longitude=CC >= 165)
         self.show(subcube, msg, show_lats=False)
         self.assertArrayAllClose(subcube.coord('longitude').points,
                                  np.arange(180, 360, 15), atol=0.01)
 
-        msg = 'cut(lon=CC < 165):'
-        subcube = cube.cut(longitude=CC < 165)
+        msg = 'sel(lons=CC < 165):'
+        subcube = cube.sel(longitude=CC < 165)
         self.show(subcube, msg, show_lats=False)
         self.assertArrayAllClose(subcube.coord('longitude').points,
                                  np.arange(0, 165.1, 15), atol=0.01)
@@ -151,32 +151,32 @@ print 'CC version'
         cube.add_dim_coord(DimCoord(np.arange(10, dtype=int), 'longitude'), 0)
         cube.add_aux_coord(DimCoord([0], 'latitude'))
 
-        msg = '0..9, cut(lons=[3:7]) :'
-        subcube = cube.cut(longitude=CC[3:7])
+        msg = '0..9, sel(lons=[3:7]) :'
+        subcube = cube.sel(longitude=CC[3:7])
         self.show(subcube, msg, show_lats=False)
         self.assertArrayEqual(subcube.coord('longitude').points,
                               [3, 4, 5, 6])
 
-        msg = '0..9, cut(lons=[3:7], "[)") :'
-        subcube = cube.cut(longitude=CC[3:7, "[)"])
+        msg = '0..9, sel(lons=[3:7, "[)"]) :'
+        subcube = cube.sel(longitude=CC[3:7, "[)"])
         self.show(subcube, msg, show_lats=False)
         self.assertArrayEqual(subcube.coord('longitude').points,
                               [3, 4, 5, 6])
 
-        msg = '0..9, cut(lons=[3:7, "()"]) :'
-        subcube = cube.cut(longitude=CC[3:7, "()"])
+        msg = '0..9, sel(lons=[3:7, "()"]) :'
+        subcube = cube.sel(longitude=CC[3:7, "()"])
         self.show(subcube, msg, show_lats=False)
         self.assertArrayEqual(subcube.coord('longitude').points,
                               [4, 5, 6])
 
-        msg = '0..9, cut(lons=[3:7, "[]"]) :'
-        subcube = cube.cut(longitude=CC[3:7, "[]"])
+        msg = '0..9, sel(lons=[3:7, "[]"]) :'
+        subcube = cube.sel(longitude=CC[3:7, "[]"])
         self.show(subcube, msg, show_lats=False)
         self.assertArrayEqual(subcube.coord('longitude').points,
                               [3, 4, 5, 6, 7])
 
-        msg = '0..9, cut(lons=[3:7, "(]"]) :'
-        subcube = cube.cut(longitude=CC[3:7, "(]"])
+        msg = '0..9, sel(lons=[3:7, "(]"]) :'
+        subcube = cube.sel(longitude=CC[3:7, "(]"])
         self.show(subcube, msg, show_lats=False)
         self.assertArrayEqual(subcube.coord('longitude').points,
                               [4, 5, 6, 7])

@@ -2311,7 +2311,21 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         constraint = iris._constraints.as_constraint(constraint)
         return constraint.extract(self)
 
-    def cut(self, *args, **kwargs):
+    def sel(self, *args, **kwargs):
+        """
+        Build a constraint and extract with it.
+
+        Equivalent to ``self.extract(Constraint(*args, **kwargs))``.
+
+        Designed to provide a neater syntax for coordinate constraints, along
+        with :data:`~iris.COORD_CONSTRAINER`.
+
+        .. for example:
+            >>> cube.sel(longitude=CC[0:180], latitude=CC[0:45,'[]'])
+
+        TODO: proper docs here.
+
+        """
         return self.extract(iris._constraints.Constraint(*args, **kwargs))
 
     def intersection(self, *args, **kwargs):
