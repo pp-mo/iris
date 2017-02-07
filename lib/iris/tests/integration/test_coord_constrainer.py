@@ -79,9 +79,9 @@ test cube.extract :
         #
         msg = """\
 print 'CC version'
-  = cube.cut(longitude=CC > 120.0, latitude=CC(-10, 40))
+  = cube.cut(longitude=CC > 120.0, latitude=CC[-10:40])
 """
-        subcube_cc = cube.cut(longitude=CC > 120.0, latitude=CC(-10, 40))
+        subcube_cc = cube.cut(longitude=CC > 120.0, latitude=CC[-10:40])
         self.show(subcube_cc, msg)
         same = subcube_cc == subcube
         print('?same? : ', same)
@@ -105,8 +105,8 @@ print 'CC version'
         self.assertArrayAllClose(subcube.coord('latitude').points,
                                  [30, 20, 10,  0, -10], atol=0.01)
 
-        msg = 'cut(lat=CC(-10,40)) :'
-        subcube = cube.cut(latitude=CC(-10, 40))
+        msg = 'cut(lat=CC[-10:40]) :'
+        subcube = cube.cut(latitude=CC[-10:40])
         self.show(subcube, msg, show_lons=False)
         self.assertArrayAllClose(subcube.coord('latitude').points,
                                  [30, 20, 10,  0, -10], atol=0.01)
