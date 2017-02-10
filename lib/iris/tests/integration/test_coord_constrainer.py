@@ -56,6 +56,7 @@ class Test(tests.IrisTest):
             if show_lats:
                 print('lats = ', lats)
 
+    @tests.skip_data
     def test(self):
         # A few tests to exercise the new stuff -- not proper tests, yet.
         path = get_data_path(('PP', 'simple_pp', 'global.pp'))
