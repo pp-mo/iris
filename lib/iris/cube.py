@@ -646,6 +646,23 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
     #: is similar to Fortran or Matlab, but different than numpy.
     __orthogonal_indexing__ = True
 
+    def _set_data_to_lazy_array(self, data):
+        # Low-level operation to record new lazy data content.
+        self.data_graph = data
+        self._has_been_realised = False
+        # Reset type + real-result caching.
+        self.dtype = self.data_graph.dtype
+        self._cached_real_data = None
+
+    def _set_data_to_real_array(self, data, chunks=None):
+        # Low-level operation to record new real data content.
+        data = np.asarray(data)
+        self.data_graph = as_lazy_data(data, chunks=chunks)
+        self._has_been_realised = True
+        # Reset type + real-result caching.
+        self.dtype = self.data_graph.dtype
+        self._cached_real_data = None
+
     def __init__(self, data, standard_name=None, long_name=None,
                  var_name=None, units=None, attributes=None,
                  cell_methods=None, dim_coords_and_dims=None,
@@ -722,9 +739,12 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         self.dtype = data.dtype
         self.fill_value = fill_value
 
-        if not is_lazy_data(data):
-            data = np.asarray(data)
-        self.data_graph = as_lazy_data(data)
+        if is_lazy_data(data):
+            # Store lazy object -- "real" data has not yet been computed.
+            self._set_data_to_lazy_array(data)
+        else:
+            # Record as 'pre-realised' data.
+            self._set_data_to_real_array(data)
 
         #: The "standard name" for the Cube's phenomenon.
         self.standard_name = standard_name
@@ -1651,7 +1671,7 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                 if self.shape or array.shape != (1,):
                     raise ValueError('Require cube data with shape %r, got '
                                      '%r.' % (self.shape, array.shape))
-            self.data_graph = array
+            self._set_data_to_lazy_array(array)
         return self.data_graph
 
     @property
@@ -1687,28 +1707,32 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             (10, 20)
 
         """
-        data = self.data_graph
-        chunks = self.data_graph.chunks
-        try:
-            data = as_concrete_data(data, fill_value=self.fill_value)
-        except MemoryError:
-            msg = "Failed to create the cube's data as there was not" \
-                  " enough memory available.\n" \
-                  "The array shape would have been {0!r} and the data" \
-                  " type {1}.\n" \
-                  "Consider freeing up variables or indexing the cube" \
-                  " before getting its data."
-            msg = msg.format(self.shape, data.dtype)
-            raise MemoryError(msg)
+        if self._cached_real_data is not None:
+            data = self._cached_real_data
+        else:
+            data = self.data_graph
+            chunks = self.data_graph.chunks
+            try:
+                data = as_concrete_data(data, fill_value=self.fill_value)
+            except MemoryError:
+                msg = "Failed to create the cube's data as there was not" \
+                      " enough memory available.\n" \
+                      "The array shape would have been {0!r} and the data" \
+                      " type {1}.\n" \
+                      "Consider freeing up variables or indexing the cube" \
+                      " before getting its data."
+                msg = msg.format(self.shape, data.dtype)
+                raise MemoryError(msg)
 
-        # Unmask the array only if it is filled.
-        if (isinstance(data, np.ma.masked_array) and
-                ma.count_masked(data) == 0):
-            data = data.data
-        # data may be a numeric type, so ensure an np.ndarray is returned
-        data = np.asanyarray(data)
-        # Create a dask data_graph and link the cube to this
-        self.data_graph = da.from_array(data.data, chunks)
+            # Unmask the array only if it has no masked points.
+            if (isinstance(data, np.ma.masked_array) and
+                    ma.count_masked(data) == 0):
+                data = data.data
+            # data may be a numeric type, so ensure an np.ndarray is returned
+            data = np.asanyarray(data)
+            # Reinitialise cube data to this result array.
+            # This means the 'original' dask graph is lost at this point.
+            self._set_data_to_real_array(data, chunks=chunks)
         return data
 
     @data.setter
@@ -1722,13 +1746,28 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             if self.shape or data.shape != (1,):
                 raise ValueError('Require cube data with shape %r, got '
                                  '%r.' % (self.shape, data.shape))
-        self.dtype = data.dtype
-        self.data_graph = as_lazy_data(data)
+        self._set_data_to_real_array(data)
 
     def has_lazy_data(self):
-        # now this always returns true, new pattern needed
-        return is_lazy_data(self.data_graph)
-        
+        """
+        Now a misnomer, maybe should be called "has_not_yet_been_realised".
+
+        The result is False when the cube content was set to a real numpy
+        array, or it has since been accessed as one (via "cube.data").
+        In that case, the cube now contains a 'real' data array, and calls to
+        "cube.data" are not costly.
+
+        The result is True when the cube content was set to a lazy array, and
+        cube.data has not been accessed since.
+        In this case, fetching cube.data must first compute the real data,
+        which may be costly in time and/or memory.
+
+        In either case, cube content is stored in the lazy graph object,
+        "cube.data_graph".
+        In the latter case, that is just a simple wrapper around a real array.
+
+        """
+        return not self._has_been_realised
 
     @property
     def dim_coords(self):

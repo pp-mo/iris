@@ -64,7 +64,7 @@ def as_concrete_data(data, fill_value=None):
 _MAX_CHUNK_SIZE = 8 * 1024 * 1024 * 2
 
 
-def as_lazy_data(data):
+def as_lazy_data(data, chunks=_MAX_CHUNK_SIZE):
     """
     Return a lazy equivalent of the argument, as a lazy array.
 
@@ -81,7 +81,7 @@ def as_lazy_data(data):
         if isinstance(data, np.ma.MaskedArray):
             # Use with NaNs replacing the mask.
             data = array_masked_to_nans(data)
-        data = da.from_array(data, chunks=_MAX_CHUNK_SIZE)
+        data = da.from_array(data, chunks=chunks)
     return data
 
 
