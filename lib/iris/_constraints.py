@@ -514,7 +514,7 @@ class CoordConstraintHelper(object):
         >>>
         >>> path = get_data_path(('PP', 'simple_pp', 'global.pp'))
         >>> cube = iris.load_cube(path)
-        >>> region = cube.cut(longitude=CC[-6:30], latitude=CC[51:78])
+        >>> region = cube.sel(longitude=CC[-6:30], latitude=CC[51:78])
         >>> print region.shape
         (11, 9)
 
