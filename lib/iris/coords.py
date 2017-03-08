@@ -33,7 +33,6 @@ import warnings
 import zlib
 
 import biggus
-import iris._lazy_data
 import dask.array as da
 import netcdftime
 import numpy as np
@@ -44,6 +43,7 @@ import iris.time
 import iris.util
 
 from iris._cube_coord_common import CFVariableMixin
+from iris._lazy_data import is_lazy_data, as_concrete_data
 from iris.util import is_regular
 
 
@@ -1611,8 +1611,8 @@ class AuxCoord(Coord):
     @property
     def points(self):
         """Property containing the points values as a numpy array"""
-        if iris._lazy_data.is_lazy_data(self._points):
-            self._points = self._points.compute()
+        if is_lazy_data(self._points):
+            self._points = as_concrete_data(self._points)
         return self._points.view()
 
     @points.setter
@@ -1623,7 +1623,7 @@ class AuxCoord(Coord):
         # of 1 and is either a numpy or lazy array.
         # This will avoid Scalar coords with points of shape () rather
         # than the desired (1,)
-        if iris._lazy_data.is_lazy_data(points):
+        if is_lazy_data(points):
             if points.shape == ():
                 points = points * np.ones(1)
         elif not isinstance(points, iris.aux_factory._LazyArray):

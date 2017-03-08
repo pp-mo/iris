@@ -40,6 +40,59 @@ def is_lazy_data(data):
     return result
 
 
+def as_concrete_data(data, filled=None, result_dtype=None):
+    """
+    Return the actual content of a lazy array, as a numpy array.
+
+    If the data is a NumPy array, return it unchanged.
+
+    If the data is lazy, return the realised result.
+
+    Where lazy data contains NaNs these are translated by either filling or
+    conversion to a masked array :
+
+    *   if the "filled" keyword is given, any NaNs in the data are filled with
+        this value.  The result is always a 'normal' numpy array.
+
+    *   if the "filled" keyword is *not* given, then the result is a 'normal'
+        NumPy array only if the data contains no NaNs :  If there *are* NaNs,
+        we return instead return a *masked* array, masked at the NaN points.
+
+    .. note::
+
+        Any masked array returned has the default fill-value.
+
+    """
+    if is_lazy_data(data):
+        # Realise dask array.
+        data = data.compute()
+        # Convert any missing data as requested.
+        data = _array_nans_to_filled_or_masked(data, filled=filled,
+                                               result_dtype=result_dtype)
+
+    return data
+
+
+def _array_nans_to_filled_or_masked(array, filled=None, result_dtype=None):
+    # Convert any NaNs into a masked or filled array result.
+    mask = np.isnan(array)
+    if not np.all(~mask):
+        # Some points have NaNs.
+        if filled is not None:
+            # Convert NaN arrays into filled data, for file storage.
+            array[mask] = filled
+        else:
+            # Convert NaN arrays into masked arrays for Iris' consumption.
+            array = np.ma.masked_array(array, mask=mask)
+
+    if result_dtype is not None and array.dtype != result_dtype:
+        # Force the required dtype.  This is used where masked integers may
+        # occur : they are represented as floating NaN arrays.
+        array = array.astype(result_dtype)
+
+    return array
+
+
 def array_masked_to_nans(array, mask=None):
     """
     Convert a masked array to a normal array with NaNs at masked points.
