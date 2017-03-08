@@ -42,7 +42,8 @@ from iris._cube_coord_common import CFVariableMixin
 import iris._concatenate
 import iris._constraints
 from iris._deprecation import warn_deprecated
-from iris._lazy_data import is_lazy_data, array_masked_to_nans
+from iris._lazy_data import (is_lazy_data, as_concrete_data,
+                             array_masked_to_nans)
 import iris._merge
 import iris.analysis
 from iris.analysis.cartography import wrap_lons
@@ -1699,17 +1700,8 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         """
         if self.has_lazy_data():
             try:
-                data = self._dask_array.compute()
-                mask = np.isnan(data)
-                if data.dtype != self.dtype:
-                    data = data.astype(self.dtype)
-                    self.dtype = None
-                if np.all(~mask):
-                    self._numpy_array = data
-                else:
-                    fv = self.fill_value
-                    self._numpy_array = ma.masked_array(data, mask=mask,
-                                                        fill_value=fv)
+                self.data = as_concrete_data(self._dask_array,
+                                             result_dtype=self.dtype)
             except MemoryError:
                 msg = "Failed to create the cube's data as there was not" \
                       " enough memory available.\n" \
@@ -1734,12 +1726,18 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                 raise ValueError('Require cube data with shape %r, got '
                                  '%r.' % (self.shape, value.shape))
 
+        # Rebase the cube on either lazy or real data, whichever provided.
         if is_lazy_data(value):
             self._dask_array = value
             self._numpy_array = None
-
         else:
             self._numpy_array = value
+            self._dask_array = None
+
+        # On setting, the cube takes the dtype of the data.
+        # You can explicitly set cube.dtype afterward, to force a conversion
+        # (for example, after setting lazy data representing masked integers).
+        self._dtype = None
 
     def has_lazy_data(self):
         return self._numpy_array is None

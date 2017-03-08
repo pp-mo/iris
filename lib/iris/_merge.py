@@ -33,7 +33,8 @@ import dask.array as da
 import numpy as np
 import numpy.ma as ma
 
-from iris._lazy_data import is_lazy_data, array_masked_to_nans
+from iris._lazy_data import (is_lazy_data, as_concrete_data,
+                             array_masked_to_nans)
 import iris.cube
 import iris.coords
 import iris.exceptions
@@ -1242,11 +1243,7 @@ class ProtoCube(object):
             if all_have_data:
                 # All inputs were concrete, so turn the result back into a
                 # normal array.
-                merged_data = merged_data.compute()
-                # Unmask the array only if it is filled.
-                if (ma.isMaskedArray(merged_data) and
-                        ma.count_masked(merged_data) == 0):
-                    merged_data = merged_data.data
+                merged_data = as_concrete_data(merged_data)
             merged_cube = self._get_cube(merged_data)
             merged_cubes.append(merged_cube)
 
@@ -1601,8 +1598,7 @@ class ProtoCube(object):
 
     def _build_signature(self, cube):
         """Generate the signature that defines this cube."""
-        array = cube.lazy_data()
-        return _CubeSignature(cube.metadata, cube.shape, array.dtype,
+        return _CubeSignature(cube.metadata, cube.shape, cube.dtype,
                               cube._cell_measures_and_dims)
 
     def _add_cube(self, cube, coord_payload):
