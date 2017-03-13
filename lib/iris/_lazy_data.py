@@ -100,9 +100,10 @@ def array_masked_to_nans(array):
     if not ma.isMaskedArray(array):
         result = array
     else:
-        if array.dtype.kind == 'i':
-            array = array.astype(np.dtype('f8'))
-        mask = array.mask
-        array[mask] = np.nan
+        if ma.is_masked(array):
+            if array.dtype.kind == 'i':
+                array = array.astype(np.dtype('f8'))
+            mask = array.mask
+            array[mask] = np.nan
         result = array.data
     return result

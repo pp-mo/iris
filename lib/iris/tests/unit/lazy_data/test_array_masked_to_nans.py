@@ -89,12 +89,12 @@ class Test(tests.IrisTest):
         self.assertIs(result, unmasked_array)
 
     def test_no_mask__integers(self):
-        masked_array = ma.masked_array([1, 2], mask=ma.nomask)
+        masked_array = ma.masked_array([1, 2], dtype=np.int16, mask=ma.nomask)
 
         result = array_masked_to_nans(masked_array)
 
         self._common_checks(result)
-        self.assertEqual(result.dtype, np.dtype('f8'))
+        self.assertEqual(result.dtype, np.dtype('i2'))
 
 
 if __name__ == '__main__':
