@@ -753,9 +753,16 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
 
         # We need to set the dtype before the fill_value,
         # as the fill_value is checked against self.dtype.
-        self._dtype = None
-        if dtype is not None:
-            self.dtype = dtype
+        self._realisation_dtype = None
+        if self.has_lazy_data() and dtype is not None:
+            # Record 'real' dtype for lazy data which represents masked ints.
+            dtype = np.dtype(dtype)
+            if dtype.kind not in ('i', 'u'):
+                emsg = ('Can only cast lazy data to integral dtype, '
+                        'got {!r}.')
+                raise ValueError(emsg.format(dtype))
+            self._realisation_dtype = dtype
+
         self.fill_value = fill_value
 
         identities = set()
@@ -801,7 +808,7 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         """
         return CubeMetadata(self.standard_name, self.long_name, self.var_name,
                             self.units, self.attributes, self.cell_methods,
-                            self._dtype, self.fill_value)
+                            self._realisation_dtype, self.fill_value)
 
     @metadata.setter
     def metadata(self, value):
@@ -1630,26 +1637,11 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
 
     @property
     def dtype(self):
-        if self._dtype is None:
-            result = self.core_data.dtype
+        if self._realisation_dtype is not None:
+            result = self._realisation_dtype
         else:
-            result = self._dtype
+            result = self.core_data.dtype
         return result
-
-    @dtype.setter
-    def dtype(self, dtype):
-        if dtype != self.dtype:
-            if dtype is not None:
-                if not self.has_lazy_data():
-                    emsg = 'Cube does not have lazy data, cannot set dtype.'
-                    raise ValueError(emsg)
-                dtype = np.dtype(dtype)
-                if dtype.kind != 'i':
-                    emsg = ('Can only cast lazy data to integral dtype, '
-                            'got {!r}.')
-                    raise ValueError(emsg.format(dtype))
-                self._fill_value = None
-            self._dtype = dtype
 
     @property
     def fill_value(self):
@@ -1736,8 +1728,8 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                 data = self._dask_array.compute()
                 mask = np.isnan(data)
                 if data.dtype != self.dtype:
-                    data = data.astype(self.dtype)
-                    self.dtype = None
+                    data = data.astype(self._realisation_dtype)
+                    self._realisation_dtype = None
                 if np.all(~mask):
                     self._numpy_array = data
                 else:
@@ -1777,7 +1769,7 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
             self._dask_array = None
 
         # Cancel any 'realisation' datatype conversion, and fill value.
-        self.dtype = None
+        self._realisation_dtype = None
         self.fill_value = None
 
     def has_lazy_data(self):
