@@ -31,12 +31,13 @@ import numpy.ma as ma
 
 import iris.cube
 from iris.coords import DimCoord, AuxCoord
+from iris._lazy_data import as_lazy_data
 import iris.tests.stock as stock
 
 
 def _make_cube(x, y, data, aux=None, offset=0, scalar=None,
                dtype=np.dtype('float32'), fill_value=None,
-               mask=None):
+               mask=None, lazy=False):
     """
     A convenience test function that creates a custom 2D cube.
 
@@ -92,7 +93,11 @@ def _make_cube(x, y, data, aux=None, offset=0, scalar=None,
     else:
         cube_data = np.empty(shape, dtype=dtype)
         cube_data[:] = data
-    cube = iris.cube.Cube(cube_data, fill_value=fill_value)
+
+    if lazy:
+        cube_data = as_lazy_data(cube_data)
+
+    cube = iris.cube.Cube(cube_data, fill_value=fill_value, dtype=dtype)
     coord = DimCoord(y_range, long_name='y')
     coord.guess_bounds()
     cube.add_dim_coord(coord, 0)
@@ -468,9 +473,7 @@ class Test2D(tests.IrisTest):
                           mask=mask)
         cubes.append(cube)
         mask = [(0, 1), (1, 0)]
-        cube = _make_cube(x, (2, 4), 2, dtype=dtype, mask=mask)
-        cube.data = cube.lazy_data()
-        cube.dtype = dtype
+        cube = _make_cube(x, (2, 4), 2, dtype=dtype, mask=mask, lazy=True)
         cube.fill_value = fill_value
         cubes.append(cube)
         result = concatenate(cubes)
@@ -489,9 +492,7 @@ class Test2D(tests.IrisTest):
         dtype = np.dtype('int16')
         fill_value = -37
         mask = [(0, 1), (1, 0)]
-        cube = _make_cube(x, (2, 4), 2, dtype=dtype, mask=mask)
-        cube.data = cube.lazy_data()
-        cube.dtype = dtype
+        cube = _make_cube(x, (2, 4), 2, dtype=dtype, mask=mask, lazy=True)
         cube.fill_value = fill_value
         cubes.append(cube)
         mask = [(0, 1), (0, 1)]

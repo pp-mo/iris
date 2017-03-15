@@ -754,7 +754,9 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
         # We need to set the dtype before the fill_value,
         # as the fill_value is checked against self.dtype.
         self._realisation_dtype = None
-        if self.has_lazy_data() and dtype is not None:
+        if (self.has_lazy_data() and
+                dtype is not None and
+                dtype != self.dtype):
             # Record 'real' dtype for lazy data which represents masked ints.
             dtype = np.dtype(dtype)
             if dtype.kind not in ('i', 'u'):
@@ -824,8 +826,10 @@ bound=(1994-12-01 00:00:00, 1998-12-01 00:00:00)
                     raise TypeError('Invalid/incomplete metadata')
         for name in CubeMetadata._fields:
             alias = name
-            if name in ['dtype', 'fill_value']:
-                alias = '_{}'.format(name)
+            if name == 'dtype':
+                alias = '_realisation_dtype'
+            elif name == 'fill_value':
+                alias = '_fill_value'
             setattr(self, alias, getattr(value, name))
 
     def is_compatible(self, other, ignore=None):

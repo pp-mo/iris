@@ -1312,12 +1312,6 @@ class Test_data_dtype_fillvalue(tests.IrisTest):
         self.assertEqual(cube.dtype, np.dtype('f8'))
         self.assertIsNone(cube.fill_value)
 
-    def test_realdata_dtype_change(self):
-        # Check that cannot change real data dtype.
-        cube = self._sample_cube()
-        with self.assertRaisesRegexp(ValueError, "cannot set dtype"):
-            cube.dtype = np.dtype('i8')
-
     def test_lazydata_nonmaskedints(self):
         # Check that lazy ints retain their dtype.
         data_original = self._sample_data(dtype=np.int32)
@@ -1332,44 +1326,12 @@ class Test_data_dtype_fillvalue(tests.IrisTest):
         # Check that lazy masked ints have a modified dtype.
         masked_data_original = self._sample_data(dtype=np.int32, masked=True)
         masked_data_lazy = as_lazy_data(masked_data_original)
-        cube = Cube(masked_data_lazy)
-        cube.dtype = masked_data_original.dtype
+        cube = Cube(masked_data_lazy, dtype=masked_data_original.dtype)
         self.assertEqual(cube.dtype, np.dtype('i4'))
         self.assertEqual(cube.core_data.dtype, np.dtype('f8'))
         data = cube.data
         self.assertTrue(np.ma.is_masked(data))
         self.assertMaskedArrayEqual(data, masked_data_original)
-
-    def test_lazydata_floating_dtype_change(self):
-        # Check that re-assigning dtype won't allow a floating type.
-        cube = self._sample_cube(dtype=np.float32, lazy=True,
-                                 cube_fill_value=23.7)
-        self.assertArrayAllClose(cube.fill_value, 23.7)
-        msg = "Can only cast lazy data to integral dtype"
-        with self.assertRaisesRegexp(ValueError, msg):
-            cube.dtype = np.float64
-
-    def test_lazydata_dtype_change(self):
-        # Check that re-assigning dtype resets fill_value.
-        cube = self._sample_cube(dtype=np.float32, lazy=True,
-                                 cube_fill_value=23.7)
-        self.assertArrayAllClose(cube.fill_value, 23.7)
-        cube.dtype = np.int16
-        self.assertEqual(cube.dtype, np.dtype('i2'))
-        self.assertEqual(cube.core_data.dtype, np.dtype('f4'))
-        self.assertIsNone(cube.fill_value)
-
-    def test_lazydata_maskedints_dtype_change(self):
-        # Check that re-assigning dtype resets fill_value.
-        cube = self._sample_cube(dtype=np.int16, masked=True, lazy=True,
-                                 cube_fill_value=199)
-        self.assertEqual(cube.dtype, np.dtype('i2'))
-        self.assertEqual(cube.core_data.dtype, np.dtype('f8'))
-        self.assertArrayAllClose(cube.fill_value, 199)
-        cube.dtype = np.int64
-        self.assertEqual(cube.dtype, np.dtype('i8'))
-        self.assertEqual(cube.core_data.dtype, np.dtype('f8'))
-        self.assertIsNone(cube.fill_value)
 
     def test_fill_value__int_dtype_to_float(self):
         # Check that fill_value is cast to dtype, e.g. float --> int.
