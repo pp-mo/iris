@@ -26,7 +26,24 @@ from __future__ import (absolute_import, division, print_function)
 from six.moves import (filter, input, map, range, zip)  # noqa
 import six
 
-from iris.fileformats._ff import FF2PP
+#from iris.fileformats._ff import FF2PP
+import mule
+from iris.fileformats._ff import DEFAULT_FF_WORD_DEPTH
+
+def FF2PP(filename, read_data=False,
+          word_depth=DEFAULT_FF_WORD_DEPTH):
+    """
+    Get a stream of PPField objects from a FieldsFile.
+
+    Now using Mule !
+
+    """
+
+    # Do not support this.
+    assert read_data == False
+
+    
+
 from iris.fileformats.pp import _load_cubes_variable_loader
 
 
