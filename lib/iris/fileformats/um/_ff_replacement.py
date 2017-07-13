@@ -26,68 +26,79 @@ from __future__ import (absolute_import, division, print_function)
 from six.moves import (filter, input, map, range, zip)  # noqa
 import six
 
+import os
+
 import numpy as np
 
 from mule.ff import FieldsFile, _DATA_DTYPES
 from iris.fileformats._ff import DEFAULT_FF_WORD_DEPTH
-from iris._lazy_data import as_lazy_data
-
-#from iris.fileformats._ff import FF2PP
 from iris.fileformats.pp import make_pp_field
 
+from iris._lazy_data import as_lazy_data
 
-class MuleFieldDataProxy(object):
-    def __init__(self, field, mule_file, filename):
-        self.dtype = np.dtype(
-            _DATA_DTYPES[mule_file.WORD_SIZE][field.lbuser1])
-        self.shape = (mule_file.integer_constants.num_rows,
-                      mule_file.integer_constants.num_cols)
-        self.mule_file = mule_file
-        self.filename = filename
-        self._field_index = mule_file.fields.index(field)
+USE_OLD_IRIS_FF = False
+_USE_IRIS_FF_VAR = os.environ.get('USE_OLD_IRIS_FF')
+if _USE_IRIS_FF_VAR is not None:
+    USE_OLD_IRIS_FF = bool(int(_USE_IRIS_FF_VAR))
+#print('\n\n  env($USE_OLD_IRIS_FF)={!r}  :  USE_OLD_IRIS_FF={!r}\n\n'.format(
+#     _USE_IRIS_FF_VAR, USE_OLD_IRIS_FF))
 
-    def __getitem__(self, keys):
-        mule_file = self.mule_file
-        original_file_still_open = \
-            mule_file._source and not mule_file._source.closed
-        if not original_file_still_open:
-            # Temporarily open a new mule file + read a field from it.
-            ff_file = open(self.filename)
+if USE_OLD_IRIS_FF:
+    from iris.fileformats._ff import FF2PP
+else:
+    class MuleFieldDataProxy(object):
+        def __init__(self, field, mule_file, filename):
+            self.dtype = np.dtype(
+                _DATA_DTYPES[mule_file.WORD_SIZE][field.lbuser1])
+            self.shape = (mule_file.integer_constants.num_rows,
+                          mule_file.integer_constants.num_cols)
+            self.mule_file = mule_file
+            self.filename = filename
+            self._field_index = mule_file.fields.index(field)
+
+        def __getitem__(self, keys):
+            mule_file = self.mule_file
+            original_file_still_open = \
+                mule_file._source and not mule_file._source.closed
+            if not original_file_still_open:
+                # Temporarily open a new mule file + read a field from it.
+                ff_file = open(self.filename)
+                mule_file = FieldsFile.from_file(ff_file,
+                                                 remove_empty_lookups=True)
+            try:
+                data = mule_file.fields[self._field_index].get_data()
+            finally:
+                if not original_file_still_open:
+                    # Close the temporary file.
+                    ff_file.close()
+            return data[keys]
+
+
+    def FF2PP(filename, read_data=False,
+              word_depth=DEFAULT_FF_WORD_DEPTH):
+        """
+        Get a stream of PPField objects from a FieldsFile.
+
+        Now using Mule !
+
+        """
+
+        # Do not support alternate forms.
+        assert read_data == False
+        assert word_depth == 8
+
+        with open(filename) as ff_file:
             mule_file = FieldsFile.from_file(ff_file,
                                              remove_empty_lookups=True)
-        try:
-            data = mule_file.fields[self._field_index].get_data()
-        finally:
-            if not original_file_still_open:
-                # Close the temporary file.
-                ff_file.close()
-        return data[keys]
-
-
-def FF2PP(filename, read_data=False,
-          word_depth=DEFAULT_FF_WORD_DEPTH):
-    """
-    Get a stream of PPField objects from a FieldsFile.
-
-    Now using Mule !
-
-    """
-
-    # Do not support alternate forms.
-    assert read_data == False
-    assert word_depth == 8
-
-    with open(filename) as ff_file:
-        mule_file = FieldsFile.from_file(ff_file,
-                                         remove_empty_lookups=True)
-        for mule_field in mule_file.fields:
-            header = mule_field.raw[1:]
-            pp_field = make_pp_field(header)
-            # Attach data, action equivalent to pp._create_field_data.
-            data_proxy = MuleFieldDataProxy(mule_field, mule_file, filename)
-            lazy_data = as_lazy_data(data_proxy, chunks=data_proxy.shape)
-            pp_field.data = lazy_data
-            yield pp_field
+            for mule_field in mule_file.fields:
+                header = mule_field.raw[1:]
+                pp_field = make_pp_field(header)
+                # Attach data, action equivalent to pp._create_field_data.
+                data_proxy = MuleFieldDataProxy(
+                    mule_field, mule_file, filename)
+                lazy_data = as_lazy_data(data_proxy, chunks=data_proxy.shape)
+                pp_field.data = lazy_data
+                yield pp_field
 
 
 from iris.fileformats.pp import _load_cubes_variable_loader

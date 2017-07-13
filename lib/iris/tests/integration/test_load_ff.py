@@ -4,6 +4,10 @@ from six.moves import (filter, input, map, range, zip)  # noqa
 import iris.tests as tests
 import iris
 
+from iris.fileformats.um._ff_replacement import FF2PP as using_ff2pp
+from iris.fileformats._ff import FF2PP as old_iris_ff2pp
+
+
 class TestFF(tests.IrisTest):
     @tests.skip_data
     def test_basic_ff_load(self):
@@ -11,6 +15,9 @@ class TestFF(tests.IrisTest):
         cubes = iris.load(file_path)
 
         self.assertEqual(len(cubes), 4)
+
+        old_match = "==" if (using_ff2pp == old_iris_ff2pp) else "!="
+        print('\n\nUsed ff function {} old ff.FF2PP\n\n'.format(old_match))
 
         shape = (73, 96)
         cube = cubes[0]
