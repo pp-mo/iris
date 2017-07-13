@@ -66,7 +66,15 @@ else:
                 mule_file = FieldsFile.from_file(ff_file,
                                                  remove_empty_lookups=True)
             try:
-                data = mule_file.fields[self._field_index].get_data()
+                mule_field = mule_file.fields[self._field_index]
+                data = mule_field.get_data()
+                # Convert any MDIs to masked points, as in
+                # pp._data_bytes_to_shaped_array.
+                mdi = mule_field.bmdi
+                if mdi in data:
+                    if data.dtype.kind == 'i':
+                        data = data.astype(np.dtype('f8'))
+                    data[data == mdi] = np.nan
             finally:
                 if not original_file_still_open:
                     # Close the temporary file.
@@ -98,6 +106,10 @@ else:
                     mule_field, mule_file, filename)
                 lazy_data = as_lazy_data(data_proxy, chunks=data_proxy.shape)
                 pp_field.data = lazy_data
+                correct_dtype = data_proxy.dtype.newbyteorder('=')
+                if correct_dtype.kind in 'biu':
+                    # Instruct DataManager to convert to original type.
+                    pp_field.realised_dtype = correct_dtype
                 yield pp_field
 
 
