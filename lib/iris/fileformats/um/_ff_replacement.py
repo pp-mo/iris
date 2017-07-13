@@ -83,6 +83,7 @@ def FF2PP(filename, read_data=False,
         for mule_field in mule_file.fields:
             header = mule_field.raw[1:]
             pp_field = make_pp_field(header)
+            # Attach data, action equivalent to pp._create_field_data.
             data_proxy = MuleFieldDataProxy(mule_field, mule_file, filename)
             lazy_data = as_lazy_data(data_proxy, chunks=data_proxy.shape)
             pp_field.data = lazy_data
