@@ -30,7 +30,8 @@ import os
 
 import numpy as np
 
-from mule.ff import FieldsFile, _DATA_DTYPES
+from mule import load_umfile
+from mule.ff import _DATA_DTYPES
 from iris.fileformats._ff import DEFAULT_FF_WORD_DEPTH
 from iris.fileformats.pp import make_pp_field
 
@@ -63,8 +64,8 @@ else:
             if not original_file_still_open:
                 # Temporarily open a new mule file + read a field from it.
                 ff_file = open(self.filename)
-                mule_file = FieldsFile.from_file(ff_file,
-                                                 remove_empty_lookups=True)
+                mule_file = load_umfile(ff_file)
+                mule_file.remove_empty_lookups()
             try:
                 mule_field = mule_file.fields[self._field_index]
                 data = mule_field.get_data()
@@ -96,8 +97,8 @@ else:
         assert word_depth == 8
 
         with open(filename) as ff_file:
-            mule_file = FieldsFile.from_file(ff_file,
-                                             remove_empty_lookups=True)
+            mule_file = load_umfile(ff_file)
+            mule_file.remove_empty_lookups()
             for mule_field in mule_file.fields:
                 header = mule_field.raw[1:]
                 pp_field = make_pp_field(header)
