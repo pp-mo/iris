@@ -29,7 +29,7 @@ import calendar
 from iris.aux_factory import HybridHeightFactory, HybridPressureFactory
 from iris.coords import AuxCoord, CellMethod, DimCoord
 from iris.fileformats.rules import (ConversionMetadata, Factory, Reference,
-                                    ReferenceTarget)
+                                    ReferenceTarget, lbproc_map)
 from iris.fileformats.um_cf_map import (LBFC_TO_CF, STASH_TO_CF,
                                         STASHCODE_IMPLIED_HEIGHTS)
 import iris.fileformats.pp
@@ -1027,7 +1027,7 @@ def _all_other_rules(f):
     if unhandled_lbproc:
         attributes["ukmo__process_flags"] = tuple(sorted(
             [name
-             for value, name in six.iteritems(iris.fileformats.pp.lbproc_map)
+             for value, name in six.iteritems(lbproc_map)
              if isinstance(value, int) and f.lbproc & value]))
 
     if (f.lbsrce % 10000) == 1111:

@@ -24,10 +24,10 @@ import warnings
 import iris
 from iris.fileformats._ff_cross_references import STASH_TRANS
 from iris.aux_factory import HybridHeightFactory, HybridPressureFactory
-from iris.fileformats.pp import lbproc_map
 from iris.fileformats.um_cf_map import CF_TO_LBFC
 from iris.fileformats.rules import (aux_factory,
                                     has_aux_factory,
+                                    lbproc_map,
                                     scalar_cell_method,
                                     scalar_coord,
                                     vector_coord)
