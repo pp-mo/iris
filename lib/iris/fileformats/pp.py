@@ -42,6 +42,11 @@ from iris._lazy_data import as_concrete_data, as_lazy_data, is_lazy_data
 import iris.config
 import iris.fileformats.pp_rules
 from iris.fileformats.pp_save_rules import verify
+
+# NOTE: this is for backwards-compatitibility *ONLY*
+# We could simply remove it for v2.0 ?
+from iris.fileformats._pp_lbproc_pairs import (LBPROC_PAIRS,
+                                               LBPROC_MAP as lbproc_map)
 import iris.fileformats.rules
 import iris.coord_systems
 

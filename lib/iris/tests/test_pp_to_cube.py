@@ -158,7 +158,7 @@ class TestPPLoadRules(tests.IrisTest):
                               8192: "maximum"}
 
         # Make test values as list of single bit values and some multiple bit values
-        single_bit_values = list(iris.fileformats.rules.LBPROC_PAIRS)
+        single_bit_values = list(iris.fileformats.pp.LBPROC_PAIRS)
         multiple_bit_values = [(128 + 32, ""), (4096 + 2096, ""), (8192 + 1024, "")]
         test_values = list(single_bit_values) + multiple_bit_values
 
@@ -192,7 +192,7 @@ class TestPPLoadRules(tests.IrisTest):
         omit_process_flags_values = (64, 128, 4096, 8192)
 
         # Test single flag values
-        for value, _ in iris.fileformats.rules.LBPROC_PAIRS:
+        for value, _ in iris.fileformats.pp.LBPROC_PAIRS:
             f = next(iris.fileformats.pp.load(orig_file))
             f.lbproc = value # set value
 
@@ -209,7 +209,7 @@ class TestPPLoadRules(tests.IrisTest):
                 self.assertEqual(cube.attributes.get("ukmo__process_flags", None), None)
             else:
                 # Check ukmo__process_flags attribute contains correct values
-                self.assertIn(iris.fileformats.rules.lbproc_map[value], cube.attributes["ukmo__process_flags"])
+                self.assertIn(iris.fileformats.pp.lbproc_map[value], cube.attributes["ukmo__process_flags"])
 
             os.remove(temp_filename)
 
@@ -217,7 +217,7 @@ class TestPPLoadRules(tests.IrisTest):
         multiple_bit_values = ((128, 32), (4096, 1024), (8192, 1024))
 
         # Maps lbproc value to the process flags that should be created
-        multiple_map = {sum(x) : [iris.fileformats.rules.lbproc_map[y] for y in x] for x in multiple_bit_values}
+        multiple_map = {sum(x) : [iris.fileformats.pp.lbproc_map[y] for y in x] for x in multiple_bit_values}
 
         for bit_values in multiple_bit_values:
             f = next(iris.fileformats.pp.load(orig_file))

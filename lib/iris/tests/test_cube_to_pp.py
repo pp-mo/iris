@@ -32,7 +32,6 @@ import iris.coords
 import iris.coord_systems
 import iris.fileformats.pp
 from iris.fileformats.pp import PPField3
-import iris.fileformats.rules
 from iris.tests import mock
 import iris.tests.pp as pp
 import iris.util
@@ -240,7 +239,7 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
 
     def test_pp_save_rules(self):
         # Test single process flags
-        for _, process_desc in iris.fileformats.rules.LBPROC_PAIRS[1:]:
+        for _, process_desc in iris.fileformats.pp.LBPROC_PAIRS[1:]:
             # Get basic cube and set process flag manually
             ll_cube = stock.lat_lon_cube()
             ll_cube.attributes["ukmo__process_flags"] = (process_desc,)
@@ -251,7 +250,7 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
      
             # Check the lbproc is what we expect
             self.assertEqual(self.lbproc_from_pp(temp_filename),
-                             iris.fileformats.rules.lbproc_map[process_desc])
+                             iris.fileformats.pp.lbproc_map[process_desc])
 
             os.remove(temp_filename)
 
@@ -259,7 +258,7 @@ class TestPPSaveRules(tests.IrisTest, pp.PPTest):
         multiple_bit_values = ((128, 64), (4096, 1024), (8192, 1024))
         
         # Maps lbproc value to the process flags that should be created
-        multiple_map = {sum(bits) : [iris.fileformats.rules.lbproc_map[bit] for bit in bits] for bits in multiple_bit_values}
+        multiple_map = {sum(bits) : [iris.fileformats.pp.lbproc_map[bit] for bit in bits] for bits in multiple_bit_values}
 
         for lbproc, descriptions in six.iteritems(multiple_map):
             ll_cube = stock.lat_lon_cube()

@@ -41,7 +41,6 @@ import iris
 import iris.analysis.trajectory
 import iris.fileformats._pyke_rules.compiled_krb.fc_rules_cf_fc as pyke_rules
 import iris.fileformats.netcdf
-import iris.fileformats.rules
 import iris.std_names
 import iris.util
 import iris.coord_systems as icoord_systems
@@ -911,7 +910,7 @@ class TestCFStandardName(tests.IrisTest):
 class TestNetCDFUKmoProcessFlags(tests.IrisTest):
     def test_process_flags(self):
         # Test single process flags
-        for _, process_desc in iris.fileformats.rules.LBPROC_PAIRS[1:]:
+        for _, process_desc in iris.fileformats.pp.LBPROC_PAIRS[1:]:
             # Get basic cube and set process flag manually
             ll_cube = stock.lat_lon_cube()
             ll_cube.attributes["ukmo__process_flags"] = (process_desc,)
@@ -934,7 +933,7 @@ class TestNetCDFUKmoProcessFlags(tests.IrisTest):
         multiple_bit_values = ((128, 64), (4096, 1024), (8192, 1024))
 
         # Maps lbproc value to the process flags that should be created
-        multiple_map = {bits: [iris.fileformats.rules.lbproc_map[bit] for
+        multiple_map = {bits: [iris.fileformats.pp.lbproc_map[bit] for
                                bit in bits] for bits in multiple_bit_values}
 
         for bits, descriptions in six.iteritems(multiple_map):
