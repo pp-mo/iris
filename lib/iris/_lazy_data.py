@@ -117,7 +117,8 @@ def as_lazy_data(data, chunks=None, asarray=False):
     if chunks is None:
         # Default to the shape of the wrapped array-like,
         # but reduce it if larger than a default maximum size.
-        chunks = _limited_shape(data.shape)
+#        chunks = _limited_shape(data.shape)
+        chunks = data.shape
 
     if isinstance(data, ma.core.MaskedConstant):
         data = ma.masked_array(data.data, mask=data.mask)
