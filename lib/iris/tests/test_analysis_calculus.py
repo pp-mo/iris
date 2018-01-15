@@ -560,6 +560,271 @@ class TestCalculusWKnownSolutions(tests.IrisTest):
         self.assertCML(r, ('analysis', 'calculus', 'grad_contrived2.cml'), checksum=False)
 
 
+class TestCurl3dKnownSolutions(tests.IrisTest):
+
+    def _make_cartesian_coord(self, i_dim, half_dim):
+        values = np.arange(-half_dim, half_dim+1, dtype=float)
+        result = iris.coords.DimCoord(values, units='m')
+        axis_name = ['z', 'y', 'x'][i_dim]
+        name = 'projection_{}_coordinate'.format(axis_name)
+        result.rename(name)
+        if i_dim == 0:
+            # Standard CF rule for identifying  Z-axis coords.
+            result.attributes['positive'] = 'up'
+        return result
+
+    def _make_spherical_coord(self, i_dim, half_dim):
+        n_dim = 1 + 2 * half_dim
+        if i_dim == 0:
+            # R coord is "one-sided", starting at 1.0.
+            values = np.linspace(1.0, n_dim, n_dim,
+                                 endpoint=True, dtype=float)
+            units = 'm'
+        elif i_dim == 1:
+            # THETA coord is polar angle.
+            values = np.linspace(0.0, 180.0, n_dim,
+                                 endpoint=True, dtype=float)
+            units = 'degrees'
+        else:
+            # PHI coord is azimuth angle : use +/-180.
+            values = np.linspace(-180.0, 180.0, n_dim,
+                                 endpoint=True, dtype=float)
+            units = 'degrees'
+
+        result = iris.coords.DimCoord(values, units=units)
+        coord_name = ['z', 'grid_latitude', 'grid_longitude'][i_dim]
+        result.rename(coord_name)
+        if i_dim == 0:
+            # Standard CF rule for identifying  Z-axis coords.
+            result.attributes['positive'] = 'up'
+        globe_radius = 1.0  # unimportant
+        result.coord_system = iris.coord_systems.GeogCS(globe_radius)
+        return result
+
+    def _make_curl_test_cube(self, coords):
+        data = np.zeros([coord.shape[0] for coord in coords])
+        cube = iris.cube.Cube(data)
+        for i_dim, coord in enumerate(coords):
+            cube.add_dim_coord(coord, i_dim)
+        return cube
+
+    def _check_cartesian_curl(self, function_axis, direction_axis, result_axis,
+                              result_sign, half_dims=(4,3,5)):
+        """"One half of "_check_known_curl_function" : q.v."""
+        # First build 3 xyz coords + 3 zeroed component cubes.
+        coords = [self._make_cartesian_coord(i_dim, half_dim)
+                  for i_dim, half_dim in enumerate(half_dims)]
+        empty_cube = self._make_curl_test_cube(coords)
+        empty_data = empty_cube.data.copy()
+
+        # Broadcast the each coordinate value into a full array.
+        xyz_arrays = [empty_data.copy() for _ in range(3)]
+        for i_dim, xyz_array in enumerate(xyz_arrays):
+            xyz_coord = coords[i_dim]
+            coord_cube_shape = [1] * 3
+            coord_cube_shape[i_dim] = xyz_coord.shape[0]
+            xyz_array[:] = xyz_coord.points.reshape(coord_cube_shape)
+
+        # The test function is the square of a coordinate.
+        test_function = xyz_arrays[function_axis]
+        test_function = test_function * test_function
+        # Broadcast to the expected function component (while the rest ==0)
+        test_cubes = [empty_cube.copy() for _ in range(3)]
+        test_cubes[direction_axis].data[:] = test_function
+        # Assign acceptable phenomenon names + units.
+        for i_dim, cube, phenom_name in zip(
+                range(3),
+                test_cubes,
+                ['z_wind', 'y_wind', 'x_wind']):
+            cube.rename(phenom_name)
+            cube.units = 'm s-1'
+
+        # Construct the expected result, in a similar fashion.
+        expect_function = result_sign * 2.0 * xyz_arrays[function_axis]
+        expect_cubes = [empty_cube.copy() for _ in range(3)]
+        expect_cubes[result_axis].data[:] = expect_function
+
+        # Perform the test evaluation : N.B. pass in xyz order, not zyx.
+        result_cubes = iris.analysis.calculus.curl(*test_cubes[::-1])
+
+        # Regrid (reshape) the expected-values to the actual result grid
+        # - because curl removes 1 from X-dim only (?!?)
+        result_grid = result_cubes[0][0]
+        linear_scheme = iris.analysis.Linear()
+        expect_cubes = [cube.regrid(result_grid, linear_scheme)
+                          for cube in expect_cubes]
+
+        # Check the results against the expected (very approximately!).
+        msg_format = "'{}' component data array mismatch : \n{}\n!=\n{}"
+        for axis_name, expect_cube, result_cube in zip(
+                ('z', 'y', 'x'),
+                expect_cubes, result_cubes[::-1]):
+            expect_data, result_data = expect_cube.data, result_cube.data
+            msg = msg_format.format(axis_name, result_data, expect_data)
+            self.assertArrayAllClose(result_data, expect_data, atol=1.1,
+                                     err_msg=msg)
+
+    def _check_spherical_curl(self, function_axis, direction_axis, result_axis,
+                              result_sign, half_dims=(4,3,5)):
+        """"One half of "_check_known_curl_function" : q.v."""
+        # First build 3 xyz coords + 3 zeroed component cubes.
+        coords = [self._make_spherical_coord(i_dim, half_dim)
+                  for i_dim, half_dim in enumerate(half_dims)]
+        empty_cube = self._make_curl_test_cube(coords)
+        empty_data = empty_cube.data.copy()
+
+        # Broadcast the each coordinate value into a full array.
+        rtp_arrays = [empty_data.copy() for _ in range(3)]
+        for i_dim, rtp_array in enumerate(rtp_arrays):
+            rtp_coord = coords[i_dim]
+            coord_cube_shape = [1] * 3
+            coord_cube_shape[i_dim] = rtp_coord.shape[0]
+            rtp_array[:] = rtp_coord.points.reshape(coord_cube_shape)
+
+        # Construct an array of x, y or z value as the function magnitude.
+        radius, theta, phi = rtp_arrays
+        zyx_values_shape = [3] + list(radius.shape)
+        zyx_values_rtp = np.zeros(zyx_values_shape, np.float)
+        # Calculate Z coordinate values.
+        zyx_values_rtp[0] = radius * np.cos(theta)
+        # Calculate Y coordinate values.
+        zyx_values_rtp[1] = radius * np.sin(theta) * np.sin(phi)
+        # Calculate X coordinate values.
+        zyx_values_rtp[2] = radius * np.sin(theta) * np.cos(phi)
+
+        # Construct unit vectors in the directions of x, y, and z.
+        zyx_directions_shape = [3, 3] + list(radius.shape)
+        zyx_directions_rtp = np.zeros(zyx_directions_shape, np.float)
+        # Construct r,t,p components of X direction unit vector.
+        zyx_directions_rtp[2, 0] = np.sin(theta) * np.cos(phi)
+        zyx_directions_rtp[2, 1] = np.cos(theta) * np.cos(phi)
+        zyx_directions_rtp[2, 2] = -np.sin(phi)
+        # Construct r,t,p components of Y direction unit vector.
+        zyx_directions_rtp[1, 0] = np.sin(theta) * np.sin(phi)
+        zyx_directions_rtp[1, 1] = np.cos(theta) * np.sin(phi)
+        zyx_directions_rtp[1, 2] = np.cos(phi)
+        # Construct r,t,p components of Z direction unit vector.
+        zyx_directions_rtp[0, 0] = np.cos(theta)
+        zyx_directions_rtp[0, 1] = -np.sin(theta)
+        zyx_directions_rtp[0, 2] = 0.0
+
+        # Construct the test input, oriented along the X, Y or Z direction,
+        # and sized as the square of X. Y or Z values.
+        test_vector = zyx_directions_rtp[direction_axis]
+        test_vector *= zyx_values_rtp[function_axis]
+        test_vector *= zyx_values_rtp[function_axis]
+        # Convert to a list of 3 cubes for passing.
+        test_cubes = [empty_cube.copy() for _ in range(3)]
+        for i_rtp in range(3):
+            cube = test_cubes[i_rtp]
+            cube.data = test_vector[i_rtp]
+            # Also convert the 'j' coord from theta (polar angle) to latitude.
+            cube.coord('grid_latitude').points = \
+                90.0 - cube.coord('grid_latitude').points
+
+        # Assign acceptable phenomenon names + units.
+        for i_dim, cube, phenom_name in zip(
+                range(3),
+                test_cubes,
+                ['z_wind', 'y_wind', 'x_wind']):
+            cube.rename(phenom_name)
+            cube.units = 'm s-1'
+
+        # Construct the expected result, in a similar fashion.
+        expect_vector = zyx_directions_rtp[result_axis]
+        expect_vector *= result_sign * 2.0 * zyx_values_rtp[function_axis]
+        expect_cubes = [empty_cube.copy() for _ in range(3)]
+        for i_rtp in range(3):
+            expect_cubes[i_rtp].data = expect_vector[i_rtp]
+
+        # Perform the test evaluation : N.B. pass in xyz order, not zyx.
+        result_cubes = iris.analysis.calculus.curl(*test_cubes[::-1])
+
+        # Regrid (reshape) the expected-values to the actual result grid
+        # - because curl removes 1 from X-dim only (?!?)
+        result_grid = result_cubes[0][0]
+        linear_scheme = iris.analysis.Linear()
+        expect_cubes = [cube.regrid(result_grid, linear_scheme)
+                          for cube in expect_cubes]
+
+        # Check the results against the expected (very approximately!).
+        msg_format = "'{}' component data array mismatch : \n{}\n!=\n{}"
+        for axis_name, expect_cube, result_cube in zip(
+                ('z', 'y', 'x'),
+                expect_cubes, result_cubes[::-1]):
+            expect_data, result_data = expect_cube.data, result_cube.data
+            msg = msg_format.format(axis_name, result_data, expect_data)
+            self.assertArrayAllClose(result_data, expect_data, atol=1.1,
+                                     err_msg=msg)
+
+    def _check_known_curl_function(self, function_axis, direction_axis,
+                                  result_sign=1, spherical=False, **kwargs):
+        """
+        Fill cubes with a known vector function + check expected curl result,
+        either in cartesian or spherical form.
+
+        Args:
+        * function_axis, direction_axis (int: 0/1/2 for z/y/x)
+            axes, always different, such that test function is the square
+            of the first coord, in the direction of the second.
+            E.G. (2, 1) is (x, y) --> F = x**2 * [0, 1, 0]
+        * result_sign (int: +1 or -1)
+            whether the expected result vector is a +ve or -ve scaling of the
+            remaining (result) axis.
+            E.G. (2, 1, -1) --> expected curl(F) = -2 * z * [0, 0, 1]
+        * spherical (bool):
+            If set, the test function, and expected result, are constructed
+            in spherical coordinates.  Otherwise the cartesian calculation
+            is tested.
+
+        """
+        # The result axis is the one different from the other two.
+        remaining_axes = list(range(3))
+        # Note: errors if input axes are not in the list, or are the same.
+        for axis in (function_axis, direction_axis):
+            remaining_axes.remove(axis)
+        [result_axis] = remaining_axes
+        if spherical:
+            self._check_spherical_curl(
+                function_axis, direction_axis, result_axis, result_sign, **kwargs)
+        else:
+            self._check_cartesian_curl(
+                function_axis, direction_axis, result_axis, result_sign, **kwargs)
+
+    # Cartesian test cases ...
+
+    def test_curl_fy_is_x_squared_cartesian(self):
+        self._check_known_curl_function(
+            function_axis=2, direction_axis=1, result_sign=1)
+
+    def test_curl_fz_is_x_squared_cartesian(self):
+        self._check_known_curl_function(
+            function_axis=2, direction_axis=0, result_sign=-1)
+
+    def test_curl_fx_is_y_squared_cartesian(self):
+        self._check_known_curl_function(
+            function_axis=1, direction_axis=2, result_sign=-1)
+
+    def test_curl_fz_is_y_squared_cartesian(self):
+        self._check_known_curl_function(
+            function_axis=1, direction_axis=0, result_sign=1)
+
+    def test_curl_fx_is_z_squared_cartesian(self):
+        self._check_known_curl_function(
+            function_axis=0, direction_axis=2, result_sign=1)
+
+    def test_curl_fy_is_z_squared_cartesian(self):
+        self._check_known_curl_function(
+            function_axis=0, direction_axis=1, result_sign=-1)
+
+    # Now spherical ones ...
+
+    def test_curl_fy_is_x_squared_spherical(self):
+        self._check_known_curl_function(
+            function_axis=2, direction_axis=1, result_sign=1, spherical=True)
+
+
+
 class TestCurlInterface(tests.IrisTest):
     def test_non_conformed(self):
         u = build_cube(np.empty((50, 20)), spherical=True)
