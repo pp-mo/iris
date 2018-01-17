@@ -368,25 +368,29 @@ def _copy_cube_transformed(src_cube, data, coord_func):
 
 
 def _curl_change_z(src_cube, z_coord, prototype_diff):
-    # New data
-    ind = [slice(None, None)] * src_cube.ndim
-    z_dim = src_cube.coord_dims(z_coord)[0]
-    ind[z_dim] = slice(-1, None)
-    new_data = np.append(src_cube.data, src_cube.data[tuple(ind)], z_dim)
+    if src_cube is None:
+        result = None
+    else:
+        # New data
+        ind = [slice(None, None)] * src_cube.ndim
+        z_dim = src_cube.coord_dims(z_coord)[0]
+        ind[z_dim] = slice(-1, None)
+        new_data = np.append(src_cube.data, src_cube.data[tuple(ind)], z_dim)
 
-    # The existing z_coord doesn't fit the new data so make a
-    # new cube using the prototype z_coord.
-    local_z_coord = src_cube.coord(z_coord)
-    new_local_z_coord = prototype_diff.coord(z_coord).copy()
+        # The existing z_coord doesn't fit the new data so make a
+        # new cube using the prototype z_coord.
+        local_z_coord = src_cube.coord(z_coord)
+        new_local_z_coord = prototype_diff.coord(z_coord).copy()
 
-    def coord_func(coord):
-        if coord is local_z_coord:
-            new_coord = new_local_z_coord
-        else:
-            new_coord = coord.copy()
-        return new_coord
+        def coord_func(coord):
+            if coord is local_z_coord:
+                new_coord = new_local_z_coord
+            else:
+                new_coord = coord.copy()
+            return new_coord
 
-    result = _copy_cube_transformed(src_cube, new_data, coord_func)
+        result = _copy_cube_transformed(src_cube, new_data, coord_func)
+
     return result
 
 
@@ -441,6 +445,26 @@ def _trig_method(coord, trig_function):
     trig_coord.rename('{}({})'.format(trig_function.__name__, coord.name()))
 
     return trig_coord
+
+
+class _SpoofRadiansUnit(cf_units.Unit):
+    """
+    A Unit subclass which is a unit of '1', but with a modulus of 2*pi.
+
+    Note: this is necessary because the concept of a unit's modulus is not
+    defined by udunits2, but is a convenience function added by cf_units,
+    and hardwired in implementation.
+
+    """
+    def __init__(self):
+        super(_SpoofRadiansUnit, self).__init__('1')
+
+    @property
+    def modulus(self):
+        return np.pi * 2
+
+
+_spoofRadiansUnit = _SpoofRadiansUnit()
 
 
 def curl(i_cube, j_cube, k_cube=None):
@@ -641,6 +665,8 @@ def curl(i_cube, j_cube, k_cube=None):
         lon_coord.convert_units('radians')
         lat_coord.convert_units('radians')
         lat_cos_coord = _coord_cos(lat_coord)
+        lon_coord.units = _spoofRadiansUnit
+        lat_coord.units = _spoofRadiansUnit
 
         # TODO Implement some mechanism for conforming to a common grid
         temp = iris.analysis.maths.multiply(i_cube, lat_cos_coord, y_dim)
@@ -662,10 +688,10 @@ def curl(i_cube, j_cube, k_cube=None):
         d_j_cube_dphi = dicos_dtheta = None
 
         # phi curl component: 1/r * ( drj_dr - d_k_cube_dtheta)
-        drj_dr = _curl_differentiate(r * j_cube, z_coord)
-        if drj_dr is not None:
-            drj_dr.units = drj_dr.units * r_unit
+        drj_dr = _curl_differentiate(z_coord * j_cube, z_coord)
         drj_dr = _curl_regrid(drj_dr, prototype_diff)
+        # ... and also perform vertical regridding
+        drj_dr = _curl_change_z(drj_dr, z_coord, prototype_diff)
         d_k_cube_dtheta = _curl_differentiate(k_cube, lat_coord)
         d_k_cube_dtheta = _curl_regrid(d_k_cube_dtheta, prototype_diff)
         if drj_dr is None and d_k_cube_dtheta is None:
@@ -680,12 +706,18 @@ def curl(i_cube, j_cube, k_cube=None):
         d_k_cube_dphi = _curl_differentiate(k_cube, lon_coord)
         d_k_cube_dphi = _curl_regrid(d_k_cube_dphi, prototype_diff)
         if d_k_cube_dphi is not None:
+            new_lat_coord = d_k_cube_dphi.coord(axis='Y')
+            new_lat_cos_coord = _coord_cos(new_lat_coord)
+            lat_dim = d_k_cube_dphi.coord_dims(new_lat_coord)[0]
             d_k_cube_dphi = iris.analysis.maths.divide(d_k_cube_dphi,
-                                                       lat_cos_coord)
+                                                       new_lat_cos_coord,
+                                                       dim=lat_dim)
         dri_dr = _curl_differentiate(r * i_cube, z_coord)
         if dri_dr is not None:
             dri_dr.units = dri_dr.units * r_unit
         dri_dr = _curl_regrid(dri_dr, prototype_diff)
+        # ... and also perform vertical regridding
+        dri_dr = _curl_change_z(dri_dr, z_coord, prototype_diff)
         if d_k_cube_dphi is None and dri_dr is None:
             theta_cmpt = None
         else:
