@@ -679,22 +679,25 @@ class TestCurl3dKnownSolutions(tests.IrisTest):
             rtp_coord = coords[i_dim]
             coord_cube_shape = [1] * 3
             coord_cube_shape[i_dim] = rtp_coord.shape[0]
-            rtp_array[:] = rtp_coord.points.reshape(coord_cube_shape)
+            data = rtp_coord.points.reshape(coord_cube_shape)
+            if rtp_coord.units == 'degrees':
+                data = rtp_coord.units.convert(data, 'radians')
+            rtp_array[:] = data
 
-        # Construct an array of x, y or z value as the function magnitude.
+        # Construct an array of x, y or z values at each gridpoint.
         radius, theta, phi = rtp_arrays
         zyx_values_shape = [3] + list(radius.shape)
-        zyx_values_rtp = np.zeros(zyx_values_shape, np.float)
-        # Calculate Z coordinate values.
-        zyx_values_rtp[0] = radius * np.cos(theta)
-        # Calculate Y coordinate values.
-        zyx_values_rtp[1] = radius * np.sin(theta) * np.sin(phi)
-        # Calculate X coordinate values.
-        zyx_values_rtp[2] = radius * np.sin(theta) * np.cos(phi)
+        zyx_values = np.zeros(zyx_values_shape, np.float)
+        # Calculate Z coordinate values at each point.
+        zyx_values[0] = radius * np.cos(theta)
+        # Calculate Y coordinate values at each point.
+        zyx_values[1] = radius * np.sin(theta) * np.sin(phi)
+        # Calculate X coordinate values at each point.
+        zyx_values[2] = radius * np.sin(theta) * np.cos(phi)
 
         # Construct unit vectors in the directions of x, y, and z.
-        zyx_directions_shape = [3, 3] + list(radius.shape)
-        zyx_directions_rtp = np.zeros(zyx_directions_shape, np.float)
+        zyx_directions_rtp_shape = [3, 3] + list(radius.shape)
+        zyx_directions_rtp = np.zeros(zyx_directions_rtp_shape, np.float)
         # Construct r,t,p components of X direction unit vector.
         zyx_directions_rtp[2, 0] = np.sin(theta) * np.cos(phi)
         zyx_directions_rtp[2, 1] = np.cos(theta) * np.cos(phi)
@@ -711,12 +714,12 @@ class TestCurl3dKnownSolutions(tests.IrisTest):
         # Construct the test input, oriented along the X, Y or Z direction,
         # and sized as the square of X. Y or Z values.
         test_vector = zyx_directions_rtp[direction_axis]
-        test_vector *= zyx_values_rtp[function_axis]
-        test_vector *= zyx_values_rtp[function_axis]
+        test_vector *= zyx_values[function_axis]
+        test_vector *= zyx_values[function_axis]
         # Convert to a list of 3 cubes for passing.
-        test_cubes = [empty_cube.copy() for _ in range(3)]
+        test_cubes_rtp = [empty_cube.copy() for _ in range(3)]
         for i_rtp in range(3):
-            cube = test_cubes[i_rtp]
+            cube = test_cubes_rtp[i_rtp]
             cube.data = test_vector[i_rtp]
             # Also convert the 'j' coord from theta (polar angle) to latitude.
             cube.coord('grid_latitude').points = \
@@ -725,20 +728,20 @@ class TestCurl3dKnownSolutions(tests.IrisTest):
         # Assign acceptable phenomenon names + units.
         for i_dim, cube, phenom_name in zip(
                 range(3),
-                test_cubes,
+                test_cubes_rtp,
                 ['z_wind', 'y_wind', 'x_wind']):
             cube.rename(phenom_name)
             cube.units = 'm s-1'
 
         # Construct the expected result, in a similar fashion.
         expect_vector = zyx_directions_rtp[result_axis]
-        expect_vector *= result_sign * 2.0 * zyx_values_rtp[function_axis]
+        expect_vector *= result_sign * 2.0 * zyx_values[function_axis]
         expect_cubes = [empty_cube.copy() for _ in range(3)]
         for i_rtp in range(3):
             expect_cubes[i_rtp].data = expect_vector[i_rtp]
 
-        # Perform the test evaluation : N.B. pass in xyz order, not zyx.
-        result_cubes = iris.analysis.calculus.curl(*test_cubes[::-1])
+        # Perform the test evaluation : N.B. pass in ptr order, not rtp.
+        result_cubes = iris.analysis.calculus.curl(*test_cubes_rtp[::-1])
 
         # Regrid (reshape) the expected-values to the actual result grid
         # - because curl removes 1 from X-dim only (?!?)
