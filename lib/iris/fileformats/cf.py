@@ -916,6 +916,9 @@ class CFGroup(MutableMapping, object):
         return '<%s of %s>' % (self.__class__.__name__, ', '.join(result))
 
 
+_FAKE_ALL_DATASETS = False
+
+
 ################################################################################
 class CFReader(object):
     """
@@ -923,14 +926,26 @@ class CFReader(object):
     to the 'NetCDF Climate and Forecast (CF) Metadata Conventions'.
 
     """
-    def __init__(self, filename_or_dataset, warn=False, monotonic=False):
-        if isinstance(filename_or_dataset, six.string_types):
-            self._filename = os.path.expanduser(filename_or_dataset)
-            dataset = netCDF4.Dataset(self._filename, mode='r')
+    def __init__(self, filename, warn=False, monotonic=False):
+        if isinstance(filename, six.string_types):
+            self._filename = os.path.expanduser(filename)
+            nc4_dataset = netCDF4.Dataset(self._filename, mode='r')
+            if not _FAKE_ALL_DATASETS:
+                dataset = nc4_dataset
+            else:
+                # Just for testing purposes :  Ingest the original netcdf4
+                # dataset with ncobj, wrap it in a
+                # :class:`ncobj.nc_fake.Nc4DatasetMimic`, and base the CFReader
+                # on that.
+                import ncobj.nc_dataset as ncds
+                import ncobj.nc_fake as ncfake
+                ncobj_content = ncds.read(nc4_dataset)
+                ncobj_fake_ds = ncfake.fake_nc4python_dataset(ncobj_content)
+                dataset = ncobj_fake_ds
             self._dataset = dataset
         else:
             # Handle an already-open dataset as an alternative.
-            self._dataset = filename_or_dataset
+            self._dataset = filename
 
         # All CF variable types EXCEPT for the "special cases" of
         # CFDataVariable, CFCoordinateVariable and _CFFormulaTermsVariable.
