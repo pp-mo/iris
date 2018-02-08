@@ -916,7 +916,7 @@ class CFGroup(MutableMapping, object):
         return '<%s of %s>' % (self.__class__.__name__, ', '.join(result))
 
 
-_FAKE_ALL_DATASETS = False
+_FAKE_ALL_DATASETS = True
 
 
 ################################################################################
