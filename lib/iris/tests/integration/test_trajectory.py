@@ -245,5 +245,39 @@ class TestLazyData(tests.IrisTest):
         self.assertCML([cube, xsec], ('trajectory', 'hybrid_height.cml'))
 
 
+
+from iris.analysis import trajectory
+import unittest
+
+class TestTrajectory(unittest.TestCase):
+
+    def test_interpolate_trajectory(self):
+        import datetime, time
+        waypoints = [{'pressure': 250,
+                      'time': time.mktime(datetime.datetime(2018, 1, 3, 9).timetuple()),
+                      'latitude': 45,
+                      'longitude': -60},
+                     {'pressure': 150,
+                      'time': time.mktime(datetime.datetime(2018, 1, 3, 10, 0, 1).timetuple()),
+                      'latitude': 55,
+                      'longitude': 0}]
+        traj = trajectory.Trajectory(waypoints, sample_count=10)
+        print(traj)
+
+    def test_interpolate_trajectory_with_bug(self):
+        import datetime, time
+        # Changed only second datetime item
+        waypoints = [{'pressure': 250,
+                      'time': time.mktime(datetime.datetime(2018, 1, 3, 9).timetuple()),
+                      'latitude': 45,
+                      'longitude': -60},
+                     {'pressure': 150,
+                      'time': time.mktime(datetime.datetime(2018, 1, 3, 10).timetuple()),
+                      'latitude': 55,
+                      'longitude': 0}]
+        traj = trajectory.Trajectory(waypoints, sample_count=10)
+        print(traj)
+
+
 if __name__ == '__main__':
-    tests.main()
+    unittest.main()
