@@ -55,9 +55,248 @@ import iris.exceptions
 import iris.util
 
 import iris.cube
-import xarray
+import xarray as xr
 
-class XCube(iris.cube.Cube):
+
+
+class DictProxy(dict):
+    NOT_ALLOWED = ['standard_name', 'units', 'grid_mapping', 'cell_methods']
+    def __init__(self, orig):
+        self._orig = orig
+
+    def __getitem__(self, key):
+        if key in self.NOT_ALLOWED:
+            raise AttributeError()
+        else:
+            return self._orig.__getitem__(key)
+
+    def __setitem__(self, key, val):
+        if key in self.NOT_ALLOWED:
+            raise AttributeError("Can't set attribute {} as it is prohibited.".format(key))
+        else:
+            return self._orig.__setitem__(key, val)
+
+    def __delitem__(self, key):
+        if key in self.NOT_ALLOWED:
+            raise AttributeError("Can't del attribute {} as it is prohibited.".format(key))
+        else:
+            return self._orig.__delitem__(key)
+    def pop(self, key, val):
+        v = self._orig.get(key, val)
+        if key in self._orig:
+            del self._orig[key]
+        return v
+
+    def keys(self):
+        return self.filtered_dict.keys()
+    def items(self):
+        return self.filtered_dict.items()
+    def values(self):
+        return self.filtered_dict.values()
+
+    def __getattr__(self, attr):
+        return self._orig.__getattr__(attr)
+
+    @property
+    def filtered_dict(self):
+        return {k: v for k, v in self._orig.items() if k not in self.NOT_ALLOWED}
+    def __repr__(self):
+        return repr(self.filtered_dict)
+    def __str__(self):
+        return str(self.filtered_dict)
+    def __bool__(self):
+        return bool(self.filtered_dict)
+    #def clear(self):
+        
+
+class XVarMixin:
+    @property
+    def _xvar(self):
+        return self._data_obj[self._var_name]
+
+    @property
+    def standard_name(self):
+        return self._xvar.attrs.get('standard_name', None)
+
+    @standard_name.setter
+    def standard_name(self, std_name):
+        self._xvar.attrs['standard_name'] = std_name
+
+    @property
+    def long_name(self):
+        return self._xvar.attrs.get('long_name', None)
+
+    @long_name.setter
+    def long_name(self, long_name):
+        self._xvar.attrs['long_name'] = long_name
+
+    @property
+    def var_name(self):
+        # TODO: I don't think this is always defined in xarray. Check.
+        return self._xvar.name
+
+    @var_name.setter
+    def var_name(self, var_name):
+        # TODO: Verify that this doen't also/alternatively live in the DataArray.encodings dict.
+        # TODO: Update the self._var_name which also references the XArray dataset
+        self._xvar.attrs['var_name'] = var_name
+
+    @property
+    def units(self):
+        import cf_units
+        return cf_units.Unit(self._xvar.attrs.get('units', '1'))
+
+    @units.setter
+    def units(self, units):
+        self._xvar.attrs['units'] = units
+
+    @property
+    def attributes(self):
+        return DictProxy(self._xvar.attrs)
+
+    @attributes.setter
+    def attributes(self, attributes):
+        # n.b. there is no way for attributes to be the actual attributes dictionary I think.
+        self._xvar.attrs.clear()
+        self._xvar.attrs.update(attributes)
+
+
+class XDataManager(DataManager):
+    # TODO: DataManager could be the canonical thing that holds standard_name etc. (throughout Iris...)
+
+    def __init__(self, x_proxy_obj):
+        self._x_proxy_obj = x_proxy_obj
+   
+    @property
+    def _xvar(self):
+        return self._x_proxy_obj._xvar
+
+    @property
+    def _lazy_array(self):
+        if self.has_lazy_data():
+            return self.core_data()
+        else:
+            return None
+
+    @property
+    def _real_array(self):
+        if self.has_lazy_data():
+            return None
+        else:
+            return self.core_data()
+
+    def core_data(self):
+        return self._xvar.data
+
+    def has_lazy_data(self):
+        # TODO: Probably worth having a better check to figure
+        # out if something is a dask array or not.
+        return hasattr(self.core_data(), 'compute')
+
+    @property
+    def data(self):
+        return self._xvar.data
+
+    @data.setter
+    def data(self, data):
+        self._xvar.data = data
+        pass
+
+#    def _deepcopy(self, memo, data=None):
+#        # TODO: Implement deepcopy properly.
+#        proxy_copy = copy.deepcopy(self._x_proxy_obj, memo=memo)
+#        new = XDataManager(proxy_copy)
+#        if data is not None:
+#            new.data = data
+#       return new
+
+
+class XCoord(XVarMixin):
+    """
+    A Coord that proxies through to an XArray variable.
+
+    TODO: Deal with what happens when we change the var_name on this coordinate.
+          Should we update this coordinate instance too!?
+
+    """
+    def __init__(self, dataset, var_name):
+        self._data_obj = dataset
+        self._var_name = var_name
+        # TODO: Also handle bounds data manager.
+        self._points_dm = XDataManager(self)
+
+    points = property(lambda self: self._points_dm.data,
+                      lambda self, points: super()._points_setter(points))
+
+    @property
+    def coord_system(self):
+        return None
+        self.coord_system = coord_system
+
+        self.attributes = attributes
+
+    def var_array(self, var):
+        import cftime
+
+        array = var.values
+        # TODO: Figure out how to decode the Datetime stuff properly.
+        if array.dtype == object and isinstance(array.item(0), cftime.Datetime360Day):
+            from xarray.coding.times import CFDatetimeCoder
+            encoded_var = CFDatetimeCoder().encode(var)
+            array = encoded_var.values
+        return array
+
+    def has_bounds(self):
+        return (self._xvar.name + '_bnds') in self._data_obj.variables
+
+    @property
+    def _bnds_dv(self):
+        return self._data_obj[self._xvar.name + '_bnds']
+
+    @property
+    def bounds(self):
+        if self.has_bounds():
+            return self.var_array(self._bnds_dv)
+
+    def __getitem__(self, keys):
+        # TODO: Sub-optimal, as it has the potential to carry around with it variables
+        # that aren't a core part of this coordinate (like all of the data!). We might get
+        # away with this thanks to lazy indexing, but for non lazy ds, this could be pretty
+        # memory hungry...
+        new = self._data_obj[{self._xvar.dims[0]: keys}]
+        return XDimCoord(new, self._var_name)
+
+    @bounds.setter
+    def bounds(self, data):
+        # TODO: Implement the case where there currently isn't a bounds variable.
+        # TODO: Implement the case where the bounds variable needs to be removed.
+        # TODO: Technically the if statement is incorrect. The variable needs to be removed if it exists.
+        if data is not None:
+            self._bnds_dv.values = data
+
+    @property
+    def _bounds_dm(self):
+        from iris._data_manager import DataManager
+        return DataManager(self.points)
+
+    @_bounds_dm.setter
+    def _bounds_dm(self, new):
+        if new is not None:
+            raise ValueError('Whaaa?')
+
+
+class XDimCoord(XCoord, iris.coords.DimCoord):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # TODO: Don't know what to do here.
+        self.circular = False
+
+class XAuxCoord(XCoord, iris.coords.AuxCoord):
+    pass
+
+
+
+class XCube(XVarMixin, iris.cube.Cube):
     """
     A single Iris cube of data and metadata.
 
@@ -67,37 +306,87 @@ class XCube(iris.cube.Cube):
     """
     def __init__(self, dataset, var_name):
         # Initialise the cube data manager.
-#        self._data_manager = DataManager(data)
+
         self._data_obj = dataset
         self._var_name = var_name
+        self._data_manager = XDataManager(self)
 
-    @property
-    def _xvar(self):
-        return self._data_obj[self._var_name]
-
-    @property
-    def standard_name(self):
-        #: The "standard name" for the Cube's phenomenon.
-        return self._xvar.standard_name
+    _MEMO = {}
 
     @property
     def _dim_coords_and_dims(self):
-        return []
+        xvar = self._xvar
+        xvar_dims = xvar.dims
+
+        result = []
+        for dim, dim_name in enumerate(xvar_dims):
+            var = self._data_obj.variables.get(dim_name)
+            if var is None:
+                # No coordinate for this dim (annonymous).
+                continue
+            # TODO: Cache this whole thing... it is pretty expensive, and Iris does it *a lot*.
+            c = self.coord_factory(var, var.name, iris.coords.DimCoord)
+            result.append([c, dim])
+        return result
+
+    def var_array(self, var):
+        import cftime
+        
+        array = var.values
+        # TODO: Figure out how to decode the Datetime stuff properly.
+        if array.dtype == object and isinstance(array.item(0), cftime.Datetime360Day):
+            from xarray.coding.times import CFDatetimeCoder
+            encoded_var = CFDatetimeCoder().encode(var)
+            array = encoded_var.values
+        return array
+
+    def coord_factory(self, variable, var_name, coord_type):
+        var = variable
+        import iris.coords
+        dim_name = var_name
+        points = self.var_array(var)
+        bounds_var = self._data_obj.get(var_name + '_bnds', None)
+        bounds = None
+        if bounds_var is not None:
+            # TODO: There is no guarantee that the shape of this is compatible with
+            # the shape of points...
+            bounds = self.var_array(bounds_var)
+        MEMO_key = (dim_name, coord_type)
+        c = self._MEMO.get(MEMO_key, None)
+        if c is None and coord_type == iris.coords.DimCoord:
+            c = XDimCoord(self._data_obj, dim_name)
+            self._MEMO[MEMO_key] = c
+        if c is None and coord_type == iris.coords.AuxCoord:
+            c = XAuxCoord(self._data_obj, dim_name)
+            self._MEMO[MEMO_key] = c
+        return c
 
     @property
     def _aux_coords_and_dims(self):
-        return []
-
-    @property
-    def units(self):
-        return self._xvar.units
+        result = []
+        xvar = self._xvar
+        xvar_dims = xvar.dims
+        for var_name, var in self._data_obj.variables.items():
+            if var_name == self._var_name:
+                continue
+            if var_name in xvar_dims:
+                continue
+            if var_name.endswith('_bnds') and var_name[:-5] in self._data_obj.variables:
+                continue
+            if xvar.attrs.get('grid_mapping', '') == var_name:
+                continue
+            if not all(dim in xvar.dims for dim in var.dims):
+                continue
+            c = self.coord_factory(var, var_name, iris.coords.AuxCoord)
+            
+            dims = [xvar.dims.index(dim) for dim in var.dims]
+            result.append([c, dims])
+            
+        return result
 
     @property
     def _aux_factories(self):
         return []
-        #: An instance of :class:`cf_units.Unit` describing the Cube's data.
-        self.units = units
-
         #: The "long name" for the Cube's phenomenon.
         self.long_name = long_name
 
@@ -106,22 +395,10 @@ class XCube(iris.cube.Cube):
 
     @property
     def _cell_methods(self):
-        return ()
+        cm = self._xvar.attrs.get('cell_methods', '')
+        import iris.fileformats.netcdf
+        return iris.fileformats.netcdf.parse_cell_methods(cm)
         #self.cell_methods = cell_methods
-
-    @property
-    def attributes(self):
-        # TODO: This needs to be a filtered dictionary which can be updated etc.
-        # Could get quite tricky... (e.g. standard_name shouldn't be in there...)
-        return self._xvar.attrs
-        #: A dictionary, with a few restricted keys, for arbitrary
-        #: Cube metadata.
-        self.attributes = attributes
-
-        # Coords
-        self._dim_coords_and_dims = []
-        self._aux_coords_and_dims = []
-        self._aux_factories = []
 
     @property
     def _cell_measures_and_dims(self):
@@ -338,7 +615,25 @@ class XCube(iris.cube.Cube):
 
     def _add_unique_aux_coord(self, coord, data_dims):
         data_dims = self._check_multi_dim_metadata(coord, data_dims)
-        self._aux_coords_and_dims.append([coord, data_dims])
+        # TODO: Implement proper coord to dataset (dataset: because it would produce 2 variables when bounded).
+        
+        # Get the dims of the variable that this cube represents.
+        dims = self._xvar.dims
+
+        # Figure out the names of the dimension to which we are adding this coordinate.
+        dims = [dims[dim] for dim in data_dims]
+
+        attrs = dict(units=str(coord.units),
+                     var_name=coord.var_name)
+        if coord.long_name:
+            attrs['long_name'] = coord.long_name
+        if coord.standard_name:
+            attrs['standard_name'] = coord.standard_name
+        var = xr.Variable(dims, coord.points,
+                attrs=attrs)
+        # Compute a good variable name.
+        var_name = iris.fileformats.netcdf.Saver.__new__(iris.fileformats.netcdf.Saver)._get_coord_variable_name(self, coord)
+        self._data_obj[var_name] = var
 
     def add_aux_factory(self, aux_factory):
         """
