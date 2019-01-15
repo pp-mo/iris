@@ -37,6 +37,10 @@ import numpy as np
 import numpy.ma as ma
 import cftime
 
+import dask
+from dask import delayed
+import dask.array as da
+
 from iris._deprecation import warn_deprecated
 from iris._lazy_data import as_concrete_data, as_lazy_data, is_lazy_data
 import iris.config
@@ -602,10 +606,10 @@ class PPDataProxy(object):
     """A reference to the data payload of a single PP field."""
 
     __slots__ = ('shape', 'src_dtype', 'path', 'offset', 'data_len',
-                 '_lbpack', 'boundary_packing', 'mdi', 'mask')
+                 '_lbpack', 'boundary_packing', 'mdi')
 
     def __init__(self, shape, src_dtype, path, offset, data_len,
-                 lbpack, boundary_packing, mdi, mask):
+                 lbpack, boundary_packing, mdi):
         self.shape = shape
         self.src_dtype = src_dtype
         self.path = path
@@ -614,7 +618,6 @@ class PPDataProxy(object):
         self.lbpack = lbpack
         self.boundary_packing = boundary_packing
         self.mdi = mdi
-        self.mask = mask
 
     # lbpack
     def _lbpack_setter(self, value):
@@ -649,7 +652,7 @@ class PPDataProxy(object):
                                                self.lbpack,
                                                self.boundary_packing,
                                                self.shape, self.src_dtype,
-                                               self.mdi, self.mask)
+                                               self.mdi)
         data = data.__getitem__(keys)
         return np.asanyarray(data, dtype=self.dtype)
 
@@ -831,7 +834,8 @@ def _pp_attribute_names(header_defn):
     special_headers = list('_' + name for name in _SPECIAL_HEADERS)
     extra_data = list(EXTRA_DATA.values())
     special_attributes = ['_raw_header', 'raw_lbtim', 'raw_lbpack',
-                          'boundary_packing', '_index_in_structured_load_file']
+                          'boundary_packing', '_index_in_structured_load_file',
+                          '_data_proxy']
     return normal_headers + special_headers + extra_data + special_attributes
 
 
@@ -865,6 +869,7 @@ class PPField(six.with_metaclass(abc.ABCMeta, object)):
         self.raw_lbpack = None
         self.boundary_packing = None
         self._index_in_structured_load_file = None
+        self._data_proxy = None
         if header is not None:
             self.raw_lbtim = header[self.HEADER_DICT['lbtim'][0]]
             self.raw_lbpack = header[self.HEADER_DICT['lbpack'][0]]
@@ -1600,7 +1605,7 @@ def _interpret_fields(fields):
             field.lbrow, field.lbnpt = land_mask.lbrow, land_mask.lbnpt
 
         data_shape = (field.lbrow, field.lbnpt)
-        _create_field_data(field, data_shape, land_mask)
+        _create_field_data(field, data_shape)
         yield field
 
     if landmask_compressed_fields:
@@ -1618,7 +1623,7 @@ def _interpret_fields(fields):
             yield field
 
 
-def _create_field_data(field, data_shape, land_mask):
+def _create_field_data(field, data_shape, mask_with_landsea_field):
     """
     Modifies a field's ``_data`` attribute either by:
      * converting DeferredArrayBytes into a lazy array,
@@ -1632,7 +1637,8 @@ def _create_field_data(field, data_shape, land_mask):
                                                  field.boundary_packing,
                                                  data_shape,
                                                  loaded_bytes.dtype,
-                                                 field.bmdi, land_mask)
+                                                 field.bmdi,
+                                                 mask_with_landsea_field)
     else:
         # Wrap the reference to the data payload within a data proxy
         # in order to support deferred data loading.
@@ -1641,9 +1647,59 @@ def _create_field_data(field, data_shape, land_mask):
                             fname, position, n_bytes,
                             field.raw_lbpack,
                             field.boundary_packing,
-                            field.bmdi, land_mask)
+                            field.bmdi, mask=None)
         block_shape = data_shape if 0 not in data_shape else (1, 1)
-        field.data = as_lazy_data(proxy, chunks=block_shape)
+        if mask_with_landsea_field is None:
+            # For a "normal" (non-landsea-masked) field, the proxy can be
+            # wrapped directly as a deferred array.
+            field.data = as_lazy_data(proxy, chunks=block_shape)
+            # Also save the underlying proxy object, which is used when this is
+            # a landsea-mask field (only).
+            field._data_proxy = proxy
+        else:
+            # This is a landsea-masked field, and its data must be defined in
+            # a different way : We must do the data+mask calculation *within
+            # Dask*, so it can manage the deferred operations correctly.
+            # This can't be represented as a dask-array operation, because of
+            # the varying shape of the values data, so we use 'deferred'
+            # objects for the calculation, and then apply 'from_deferred' to
+            # make the result back into a dask array.
+            @delayed
+            def fetch_valid_values_array():
+                return proxy[:]
+
+            # Get the private data-proxy from the landsea-mask field.
+            mask_proxy = mask_with_landsea_field._data_proxy
+            assert isinstance(mask_proxy, PPDataProxy)
+
+            @delayed
+            def fetch_mask_array():
+                return mask_proxy[:]
+
+#            # TODO: fix it so the mask gets cached on first read.
+#            _cached_mask = None
+#
+#            @delayed
+#            def fetch_mask_array():
+#                if _cached_mask is None:
+#                    _cached_mask = mask_proxy[:]
+#                return _cached_mask
+
+            @delayed
+            def calc_array(mask, values):
+                result = ma.masked_array(np.zeros(mask.shape),
+                                         mask=mask,
+                                         dtype=values.dtype)
+                result[~mask] = values
+                return result
+
+            delayed_valid_values = fetch_valid_values_array()
+            delayed_mask = fetch_mask_array()
+            delayed_result = calc_array(delayed_mask, delayed_valid_values)
+            lazy_result_array = da.from_delayed(delayed_result,
+                                                shape=block_shape,
+                                                dtype=dtype)
+            field.data = lazy_result_array
 
 
 def _field_gen(filename, read_data_bytes, little_ended=False):
