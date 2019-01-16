@@ -606,10 +606,10 @@ class PPDataProxy(object):
     """A reference to the data payload of a single PP field."""
 
     __slots__ = ('shape', 'src_dtype', 'path', 'offset', 'data_len',
-                 '_lbpack', 'boundary_packing', 'mdi')
+                 '_lbpack', 'boundary_packing', 'mdi', '_name')
 
     def __init__(self, shape, src_dtype, path, offset, data_len,
-                 lbpack, boundary_packing, mdi):
+                 lbpack, boundary_packing, mdi, name=None):
         self.shape = shape
         self.src_dtype = src_dtype
         self.path = path
@@ -618,6 +618,7 @@ class PPDataProxy(object):
         self.lbpack = lbpack
         self.boundary_packing = boundary_packing
         self.mdi = mdi
+        self._name = name
 
     # lbpack
     def _lbpack_setter(self, value):
@@ -645,6 +646,9 @@ class PPDataProxy(object):
         return len(self.shape)
 
     def __getitem__(self, keys):
+        if self._name is not None:
+            print('LSM-DEBUG: Proxy fetch  @ {}[{}]'.format(self._name, keys))
+
         with open(self.path, 'rb') as pp_file:
             pp_file.seek(self.offset, os.SEEK_SET)
             data_bytes = pp_file.read(self.data_len)
@@ -691,12 +695,15 @@ class PPDataProxy(object):
 
 def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
                                 data_shape, data_type, mdi,
-                                mask=None):
+                                mask=None, name=None):
     """
     Convert the already read binary data payload into a numpy array, unpacking
     and decompressing as per the F3 specification.
 
     """
+    if name is not None:
+        print('LSM-DEBUG: eval data bytes  @ {}'.format(name))
+
     if lbpack.n1 in (0, 2):
         data = np.frombuffer(data_bytes, dtype=data_type)
     elif lbpack.n1 == 1:
@@ -1584,7 +1591,7 @@ def _interpret_fields(fields):
     """
     land_mask = None
     landmask_compressed_fields = []
-    for field in fields:
+    for i_field, field in enumerate(fields):
         # Store the first reference to a land mask, and use this as the
         # definitive mask for future fields in this generator.
         if land_mask is None and field.lbuser[6] == 1 and \
@@ -1603,7 +1610,7 @@ def _interpret_fields(fields):
             field.lbrow, field.lbnpt = land_mask.lbrow, land_mask.lbnpt
 
         data_shape = (field.lbrow, field.lbnpt)
-        _create_field_data(field, data_shape)
+        _create_field_data(field, data_shape, name='nonlsm#{}'.format(i_field))
         yield field
 
     if landmask_compressed_fields:
@@ -1615,13 +1622,14 @@ def _interpret_fields(fields):
         else:
             mask_shape = (land_mask.lbrow, land_mask.lbnpt)
 
-        for field in landmask_compressed_fields:
+        for i_field, field in enumerate(landmask_compressed_fields):
             field.lbrow, field.lbnpt = mask_shape
-            _create_field_data(field, mask_shape, mask_field=land_mask)
+            _create_field_data(field, mask_shape, mask_field=land_mask,
+                               name='lsm#{}'.format(i_field))
             yield field
 
 
-def _create_field_data(field, data_shape, mask_field):
+def _create_field_data(field, data_shape, mask_field=None, name=''):
     """
     Modifies a field's ``_data`` attribute either by:
      * converting DeferredArrayBytes into a lazy array,
@@ -1636,7 +1644,8 @@ def _create_field_data(field, data_shape, mask_field):
                                                  data_shape,
                                                  loaded_bytes.dtype,
                                                  field.bmdi,
-                                                 mask_field)
+                                                 mask_field,
+                                                 name=name)
     else:
         # Wrap the reference to the data payload within a data proxy
         # in order to support deferred data loading.
@@ -1645,7 +1654,8 @@ def _create_field_data(field, data_shape, mask_field):
                             fname, position, n_bytes,
                             field.raw_lbpack,
                             field.boundary_packing,
-                            field.bmdi, mask=None)
+                            field.bmdi,
+                            name=name)
         block_shape = data_shape if 0 not in data_shape else (1, 1)
         if mask_field is None:
             # For a "normal" (non-landsea-masked) field, the proxy can be
