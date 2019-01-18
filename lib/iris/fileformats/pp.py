@@ -647,7 +647,7 @@ class PPDataProxy(object):
 
     def __getitem__(self, keys):
         if self._name is not None:
-            print('LSM-DEBUG: Proxy fetch  @ {}[{}]'.format(self._name, keys))
+            print('\nLSM-DEBUG: Proxy fetch  @ {}[{}]'.format(self._name, keys))
 
         with open(self.path, 'rb') as pp_file:
             pp_file.seek(self.offset, os.SEEK_SET)
@@ -1699,12 +1699,14 @@ def _create_field_data(field, data_shape, mask_field=None, name=''):
             @delayed
             def calc_array(mask, values):
                 # Note: "mask" is True at *valid* points, not missing ones.
-                # First ensure the mask array is boolean (not int).
+#                # Get the mask field to cache its data (as it did before).
+#                mask_field.data = mask
+                # Ensure the mask array is boolean (not int).
                 mask = mask.astype(bool)
                 result = ma.masked_all(mask.shape, dtype=dtype)
                 n_values = np.sum(mask)
                 if n_values > 0:
-                    # Note: allow the data field to contain excess values.
+                    # Note: data field can have excess values, but not fewer.
                     result[mask] = values[:n_values]
                 return result
 
