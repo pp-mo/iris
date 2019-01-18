@@ -780,24 +780,29 @@ def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
 
     elif lbpack.n2 == 2:
         if mask is None:
-            raise ValueError('No mask was found to unpack the data. '
-                             'Could not load.')
-        land_mask = mask.data.astype(np.bool)
-        sea_mask = ~land_mask
-        new_data = np.ma.masked_all(land_mask.shape)
-        new_data.fill_value = mdi
-        if lbpack.n3 == 1:
-            # Land mask packed data.
-            # Sometimes the data comes in longer than it should be (i.e. it
-            # looks like the compressed data is compressed, but the trailing
-            # data hasn't been clipped off!).
-            new_data[land_mask] = data[:land_mask.sum()]
-        elif lbpack.n3 == 2:
-            # Sea mask packed data.
-            new_data[sea_mask] = data[:sea_mask.sum()]
+            # If we are given no mask to apply, then just return raw data, even
+            # though it does not have the correct shape.
+            # For dask-delayed loading, this means that mask, data and the
+            # combination can be properly handled within a dask graph
+            # Note: except, we will still do MDI checking on this here (below).
+            pass
         else:
-            raise ValueError('Unsupported mask compression.')
-        data = new_data
+            land_mask = mask.data.astype(np.bool)
+            sea_mask = ~land_mask
+            new_data = np.ma.masked_all(land_mask.shape)
+            new_data.fill_value = mdi
+            if lbpack.n3 == 1:
+                # Land mask packed data.
+                # Sometimes the data comes in longer than it should be (i.e. it
+                # looks like the compressed data is compressed, but the trailing
+                # data hasn't been clipped off!).
+                new_data[land_mask] = data[:land_mask.sum()]
+            elif lbpack.n3 == 2:
+                # Sea mask packed data.
+                new_data[sea_mask] = data[:sea_mask.sum()]
+            else:
+                raise ValueError('Unsupported mask compression.')
+            data = new_data
 
     else:
         # Reform in row-column order
@@ -1679,7 +1684,7 @@ def _create_field_data(field, data_shape, mask_field=None, name=''):
             # This is *either* a lazy or a real array, we don't actually care.
             # If this is a deferred dependency, the delayed calc can see that.
             mask_field_array = mask_field.core_data()
-            assert isinstance(mask_field_array, [da.Array, np.ndarray])
+            assert isinstance(mask_field_array, (da.Array, np.ndarray))
 
             # Check whether this field uses a land or a sea mask.
             if field.lbpack.n3 not in (1, 2):
