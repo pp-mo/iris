@@ -1699,9 +1699,7 @@ def _create_field_data(field, data_shape, mask_field=None, name=''):
             @delayed
             def calc_array(mask, values):
                 # Note: "mask" is True at *valid* points, not missing ones.
-#                # Get the mask field to cache its data (as it did before).
-#                mask_field.data = mask
-                # Ensure the mask array is boolean (not int).
+                # First ensure the mask array is boolean (not int).
                 mask = mask.astype(bool)
                 result = ma.masked_all(mask.shape, dtype=dtype)
                 n_values = np.sum(mask)
