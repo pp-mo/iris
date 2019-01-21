@@ -663,8 +663,8 @@ class PPDataProxy(object):
     def __repr__(self):
         fmt = '<{self.__class__.__name__} shape={self.shape}' \
               ' src_dtype={self.dtype!r} path={self.path!r}' \
-              ' offset={self.offset} mask={self.mask!r}>'
-        return fmt.format(self=self)
+              ' offset={self.offset} mask={msk!r}>'
+        return fmt.format(self=self, msk=getattr(self, "mask", None))
 
     def __getstate__(self):
         # Because we have __slots__, this is needed to support Pickle.dump()
