@@ -1604,20 +1604,36 @@ def _interpret_fields(fields):
                 (field.lbuser[3] % 1000) == 30:
             land_mask = field
 
+        apply_landmask = None
+
         # Handle land compressed data payloads,
         # when lbpack.n2 is 2.
         if (field.raw_lbpack // 10 % 10) == 2:
             if land_mask is None:
                 landmask_compressed_fields.append(field)
+                # Land-masked fields have their size+shape defined by the
+                # reference landmask field, so we can't yield them if they
+                # are encountered *before* the landmask.
+                # In that case, defer them, and process them all afterwards at
+                # the end of the file.
                 continue
 
-            # Land compressed fields don't have a lbrow and lbnpt.
+            # Landmask-compressed fields don't have a lbrow and lbnpt.
             field.lbrow, field.lbnpt = land_mask.lbrow, land_mask.lbnpt
+            # We must also construct the data array differently, using the
+            # landmask field as a template.
+            apply_landmask = land_mask
 
         data_shape = (field.lbrow, field.lbnpt)
-        _create_field_data(field, data_shape, name='nonlsm#{}'.format(i_field))
+        _create_field_data(field, data_shape,
+                           with_landmask_field=apply_landmask,
+                           name='{}#{}'.format(
+                               'direct-lsm' if apply_landmask else 'nonlsm',
+                               i_field))
         yield field
 
+    # At end, now return any land-masked fields that were deferred because they
+    # were encountered before the landmask reference field.
     if landmask_compressed_fields:
         if land_mask is None:
             warnings.warn('Landmask compressed fields existed without a '
@@ -1629,16 +1645,21 @@ def _interpret_fields(fields):
 
         for i_field, field in enumerate(landmask_compressed_fields):
             field.lbrow, field.lbnpt = mask_shape
-            _create_field_data(field, mask_shape, mask_field=land_mask,
+            _create_field_data(field, mask_shape,
+                               with_landmask_field=land_mask,
                                name='lsm#{}'.format(i_field))
             yield field
 
 
-def _create_field_data(field, data_shape, mask_field=None, name=''):
+def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
     """
     Modifies a field's ``_data`` attribute either by:
      * converting DeferredArrayBytes into a lazy array,
      * converting LoadedArrayBytes into an actual numpy array.
+
+    If 'with_landmask_field' is passed, it is another field :  The landmask
+    field's data is used as a template for this field's data, determining its
+    size, shape and the locations of valid (non-missing) datapoints.
 
     """
     if isinstance(field.core_data(), LoadedArrayBytes):
@@ -1649,7 +1670,7 @@ def _create_field_data(field, data_shape, mask_field=None, name=''):
                                                  data_shape,
                                                  loaded_bytes.dtype,
                                                  field.bmdi,
-                                                 mask_field,
+                                                 with_landmask_field,
                                                  name=name)
     else:
         # Wrap the reference to the data payload within a data proxy
@@ -1662,7 +1683,7 @@ def _create_field_data(field, data_shape, mask_field=None, name=''):
                             field.bmdi,
                             name=name)
         block_shape = data_shape if 0 not in data_shape else (1, 1)
-        if mask_field is None:
+        if with_landmask_field is None:
             # For a "normal" (non-landsea-masked) field, the proxy can be
             # wrapped directly as a deferred array.
             field.data = as_lazy_data(proxy, chunks=block_shape)
@@ -1683,7 +1704,7 @@ def _create_field_data(field, data_shape, mask_field=None, name=''):
             # Get the mask data-array from the landsea-mask field.
             # This is *either* a lazy or a real array, we don't actually care.
             # If this is a deferred dependency, the delayed calc can see that.
-            mask_field_array = mask_field.core_data()
+            mask_field_array = with_landmask_field.core_data()
             assert isinstance(mask_field_array, (da.Array, np.ndarray))
 
             # Check whether this field uses a land or a sea mask.
