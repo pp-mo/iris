@@ -647,7 +647,8 @@ class PPDataProxy(object):
 
     def __getitem__(self, keys):
         if self._name is not None:
-            print('\nLSM-DEBUG: Proxy fetch  @ {}[{}]'.format(self._name, keys))
+            print('\nLSM-DEBUG: Proxy fetch  @ {}[{}]'.format(
+                self._name, keys))
 
         with open(self.path, 'rb') as pp_file:
             pp_file.seek(self.offset, os.SEEK_SET)
@@ -729,8 +730,11 @@ def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
         raise iris.exceptions.NotYetImplementedError(
             'PP fields with LBPACK of %s are not yet supported.' % lbpack)
 
-    # Ensure we have write permission on the data buffer.
-    data.setflags(write=True)
+    # Ensure we have a writeable data buffer.
+    if not data.flags['WRITEABLE']:
+        data = data.copy()
+#        NOTE: this worked upto numpy 1.15, but not at 1.16.0
+#        data.setflags(write=True)
 
     # Ensure the data is in the native byte order
     if not data.dtype.isnative:
@@ -794,8 +798,8 @@ def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
             if lbpack.n3 == 1:
                 # Land mask packed data.
                 # Sometimes the data comes in longer than it should be (i.e. it
-                # looks like the compressed data is compressed, but the trailing
-                # data hasn't been clipped off!).
+                # looks like the compressed data is compressed, but the
+                # trailing data hasn't been clipped off!).
                 new_data[land_mask] = data[:land_mask.sum()]
             elif lbpack.n3 == 2:
                 # Sea mask packed data.
@@ -1705,7 +1709,7 @@ def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
             # This is *either* a lazy or a real array, we don't actually care.
             # If this is a deferred dependency, the delayed calc can see that.
             mask_field_array = with_landmask_field.core_data()
-            assert isinstance(mask_field_array, (da.Array, np.ndarray))
+#            assert isinstance(mask_field_array, (da.Array, np.ndarray))
 
             # Check whether this field uses a land or a sea mask.
             if field.lbpack.n3 not in (1, 2):
