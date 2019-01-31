@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2010 - 2018, Met Office
+# (C) British Crown Copyright 2010 - 2019, Met Office
 #
 # This file is part of Iris.
 #
@@ -38,7 +38,6 @@ import numpy.ma as ma
 import cftime
 
 import dask
-from dask import delayed
 import dask.array as da
 
 from iris._deprecation import warn_deprecated
@@ -606,10 +605,10 @@ class PPDataProxy(object):
     """A reference to the data payload of a single PP field."""
 
     __slots__ = ('shape', 'src_dtype', 'path', 'offset', 'data_len',
-                 '_lbpack', 'boundary_packing', 'mdi', '_name')
+                 '_lbpack', 'boundary_packing', 'mdi')
 
     def __init__(self, shape, src_dtype, path, offset, data_len,
-                 lbpack, boundary_packing, mdi, name=None):
+                 lbpack, boundary_packing, mdi):
         self.shape = shape
         self.src_dtype = src_dtype
         self.path = path
@@ -618,7 +617,6 @@ class PPDataProxy(object):
         self.lbpack = lbpack
         self.boundary_packing = boundary_packing
         self.mdi = mdi
-        self._name = name
 
     # lbpack
     def _lbpack_setter(self, value):
@@ -646,10 +644,6 @@ class PPDataProxy(object):
         return len(self.shape)
 
     def __getitem__(self, keys):
-        if self._name is not None:
-            print('\nLSM-DEBUG: Proxy fetch  @ {}[{}]'.format(
-                self._name, keys))
-
         with open(self.path, 'rb') as pp_file:
             pp_file.seek(self.offset, os.SEEK_SET)
             data_bytes = pp_file.read(self.data_len)
@@ -664,8 +658,8 @@ class PPDataProxy(object):
     def __repr__(self):
         fmt = '<{self.__class__.__name__} shape={self.shape}' \
               ' src_dtype={self.dtype!r} path={self.path!r}' \
-              ' offset={self.offset} mask={msk!r}>'
-        return fmt.format(self=self, msk=getattr(self, "mask", None))
+              ' offset={self.offset}>'
+        return fmt.format(self=self)
 
     def __getstate__(self):
         # Because we have __slots__, this is needed to support Pickle.dump()
@@ -696,15 +690,12 @@ class PPDataProxy(object):
 
 def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
                                 data_shape, data_type, mdi,
-                                mask=None, name=None):
+                                mask=None):
     """
     Convert the already read binary data payload into a numpy array, unpacking
     and decompressing as per the F3 specification.
 
     """
-    if name is not None:
-        print('LSM-DEBUG: eval data bytes  @ {}'.format(name))
-
     if lbpack.n1 in (0, 2):
         data = np.frombuffer(data_bytes, dtype=data_type)
     elif lbpack.n1 == 1:
@@ -731,10 +722,9 @@ def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
             'PP fields with LBPACK of %s are not yet supported.' % lbpack)
 
     # Ensure we have a writeable data buffer.
+    # NOTE: "data.setflags(write=True)" is not valid for numpy >= 1.16.0.
     if not data.flags['WRITEABLE']:
         data = data.copy()
-#        NOTE: this worked upto numpy 1.15, but not at 1.16.0
-#        data.setflags(write=True)
 
     # Ensure the data is in the native byte order
     if not data.dtype.isnative:
@@ -787,8 +777,8 @@ def _data_bytes_to_shaped_array(data_bytes, lbpack, boundary_packing,
             # If we are given no mask to apply, then just return raw data, even
             # though it does not have the correct shape.
             # For dask-delayed loading, this means that mask, data and the
-            # combination can be properly handled within a dask graph
-            # Note: except, we will still do MDI checking on this here (below).
+            # combination can be properly handled within a dask graph.
+            # However, we still mask any MDI values in the array (below).
             pass
         else:
             land_mask = mask.data.astype(np.bool)
@@ -1600,7 +1590,7 @@ def _interpret_fields(fields):
     """
     land_mask = None
     landmask_compressed_fields = []
-    for i_field, field in enumerate(fields):
+    for field in fields:
         # Store the first reference to a land mask, and use this as the
         # definitive mask for future fields in this generator.
         if land_mask is None and field.lbuser[6] == 1 and \
@@ -1622,22 +1612,17 @@ def _interpret_fields(fields):
                 # the end of the file.
                 continue
 
-            # Landmask-compressed fields don't have a lbrow and lbnpt.
+            # Landmask-compressed fields don't have an lbrow and lbnpt.
             field.lbrow, field.lbnpt = land_mask.lbrow, land_mask.lbnpt
-            # We must also construct the data array differently, using the
-            # landmask field as a template.
+            # Construct a data array using the landmask field as a template.
             apply_landmask = land_mask
 
-        data_shape = (field.lbrow, field.lbnpt)
-        _create_field_data(field, data_shape,
-                           with_landmask_field=apply_landmask,
-                           name='{}#{}'.format(
-                               'direct-lsm' if apply_landmask else 'nonlsm',
-                               i_field))
+        _create_field_data(field, (field.lbrow, field.lbnpt),
+                           with_landmask_field=apply_landmask)
         yield field
 
-    # At end, now return any land-masked fields that were deferred because they
-    # were encountered before the landmask reference field.
+    # At file end, return any land-masked fields that were deferred because
+    # they were encountered before the landmask reference field.
     if landmask_compressed_fields:
         if land_mask is None:
             warnings.warn('Landmask compressed fields existed without a '
@@ -1647,15 +1632,14 @@ def _interpret_fields(fields):
         else:
             mask_shape = (land_mask.lbrow, land_mask.lbnpt)
 
-        for i_field, field in enumerate(landmask_compressed_fields):
+        for field in landmask_compressed_fields:
             field.lbrow, field.lbnpt = mask_shape
             _create_field_data(field, mask_shape,
-                               with_landmask_field=land_mask,
-                               name='lsm#{}'.format(i_field))
+                               with_landmask_field=land_mask)
             yield field
 
 
-def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
+def _create_field_data(field, data_shape, with_landmask_field=None):
     """
     Modifies a field's ``_data`` attribute either by:
      * converting DeferredArrayBytes into a lazy array,
@@ -1674,8 +1658,7 @@ def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
                                                  data_shape,
                                                  loaded_bytes.dtype,
                                                  field.bmdi,
-                                                 with_landmask_field,
-                                                 name=name)
+                                                 with_landmask_field)
     else:
         # Wrap the reference to the data payload within a data proxy
         # in order to support deferred data loading.
@@ -1684,8 +1667,7 @@ def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
                             fname, position, n_bytes,
                             field.raw_lbpack,
                             field.boundary_packing,
-                            field.bmdi,
-                            name=name)
+                            field.bmdi)
         block_shape = data_shape if 0 not in data_shape else (1, 1)
         if with_landmask_field is None:
             # For a "normal" (non-landsea-masked) field, the proxy can be
@@ -1697,8 +1679,8 @@ def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
             # advance, the data+mask calculation can't be represented
             # as a dask-array operation.  Instead, we make that calculation
             # 'delayed', and then use 'from_delayed' to make the result back
-            # into a dask array -- because the result shape *is* known.
-            @delayed
+            # into a dask array -- because the final result shape *is* known.
+            @dask.delayed
             def fetch_valid_values_array():
                 # Return the data values array (shape+size unknown).
                 return proxy[:]
@@ -1709,7 +1691,6 @@ def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
             # This is *either* a lazy or a real array, we don't actually care.
             # If this is a deferred dependency, the delayed calc can see that.
             mask_field_array = with_landmask_field.core_data()
-#            assert isinstance(mask_field_array, (da.Array, np.ndarray))
 
             # Check whether this field uses a land or a sea mask.
             if field.lbpack.n3 not in (1, 2):
@@ -1721,7 +1702,7 @@ def _create_field_data(field, data_shape, with_landmask_field=None, name=''):
 
             # Define the mask+data calculation as a deferred operation.
             # NOTE: duplicates the operation in _data_bytes_to_shaped_array.
-            @delayed
+            @dask.delayed
             def calc_array(mask, values):
                 # Note: "mask" is True at *valid* points, not missing ones.
                 # First ensure the mask array is boolean (not int).

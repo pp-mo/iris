@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2018, Met Office
+# (C) British Crown Copyright 2013 - 2019, Met Office
 #
 # This file is part of Iris.
 #
@@ -49,8 +49,7 @@ class Test__create_field_data(tests.IrisTest):
                                               field.boundary_packing,
                                               data_shape,
                                               mock_loaded_bytes.dtype,
-                                              field.bmdi, land_mask,
-                                              name='')
+                                              field.bmdi, land_mask)
 
     def test_deferred_bytes(self):
         # Check that a field with deferred array bytes in core_data gets a
@@ -84,8 +83,7 @@ class Test__create_field_data(tests.IrisTest):
                                             n_bytes,
                                             field.raw_lbpack,
                                             field.boundary_packing,
-                                            field.bmdi,
-                                            name='')
+                                            field.bmdi)
 
 
 if __name__ == "__main__":

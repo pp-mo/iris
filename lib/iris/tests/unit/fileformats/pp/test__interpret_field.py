@@ -1,4 +1,4 @@
-# (C) British Crown Copyright 2013 - 2018, Met Office
+# (C) British Crown Copyright 2013 - 2019, Met Office
 #
 # This file is part of Iris.
 #
@@ -95,7 +95,7 @@ class Test__interpret_fields__land_packed_fields(tests.IrisTest):
 
     def test_landsea_unpacking_uses_dask(self):
         # Ensure that the graph of the (lazy) landsea-masked data contains an
-        # explicit reference to the (lazy) mask field data.
+        # explicit reference to a (lazy) landsea-mask field.
         # Otherwise its compute() will need to invoke another compute().
         # See https://github.com/SciTools/iris/issues/3237
 
@@ -103,7 +103,7 @@ class Test__interpret_fields__land_packed_fields(tests.IrisTest):
         # tiny bit of real data ...
         testfile_path = tests.get_data_path(
             ['FF', 'landsea_masked', 'testdata_mini_lsm.ff'])
-        landsea_mask, soil_temp  = iris.load_cubes(
+        landsea_mask, soil_temp = iris.load_cubes(
             testfile_path, ('land_binary_mask', 'soil_temperature'))
 
         # Now check that the soil-temp dask graph correctly references the
@@ -125,7 +125,7 @@ class Test__interpret_fields__land_packed_fields(tests.IrisTest):
                               pp.PPDataProxy)
 
         # Check that the soil-temp graph references the *same* lazy element,
-        # showing that the mask+data combination is calculated in dask.
+        # showing that the mask+data calculation is handled by dask.
         self.assertIn(mask_data_name, lazy_soildata_array.dask.keys())
 
 
