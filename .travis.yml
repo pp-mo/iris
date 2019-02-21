@@ -126,9 +126,9 @@ install:
 
 script:
   - if [[ $TEST_TARGET == 'default' ]]; then
-      cd $INSTALL_DIR;
       python -m iris.tests.runner --default-tests --system-tests --coding-tests --print-failed-images --num-processors=3;
-      pwd;
+      echo 'CHECK TEST CWD : $(pwd)';
+      python setup.py test --coding-tests;
     fi
   - if [[ $TEST_TARGET == 'example' ]]; then
       python -m iris.tests.runner --example-tests --print-failed-images --num-processors=3;
