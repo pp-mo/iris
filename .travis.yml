@@ -126,6 +126,8 @@ install:
 
 script:
   - if [[ $TEST_TARGET == 'default' ]]; then
+      # Need correct cwd for licence header test.
+      cd $INSTALL_DIR;
       python -m iris.tests.runner --default-tests --system-tests --coding-tests --print-failed-images --num-processors=3;
     fi
   - if [[ $TEST_TARGET == 'example' ]]; then
