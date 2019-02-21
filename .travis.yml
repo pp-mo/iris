@@ -130,7 +130,11 @@ script:
   - >
     if [[ $TEST_TARGET == 'default' ]]; then
       python -m iris.tests.runner --default-tests --system-tests --coding-tests --print-failed-images --num-processors=3;
-      pwd;
+      echo "";
+      echo "CHECK TEST CWD : $(pwd)";
+      echo "";
+      python setup.py pyke_rules;
+      python setup.py std_names;
       python setup.py test --coding-tests;
       echo "done";
     fi
