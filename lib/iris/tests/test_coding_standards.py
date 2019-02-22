@@ -29,6 +29,7 @@ from itertools import chain
 import os
 import re
 import subprocess
+import warnings
 
 import pep8
 
@@ -64,8 +65,8 @@ LICENSE_RE = re.compile(LICENSE_RE_PATTERN, re.MULTILINE)
 # Guess iris repo directory of Iris - realpath is used to mitigate against
 # Python finding the iris package via a symlink.
 IRIS_DIR = os.path.realpath(os.path.dirname(iris.__file__))
-REPO_DIR = os.path.dirname(os.path.dirname(IRIS_DIR))
-DOCS_DIR = os.path.join(REPO_DIR, 'docs', 'iris')
+IRIS_INSTALL_DIR = os.path.dirname(os.path.dirname(IRIS_DIR))
+DOCS_DIR = os.path.join(IRIS_INSTALL_DIR, 'docs', 'iris')
 DOCS_DIR = iris.config.get_option('Resources', 'doc_dir', default=DOCS_DIR)
 exclusion = ['Makefile', 'build']
 DOCS_DIRS = glob(os.path.join(DOCS_DIR, '*'))
@@ -213,7 +214,6 @@ class TestCodeFormat(tests.IrisTest):
                           'or do not point to a file:\n  '
                           '{}'.format('\n  '.join(unexpectedly_good)))
 
-import warnings
 
 class GitWhatchangedError(Exception):
     pass
@@ -284,21 +284,26 @@ class TestLicenseHeaders(tests.IrisTest):
             or cannot be found by subprocess, an IOError may also be raised.
 
         """
+        # Get dirpath to the git repository : allow setting with an environment
+        # variable, so Travis can test in the repo, not the installation.
+        iris_repo_dirpath = os.environ.get('IRIS_REPO_DIR', IRIS_INSTALL_DIR)
+
         # Check the ".git" folder exists at the repo dir.
-        if not os.path.isdir(os.path.join(REPO_DIR, '.git')):
-            raise ValueError('{} is not a git repository.'.format(REPO_DIR))
+        if not os.path.isdir(os.path.join(iris_repo_dirpath, '.git')):
+            msg = '{} is not a git repository.'
+            raise ValueError(msg.format(iris_repo_dirpath))
 
         # Call "git whatchanged" to get the details of all the files and when
         # they were last changed.
         dir_msg = subprocess.check_output(
             ['echo "SUBPROCESS CHECKED TEST CWD: $(pwd)"'],
-            shell=True, cwd=REPO_DIR)
+            shell=True, cwd=iris_repo_dirpath)
         msg = '\n\nTEST CHECK DIR  asked={}\n  response:{}\n'
-        warnings.warn(msg.format(REPO_DIR, dir_msg))
+        warnings.warn(msg.format(iris_repo_dirpath, dir_msg))
         try:
             output = subprocess.check_output(['git', 'whatchanged',
                                               "--pretty=TIME:%ct"],
-                                             cwd=REPO_DIR)
+                                             cwd=iris_repo_dirpath)
         except CalledProcessError as err:
             msg = 'Git whatchanged fail(rc={}), text: {}'
             raise GitWhatchangedError(msg.format(err.returncode, err.output))
@@ -327,9 +332,9 @@ class TestLicenseHeaders(tests.IrisTest):
 
         try:
             last_change_by_fname = self.last_change_by_fname()
-        except GitWhatchangedError as err:
-            # Caught the case where this is not a git repo.
-            return self.skipTest(str(err))
+#        except GitWhatchangedError as err:
+#            # Caught the case where this is not a git repo.
+#            return self.skipTest(str(err))
         except ValueError as err:
             # Caught the case where this is not a git repo.
             msg = ('Iris installation did not look like a git repo?'
@@ -338,7 +343,7 @@ class TestLicenseHeaders(tests.IrisTest):
 
         failed = False
         for fname, last_change in sorted(last_change_by_fname.items()):
-            full_fname = os.path.join(REPO_DIR, fname)
+            full_fname = os.path.join(IRIS_INSTALL_DIR, fname)
             if full_fname.endswith('.py') and os.path.isfile(full_fname) and \
                     not any(fnmatch(fname, pat) for pat in exclude_patterns):
                 with open(full_fname) as fh:
