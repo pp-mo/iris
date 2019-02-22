@@ -33,6 +33,7 @@ import subprocess
 import pep8
 
 import iris
+from cherrypy._cpcompat_subprocess import CalledProcessError
 
 
 LICENSE_TEMPLATE = """
@@ -213,6 +214,10 @@ class TestCodeFormat(tests.IrisTest):
                           '{}'.format('\n  '.join(unexpectedly_good)))
 
 
+class GitWhatchangedError(Exception):
+    pass
+
+
 class TestLicenseHeaders(tests.IrisTest):
     @staticmethod
     def years_of_license_in_file(fh):
@@ -284,9 +289,17 @@ class TestLicenseHeaders(tests.IrisTest):
 
         # Call "git whatchanged" to get the details of all the files and when
         # they were last changed.
-        output = subprocess.check_output(['git', 'whatchanged',
-                                          "--pretty=TIME:%ct"],
-                                         cwd=REPO_DIR)
+        print(subprocess.check_output(
+            ['echo "TEST SUBPROCESS CHECK DIR: $(pwd_"'],
+            shell=True, cwd=REPO_DIR))
+        try:
+            output = subprocess.check_output(['git', 'whatchanged',
+                                              "--pretty=TIME:%ct"],
+                                             cwd=REPO_DIR)
+        except CalledProcessError as err:
+            msg = 'Git whatchanged fail(rc={}), text: {}'
+            raise GitWhatchangedError(msg.format(err.returncode, err.output))
+
         output = output.decode().split('\n')
         res = {}
         for fname, dt in TestLicenseHeaders.whatchanged_parse(output):
@@ -311,6 +324,9 @@ class TestLicenseHeaders(tests.IrisTest):
 
         try:
             last_change_by_fname = self.last_change_by_fname()
+        except GitWhatchangedError as err:
+            # Caught the case where this is not a git repo.
+            return self.skipTest(str(err))
         except ValueError:
             # Caught the case where this is not a git repo.
             return self.skipTest('Iris installation did not look like a '
