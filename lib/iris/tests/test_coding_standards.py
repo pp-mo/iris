@@ -33,7 +33,7 @@ import subprocess
 import pep8
 
 import iris
-from cherrypy._cpcompat_subprocess import CalledProcessError
+from subprocess import CalledProcessError
 
 
 LICENSE_TEMPLATE = """
@@ -290,7 +290,7 @@ class TestLicenseHeaders(tests.IrisTest):
         # Call "git whatchanged" to get the details of all the files and when
         # they were last changed.
         print(subprocess.check_output(
-            ['echo "TEST SUBPROCESS CHECK DIR: $(pwd_"'],
+            ['echo "TEST SUBPROCESS CHECK DIR: $(pwd)"'],
             shell=True, cwd=REPO_DIR))
         try:
             output = subprocess.check_output(['git', 'whatchanged',
