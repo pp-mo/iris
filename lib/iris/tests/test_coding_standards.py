@@ -327,10 +327,11 @@ class TestLicenseHeaders(tests.IrisTest):
         except GitWhatchangedError as err:
             # Caught the case where this is not a git repo.
             return self.skipTest(str(err))
-        except ValueError:
+        except ValueError as err:
             # Caught the case where this is not a git repo.
-            return self.skipTest('Iris installation did not look like a '
-                                 'git repo.')
+            msg = ('Iris installation did not look like a git repo?'
+                   '\nERR = {}\n\n')
+            return self.skipTest(msg.format(str(err)))
 
         failed = False
         for fname, last_change in sorted(last_change_by_fname.items()):
