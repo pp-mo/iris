@@ -72,7 +72,9 @@ exclusion = ['Makefile', 'build']
 DOCS_DIRS = glob(os.path.join(DOCS_DIR, '*'))
 DOCS_DIRS = [DOC_DIR for DOC_DIR in DOCS_DIRS if os.path.basename(DOC_DIR) not
              in exclusion]
-
+# Get a dirpath to the git repository : allow setting with an environment
+# variable, so Travis can test for headers in the repo, not the installation.
+IRIS_REPO_DIRPATH = os.environ.get('IRIS_REPO_DIR', IRIS_INSTALL_DIR)
 
 # pycodestyle / pep8 error codes that should be ignored:
 PYCODESTYLE_IGNORE_OPTIONS = (
@@ -284,26 +286,22 @@ class TestLicenseHeaders(tests.IrisTest):
             or cannot be found by subprocess, an IOError may also be raised.
 
         """
-        # Get dirpath to the git repository : allow setting with an environment
-        # variable, so Travis can test in the repo, not the installation.
-        iris_repo_dirpath = os.environ.get('IRIS_REPO_DIR', IRIS_INSTALL_DIR)
-
         # Check the ".git" folder exists at the repo dir.
-        if not os.path.isdir(os.path.join(iris_repo_dirpath, '.git')):
+        if not os.path.isdir(os.path.join(IRIS_REPO_DIRPATH, '.git')):
             msg = '{} is not a git repository.'
-            raise ValueError(msg.format(iris_repo_dirpath))
+            raise ValueError(msg.format(IRIS_REPO_DIRPATH))
 
         # Call "git whatchanged" to get the details of all the files and when
         # they were last changed.
         dir_msg = subprocess.check_output(
             ['echo "SUBPROCESS CHECKED TEST CWD: $(pwd)"'],
-            shell=True, cwd=iris_repo_dirpath)
+            shell=True, cwd=IRIS_REPO_DIRPATH)
         msg = '\n\nTEST CHECK DIR  asked={}\n  response:{}\n'
-        warnings.warn(msg.format(iris_repo_dirpath, dir_msg))
+        warnings.warn(msg.format(IRIS_REPO_DIRPATH, dir_msg))
         try:
             output = subprocess.check_output(['git', 'whatchanged',
                                               "--pretty=TIME:%ct"],
-                                             cwd=iris_repo_dirpath)
+                                             cwd=IRIS_REPO_DIRPATH)
         except CalledProcessError as err:
             msg = 'Git whatchanged fail(rc={}), text: {}'
             raise GitWhatchangedError(msg.format(err.returncode, err.output))
@@ -343,7 +341,7 @@ class TestLicenseHeaders(tests.IrisTest):
 
         failed = False
         for fname, last_change in sorted(last_change_by_fname.items()):
-            full_fname = os.path.join(IRIS_INSTALL_DIR, fname)
+            full_fname = os.path.join(IRIS_REPO_DIRPATH, fname)
             if full_fname.endswith('.py') and os.path.isfile(full_fname) and \
                     not any(fnmatch(fname, pat) for pat in exclude_patterns):
                 with open(full_fname) as fh:
