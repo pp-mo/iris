@@ -213,6 +213,7 @@ class TestCodeFormat(tests.IrisTest):
                           'or do not point to a file:\n  '
                           '{}'.format('\n  '.join(unexpectedly_good)))
 
+import warnings
 
 class GitWhatchangedError(Exception):
     pass
@@ -289,9 +290,11 @@ class TestLicenseHeaders(tests.IrisTest):
 
         # Call "git whatchanged" to get the details of all the files and when
         # they were last changed.
-        print(subprocess.check_output(
-            ['echo "TEST SUBPROCESS CHECK DIR: $(pwd)"'],
-            shell=True, cwd=REPO_DIR))
+        dir_msg = subprocess.check_output(
+            ['echo "SUBPROCESS CHECKED TEST CWD: $(pwd)"'],
+            shell=True, cwd=REPO_DIR)
+        msg = '\n\nTEST CHECK DIR  asked={}\n  response:{}\n'
+        warnings.warn(msg.format(REPO_DIR, dir_msg))
         try:
             output = subprocess.check_output(['git', 'whatchanged',
                                               "--pretty=TIME:%ct"],

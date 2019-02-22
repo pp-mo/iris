@@ -14,9 +14,10 @@ sudo: false
 env:
   matrix:
     - TEST_TARGET=default TEST_MINIMAL=true
-    - TEST_TARGET=default
-    - TEST_TARGET=example
-    - TEST_TARGET=doctest
+
+#    - TEST_TARGET=default
+#    - TEST_TARGET=example
+#    - TEST_TARGET=doctest
 
   global:
     # The decryption key for the encrypted .github/deploy_key.scitools-docs.enc.
