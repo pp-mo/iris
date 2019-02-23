@@ -29,12 +29,10 @@ from itertools import chain
 import os
 import re
 import subprocess
-import warnings
 
 import pep8
 
 import iris
-from subprocess import CalledProcessError
 
 
 LICENSE_TEMPLATE = """
@@ -217,10 +215,6 @@ class TestCodeFormat(tests.IrisTest):
                           '{}'.format('\n  '.join(unexpectedly_good)))
 
 
-class GitWhatchangedError(Exception):
-    pass
-
-
 class TestLicenseHeaders(tests.IrisTest):
     @staticmethod
     def years_of_license_in_file(fh):
@@ -293,18 +287,9 @@ class TestLicenseHeaders(tests.IrisTest):
 
         # Call "git whatchanged" to get the details of all the files and when
         # they were last changed.
-        dir_msg = subprocess.check_output(
-            ['echo "SUBPROCESS CHECKED TEST CWD: $(pwd)"'],
-            shell=True, cwd=IRIS_REPO_DIRPATH)
-        msg = '\n\nTEST CHECK DIR  asked={}\n  response:{}\n'
-        warnings.warn(msg.format(IRIS_REPO_DIRPATH, dir_msg))
-        try:
-            output = subprocess.check_output(['git', 'whatchanged',
-                                              "--pretty=TIME:%ct"],
-                                             cwd=IRIS_REPO_DIRPATH)
-        except CalledProcessError as err:
-            msg = 'Git whatchanged fail(rc={}), text: {}'
-            raise GitWhatchangedError(msg.format(err.returncode, err.output))
+        output = subprocess.check_output(['git', 'whatchanged',
+                                          "--pretty=TIME:%ct"],
+                                         cwd=IRIS_REPO_DIRPATH)
 
         output = output.decode().split('\n')
         res = {}
@@ -330,9 +315,6 @@ class TestLicenseHeaders(tests.IrisTest):
 
         try:
             last_change_by_fname = self.last_change_by_fname()
-#        except GitWhatchangedError as err:
-#            # Caught the case where this is not a git repo.
-#            return self.skipTest(str(err))
         except ValueError as err:
             # Caught the case where this is not a git repo.
             msg = ('Iris installation did not look like a git repo?'
