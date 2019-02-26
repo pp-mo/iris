@@ -44,6 +44,8 @@ import numpy as np
 import numpy.ma as ma
 from pyke import knowledge_engine
 
+from cf_units import Unit
+
 from iris._deprecation import warn_deprecated
 import iris.analysis
 from iris.aux_factory import HybridHeightFactory, HybridPressureFactory, \
@@ -757,23 +759,134 @@ def _set_file_ncattr(variable, name, attribute):
     return variable.setncattr(name, attribute)
 
 
+def _offset_keys(keys, axis, offset):
+    """
+    Return indexes adjusted for a write offset.
+
+    This is to support append operations, where we want to translate a write
+    access, from e.g. "cf_var[:, :, :]" to something like "cf_var[:, N:, :]".
+    We can't use an index-of-index-of-thing to do this, as cf_var[keys] does
+    not produce a writeable view (unlike the equivalent numpy array access).
+    So instead we pick apart the index expression + return a modified version.
+
+    Args:
+
+    * keys (multidimensional indexing expression):
+        A slicing representing a subsection of an array.
+    * axis (integer):
+        The dimension to offset.
+    * offset (integer):
+        A positive integer to add onto the 'axis'th indexing.
+
+    Returns:
+        * out_keys (tuple of (int or slice)):
+            an indexing expression addressing the notional target region
+            "target[< axis * (:,) >, offset:][keys]".
+
+    .. note::
+
+        Supports *only* keys which are slice objects or integers
+        -- not newaxis, ellipsis, or anything else.
+        So we depend on dask streaming using only those.
+        It seems to work, for now.
+
+    .. note::
+
+        Negative indices also don't have an obvious interpretation, so we don't
+        allow them.
+
+    """
+    # Make input into an iterable of keys, if not already.
+    try:
+        keys = iter(keys)
+    except TypeError:
+        # Convert single key to 1-tuple.
+        keys = (keys,)
+
+    # Make into a list so we can change it.
+    keys = list(keys)
+
+    _DEBUG_OFFSET_KEYS = False
+    if _DEBUG_OFFSET_KEYS:
+        debug_orig_keys = keys
+
+    # Expand to minimum dimensions if required.
+    n_extra_dims = axis - len(keys) + 1
+    if n_extra_dims > 0:
+        keys = keys + n_extra_dims * [slice(None)]
+
+    # Adjust the key of the specified axis.
+    axis_key = keys[axis]
+    if isinstance(axis_key, int):
+        # The key is an integer : just add the offset.
+        axis_key += offset
+    elif isinstance(axis_key, slice):
+        # The key is a slice object : translate accordingly ..
+
+        # Take apart the slice..
+        start, stop, step = axis_key.start, axis_key.stop, axis_key.step
+
+        # ..adjust slice elements..
+        if ((start is not None and start < 0) or
+                (stop is not None and stop < 0)):
+            msg = ("Cannot offset the {}th key of index expression "
+                   "'{}', = '{}', as it uses negative indices.")
+            msg = msg.format(axis + 1, keys, axis_key)
+            raise ValueError(msg)
+
+        if start is None:
+            start = offset
+        else:
+            start = start + offset
+
+        if stop is not None:
+            stop = stop + offset
+
+        # ..put slice back together.
+        axis_key = slice(start, stop, step)
+    else:
+        msg = ("Cannot offset the {}th key of index expression "
+               "'{}', = '{}', as it is of type '{}' but we only support "
+               "integers or slice objects.")
+        msg = msg.format(axis + 1, keys, axis_key, type(axis_key))
+        raise ValueError(msg)
+
+    # Update just the specified axis, and return a tuple of keys (always).
+    keys[axis] = axis_key
+    keys = tuple(keys)
+
+    if _DEBUG_OFFSET_KEYS:
+        msg = '\n  DEBUG: offset_keys({}, axis={}, offs={}) --> {}'
+        print(msg.format(debug_orig_keys, axis, offset, keys))
+
+    return keys
+
+
 class _FillValueMaskCheckAndStoreTarget(object):
     """
     To be used with da.store. Remembers whether any element was equal to a
     given value and whether it was masked, before passing the chunk to the
     given target.
 
+    TODO: document the added 'offset' behaviour properly.
+
     """
-    def __init__(self, target, fill_value=None):
+    def __init__(self, target, fill_value=None,
+                 write_offset_axis=None, write_offset=0):
         self.target = target
         self.fill_value = fill_value
         self.contains_value = False
         self.is_masked = False
+        self.offset_axis = write_offset_axis
+        self.offset = write_offset
 
     def __setitem__(self, keys, arr):
         if self.fill_value is not None:
             self.contains_value = self.contains_value or self.fill_value in arr
         self.is_masked = self.is_masked or ma.is_masked(arr)
+        if self.offset != 0:
+            # Adjust keys to offset one axis, as needed in append operations.
+            keys = _offset_keys(keys, self.offset_axis, self.offset)
         self.target[keys] = arr
 
 
@@ -787,8 +900,11 @@ class _SlotsHolder(object):
     * __slots__ (list of string):
         names of content attributes.
         Order and names also provide object init args and kwargs.
-    * _typename : the headline name for the string print
-    * _defaults_dict : an kwargs-like dict of defaults for object init.
+    * _typename (string):
+        the headline name for the string print
+    * _defaults_dict (dict or callable):
+        a kwargs-like dict of defaults for object init,
+        or a callable returning one.
 
     """
     def __init__(self, *args, **kwargs):
@@ -797,11 +913,13 @@ class _SlotsHolder(object):
 
         Args order and Kwargs entries from '__slots__'.
 
-        Unspecified args default to values in 'self._defaults_dict',
+        Unspecified args default to values in 'self._defaults_dict()', if any,
         or else None.
 
         """
         values = getattr(self, '_defaults_dict', {})
+        if callable(values):
+            values = values()
         unrecs = [key for key in kwargs if key not in self.__slots__]
         if unrecs:
             unrecs = ', '.join(unrecs)
@@ -840,10 +958,17 @@ class _SaveFile(_SlotsHolder):
     _typename = 'SaveFile'
     __slots__ = ('dims', 'vars', 'ncattrs')
 
+    @staticmethod
+    def _defaults_dict():
+        return dict(dims=OrderedDict(),
+                    vars=OrderedDict(),
+                    ncattrs=OrderedDict())
+
 
 class _SaveDim(_SlotsHolder):
     _typename = 'SaveDim'
-    __slots__ = ('name', 'size')
+    __slots__ = ('name', 'size', 'is_unlimited')
+    _defaults_dict = {'is_unlimited': False}
 
 
 class _SaveVar(_SlotsHolder):
@@ -936,9 +1061,7 @@ class Saver(object):
         #: A dictionary, mapping formula terms to owner cf variable name
         self._formula_terms_cache = {}
         #: A placeholder for elements to be written/appended to the file.
-        self._save = _SaveFile(dims=OrderedDict(),
-                               vars=OrderedDict(),
-                               ncattrs=OrderedDict())
+        self._save = _SaveFile()
         self._append_mode = append
 
         #: NetCDF dataset
@@ -966,14 +1089,18 @@ class Saver(object):
     def __exit__(self, type, value, traceback):
         """Flush any buffered data to the CF-netCDF file before closing."""
         output_path = self._dataset.filepath()
-        self._write_to_dataset()
+        self._write_or_append_to_dataset()
         self._dataset.sync()
         self._dataset.close()
         import subprocess
         import sys
         cmd = 'ncdump -h ' + output_path
-        lines = subprocess.check_output(cmd, shell=True)
-        lines = lines.split('\n')
+        chars = subprocess.check_output(cmd, shell=True)
+        # Convert bytes into strings in Python 2/3 compatible way.
+        if (not isinstance(chars, six.string_types) and
+                hasattr(chars, 'decode')):
+            chars = chars.decode()
+        lines = chars.split('\n')
         lines = ['netcdf [[XXX]] {'] + \
             lines[1:]  # replace first with filepath
         outlines = ['',
@@ -1096,7 +1223,6 @@ class Saver(object):
             """
         if unlimited_dimensions is None:
                 unlimited_dimensions = []
-
 #
 # For now, we are just not supporting the cf_profile hook,
 # because this expects an existing open dataset to modify after each write,
@@ -1260,12 +1386,14 @@ class Saver(object):
 
         for dim_name in dimension_names:
             if dim_name not in self._save.dims:
-                if dim_name in unlimited_dim_names:
+                unlimited = dim_name in unlimited_dim_names
+                if unlimited:
                     size = None
                 else:
                     size = self._existing_dim[dim_name]
                 _addbyname(self._save.dims,
-                           _SaveDim(name=dim_name, size=size))
+                           _SaveDim(name=dim_name, size=size,
+                                    is_unlimited=unlimited))
 
     def _add_aux_coords(self, cube, cf_var_cube, dimension_names):
         """
@@ -2265,6 +2393,17 @@ class Saver(object):
 
         return '{}_{}'.format(varname, num)
 
+    def _write_or_append_to_dataset(self):
+        """
+        Write the contents of self._save to an actual file.
+        The target, 'self._dataset' should be open + ready to go.
+
+        """
+        if self._append_mode:
+            self._append_to_dataset()
+        else:
+            self._write_to_dataset()
+
     def _write_to_dataset(self):
         """
         Write the contents of self._save to an actual file.
@@ -2289,6 +2428,449 @@ class Saver(object):
         # Add global attributes.
         for attr in self._save.ncattrs.values():
             _set_file_ncattr(self._dataset, attr.name, attr.value)
+
+    def _append_to_dataset(self):
+        """
+        Append the contents of self._save to an actual file.
+        The target, 'self._dataset' should be open + ready to go.
+
+        """
+        # First check all is good to go.
+        filedata, file_unlim_dim = self._prepare_append()
+        unlim_dim_length = file_unlim_dim.size
+        file_extend_dim_name = file_unlim_dim.name
+
+        # Write to (extend) each variable mapped to the unlimited dim.
+        for src_var in self._save.vars.values():
+            if file_extend_dim_name in src_var.dim_names:
+                i_dim_unlim = src_var.dim_names.index(file_extend_dim_name)
+                nc_var = src_var._file_var.data_source
+                self._write_variable_values_in_dataset(
+                    nc_var, src_var,
+                    write_axis=i_dim_unlim, write_offset=unlim_dim_length)
+
+    def _prepare_append(self):
+        """
+        Work out the correspondence between the data elements in self._save
+        and those found in an existing file (for append).
+
+        Align the save data variables and dimensions with those in the file by
+        renaming them as needed.
+
+        Check all necessary matching properties between corresponding elements:
+        Check there is exactly one unlimited dimension.
+        Check that dimension variable appends will preserve monotonicity.
+        Check that the data-variables are 1-to-1 with the file, and all 'other'
+        variables are accounted for.
+        Variables mapped to the unlimited dimension should all have the same
+        length in the that dimension, i.e. same 'append size'.
+        Variables *not* mapped to the unlimited dimension should all match
+        1-to-1 with variables in the file.
+        All variables are either 'data' variables, or are the subject of a
+        reference from another variable.
+
+        If this call succeeds, an append can proceed, and should be safe.
+
+        NOTE: general attributes in the new data are mostly ignored : They are
+        not written to the file.  However, structural attributes like
+        'coordinates' are used, and 'units' attributes are checked for a match.
+        Any packing controls are also retained as already in the file.
+
+        """
+        def var_identity_name(var):
+            """
+            Get the human-readable name of a variable (_SaveVar).
+
+            NOTE: Used *only* for constructing user-messages.
+
+            """
+            if 'standard_name' in var.ncattrs:
+                result = var.ncattrs['standard_name']
+            elif 'long_name' in var.ncattrs:
+                result = var.ncattrs['long_name']
+            else:
+                result = var.name
+            return result
+
+        # Construct a simple representation of the existing data.
+        ds = self._dataset
+        filedata = _SaveFile()
+
+        for dimname, ds_dim in ds.dimensions.items():
+            _addbyname(filedata.dims,
+                       _SaveDim(dimname, size=ds_dim.size,
+                                is_unlimited=ds_dim.isunlimited()))
+
+        for ds_var in ds.variables.values():
+            attrs = {attname: _SaveAttr(attname, getattr(ds_var, attname))
+                     for attname in ds_var.ncattrs()}
+
+            cf_var = _SaveVar(ds_var.name,
+                              dim_names=ds_var.dimensions,
+                              ncattrs=attrs,
+                              data_source=ds_var)
+
+            _addbyname(filedata.vars, cf_var)
+
+        savedata = self._save
+
+        # Check that both savedata + filedata have a single unlimited dim,
+        # and grab it.
+        def get_single_unlimited_dim(cf_data, source_description):
+            """Find the unlimited dimension + ensure there is just one."""
+            dims_unlim = [dim for dim in cf_data.dims.values()
+                          if dim.is_unlimited]
+            n_unlim = len(dims_unlim)
+            if n_unlim != 1:
+                if n_unlim == 0:
+                    fail_reason = 'no'
+                else:
+                    fail_reason = 'too many ({})'.format(n_unlim)
+                msg = ('Append failure : {} has {} unlimited '
+                       'dimensions : can only have exactly 1.')
+                msg = msg.format(source_description, fail_reason)
+                raise ValueError(msg)
+            return dims_unlim[0]
+
+        file_unlimited_dim = get_single_unlimited_dim(filedata, 'source file')
+        save_unlimited_dim = get_single_unlimited_dim(savedata, 'save data')
+
+        # Label all the links in both savedata + filedata.
+        # This enables us to identify variables like aux-coords and
+        # cell-methods through relationships, not just their names.
+        # Linkage occurs where a variable attribute names other variables, and
+        # also when a variable uses dimensions with dimension variables.
+        variable_linkage_attrs = ('bounds', 'coordinates', 'grid_mapping',
+                                  'cell_measures', 'ancillary_variables')
+
+        def label_links(cf_data, user_datatype_info):
+            def addlink(linksdict, name, item):
+                """
+                Add item to a named list in a "links dictionary",
+                creating the named list if not yet present.
+
+                """
+                links_list = linksdict.setdefault(name, [])
+                links_list.append(item)
+
+            # Create empty links on all variables.
+            for cf_var in cf_data.vars.values():
+                cf_var._linksto = {}
+                cf_var._linkedfrom = {}
+            for cf_var in cf_data.vars.values():
+                # Make links where variable attributes name other variables.
+                # Note: all links are made both 'up' and 'down'
+                for attrname in variable_linkage_attrs:
+                    if attrname in cf_var.ncattrs:
+                        target_names = cf_var.ncattrs[attrname].value
+                        target_names = target_names.split(' ')
+                        for target_name in target_names:
+                            if target_name not in cf_data.vars:
+                                msg = (
+                                   'Append failure : missing linked variable '
+                                   'in {} : variable property {}.{} is {!s}, '
+                                   'but there is no "{}" variable in the '
+                                   'dataset.')
+                                msg = msg.format(user_datatype_info,
+                                                 cf_var.name, attrname,
+                                                 target_names,
+                                                 target_name)
+                                raise ValueError(msg)
+                            # Make links both "up" and "down".
+                            target_var = cf_data.vars[target_name]
+                            addlink(cf_var._linksto, attrname, target_var)
+                            addlink(target_var._linkedfrom, attrname, cf_var)
+
+                # Also add links due to dimension usage.
+                for dim_name in cf_var.dim_names:
+                    dim_var = cf_data.vars.get(dim_name, None)
+                    if dim_var is not None:
+                        # Note: there may *not* be a dim-coord for the dim.
+                        addlink(cf_var._linksto, '_dim', dim_var)
+                        addlink(dim_var._linkedfrom, '_dim', cf_var)
+
+        label_links(filedata, 'existing file')
+        label_links(savedata, 'data to be appended')
+
+        # Get all variables in the existing file.
+        all_file_vars = set(filedata.vars.values())
+
+        # Get all variables in the save data.
+        all_save_vars = set(self._save.vars.values())  # A copy !
+
+        # Get a list of the 'primary' variables (cube data in the save).
+        primary_save_vars = set(
+            save_var for save_var in all_save_vars
+            if save_var.controls['var_type'] == 'data-var')
+
+        # Identify save variables with file variables, using the metadata in
+        # preference to matching by variable names only ...
+
+        def units_match(units_str_1, units_str_2):
+            # Compare unit strings *AS* units, if valid, else string-compare.
+            try:
+                unit1 = Unit(units_str_1)
+                unit2 = Unit(units_str_2)
+            except ValueError:
+                unit1, unit2 = units_str_1, units_str_2
+            return unit1 == unit2
+
+        def identity_match(v_save, v_file):
+            """
+            Match a save-data variable to a file variable.
+
+            Match by name attributes or actual variable name.
+            If existing identification is recorded, check it.
+            If no existing identification recorded, perform units equivalence
+            checking, but do *not* record the new identification : the caller
+            should do that.
+
+            """
+            std, lng = 'standard_name', 'long_name'
+            if std in v_save.ncattrs or std in v_file.ncattrs:
+                # If either has 'standard_name', compare those.
+                match = (std in v_save.ncattrs and std in v_file.ncattrs and
+                         v_save.ncattrs[std] == v_file.ncattrs[std])
+            elif lng in v_save.ncattrs or lng in v_file.ncattrs:
+                # ELSE if either has 'long_name', compare those.
+                match = (lng in v_save.ncattrs and lng in v_file.ncattrs and
+                         v_save.ncattrs[lng] == v_file.ncattrs[lng])
+            else:
+                # ELSE compare actual variable names.
+                match = v_save.name == v_file.name
+
+            if match:
+                # If we already have an association, check it is the same.
+                linked = (hasattr(v_save, '_file_var') or
+                          hasattr(v_file, '_save_var'))
+                if linked:
+                    if (getattr(v_save, '_file_var', None) != v_file or
+                            getattr(v_file, '_save_var', None) != v_save):
+                        msg = ('Append failure : save data variable "{}" '
+                               'appears to match file variable "{}", but '
+                               'file variable "{}" also matches save data '
+                               'variable "{}".')
+                        msg = msg.format(
+                            var_identity_name(v_save),
+                            var_identity_name(v_file),
+                            var_identity_name(v_file._save_var))
+                        raise ValueError(msg)
+                else:
+                    # New identification found : check some other aspects.
+                    # Check shapes match.
+                    save_dims = [dim.size
+                                 for dim in [savedata.dims[dim_name]
+                                             for dim_name in v_save.dim_names]
+                                 if dim is not save_unlimited_dim]
+                    file_dims = [dim.size
+                                 for dim in [filedata.dims[dim_name]
+                                             for dim_name in v_file.dim_names]
+                                 if dim is not file_unlimited_dim]
+                    if (save_dims != file_dims):
+                        msg = ('Append failure : Shapes of "{}" in save '
+                               'data and  "{}" in the file are not '
+                               'equivalent : "{}" != "{}".')
+                        msg = msg.format(var_identity_name(v_save),
+                                         var_identity_name(v_file),
+                                         save_dims,
+                                         file_dims)
+                        raise ValueError(msg)
+
+                    # Check units, if any.
+                    if ('units' in v_save.ncattrs or
+                            'units' in v_file.ncattrs):
+                        save_ut_str, file_ut_str = (
+                            var.ncattrs['units'].value
+                            for var in (v_save, v_file))
+                        if not units_match(save_ut_str, file_ut_str):
+                            msg = ('Append failure : Units of "{}" in save '
+                                   'data and  "{}" in the file are not '
+                                   'equivalent : "{}" != "{}".')
+                            msg = msg.format(var_identity_name(v_save),
+                                             var_identity_name(v_file),
+                                             save_ut_str, file_ut_str)
+                            raise ValueError(msg)
+
+            return match
+
+        def find_single_match(save_var, candidate_file_vars, element_type):
+            matches = [file_var for file_var in candidate_file_vars
+                       if identity_match(save_var, file_var)]
+            n_matches = len(matches)
+            if n_matches != 1:
+                ident = var_identity_name(save_var)
+                if n_matches == 0:
+                    fail_reason = 'no'
+                else:
+                    fail_reason = 'too many ({})'.format(n_matches)
+                msg = ('Append failure : {} variables found in original file '
+                       'matching source {} "{}"')
+                raise ValueError(msg.format(fail_reason, element_type, ident))
+
+            return matches[0]
+
+        # Identify each primary variable in the save data with a variable in
+        # the file, matching by cf-meaningful name attributes in preference to
+        # the actual variable names.
+        for save_var in primary_save_vars:
+            file_var = find_single_match(save_var, all_file_vars, 'cube data')
+            # Record the matching file variable + vice-versa
+            save_var._file_var = file_var
+            file_var._save_var = save_var
+
+        # Starting with the primary variables, extend the variable
+        # identification process over all links from each variable, recursing
+        # until all done.
+        new_matches = primary_save_vars.copy()
+        all_matches = set()
+        while new_matches:
+            all_matches |= new_matches
+            scan_new_matches = new_matches.copy()
+            new_matches = set()
+            for src_var in scan_new_matches:
+                # Do identify on link groups of each 'type'.
+                for linktype in src_var._linksto:
+                    src_links = src_var._linksto[linktype]
+                    tgt_links = src_var._file_var._linksto[linktype]
+                    # Search to match these target vars 1-2-1 to source vars.
+                    assert len(tgt_links) == len(src_links)
+                    for src_link in src_links:
+                        tgt_link = find_single_match(src_link, tgt_links,
+                                                     linktype)
+                        if not hasattr(src_link, '_file_var'):
+                            # Found a new variable identity.
+                            new_matches.add(src_link)
+                            src_link._file_var = tgt_link
+                            tgt_link._save_var = src_link
+                        else:
+#                            if src_link._file_var != tgt_link:
+#                                # This can't happen, as it means src matches
+#                                # >1 target, which we already excluded.
+#                                assert(0)
+                            if tgt_link._save_var != src_link:
+                                msg = (
+                                    'Append failure : file data variable "{}" '
+                                    'appears to match save data variable '
+                                    '"{}", but also matches "{}".')
+                                msg = msg.format(
+                                    var_identity_name(tgt_link),
+                                    var_identity_name(src_link),
+                                    var_identity_name(src_link._file_var))
+                                raise ValueError(msg)
+
+        # Check that all save-vars are now matched to a file-var.
+        # NOTE: *including* dimensions, which should all appear somewhere in
+        # the '_dim' references.
+        non_id_vars = [var for var in all_save_vars
+                       if var._file_var is None]
+        if len(non_id_vars) > 0:
+            msg = ('Append failure : save data variable(s) have no match in '
+                   'the existing file : ({})')
+            msg = msg.format(', '.join(var_identity_name(var)
+                                       for var in non_id_vars))
+            raise ValueError(msg)
+
+        # NOTE: at this point, it is ok to have additional variables in the
+        # file not identified with a save variable.
+        # But ... we *must* have a save variable for all those file variables
+        # *which map to the unlimited dimension*.
+        for var in all_file_vars:
+            if (file_unlimited_dim.name in var.dim_names and
+                    not hasattr(var, '_save_var')):
+                msg = ('Append failure : variable "{}" in the existing file '
+                       'is indexed to the unlimited dimension, but there is '
+                       'no corresponding content in the saved cubes.')
+                msg = msg.format(var_identity_name(var))
+                raise ValueError(msg)
+
+        # Get the list of save variables we are going to actually write out.
+        save_vars = [var for var in all_save_vars
+                     if save_unlimited_dim.name in var.dim_names]
+
+        # Check that all save variable dimensions correspond correctly with
+        # those in the file.
+        # For this we scan through all the save variable dimensions, labelling
+        # both save and and file dimensions in the order they are encountered,
+        # and checking that the references are everywhere the same between the
+        # save and file variables.
+        i_next_dim = 0
+        for save_var in all_save_vars:
+            file_var = save_var._file_var
+            # N.B. we already checked that var *shapes* match.
+            for save_dimname, file_dimname in zip(
+                    save_var.dim_names, file_var.dim_names):
+                save_dim = savedata.dims[save_dimname]
+                file_dim = filedata.dims[file_dimname]
+                save_i = getattr(save_dim, '_i_dim', None)
+                file_i = getattr(file_dim, '_i_dim', None)
+                if (save_i is None and file_i is not None):
+                    # Newly encountered dim in both save and file.
+                    save_dim._i_dim = i_next_dim
+                    file_dim._i_dim = i_next_dim
+                    i_next_dim += 1
+                else:
+                    # At least one already seen : check both seen + match.
+                    if (save_i != file_i):
+                        # N.B. (includes 'None' values for unseen).
+                        msg = ('Append failure : the dimensions of variable '
+                               '{}({}) in the save data do not correspond with '
+                               'those of variable {}({}) in the existing '
+                               'file.')
+                        msg = msg.format(
+                            var_identity_name(save_var),
+                            save_var.dim_names,
+                            var_identity_name(file_var),
+                            file_var.dim_names)
+                        raise ValueError(msg)
+
+        # Check that all the new data is the same length along the unlimited
+        # dimension.
+        save_length = None
+        for var in save_vars:
+            i_dim = var.dim_names.index(save_unlimited_dim.name)
+            this_length = var.data_source.shape[i_dim]
+            if save_length is None:
+                save_length = this_length
+            elif this_length != save_length:
+                save_dim_var = savedata.vars[save_unlimited_dim.name]
+                save_dimname = var_identity_name(save_dim_var)
+                msg = (
+                    'Append failure : source data does not all have the '
+                    'same length in the append dimension "{}" : {} != {}.')
+                msg = msg.format(save_dimname, this_length, save_length)
+                raise ValueError(msg)
+
+        # Check that any dimension coordinate on the unlimited dimension will
+        # remain monotonic in the append.
+        file_unlim_dimvar = filedata.vars.get(file_unlimited_dim.name, None)
+        if file_unlim_dimvar:
+            file_unlim_data = file_unlim_dimvar.data_source
+            save_unlim_data = file_unlim_dimvar._save_var.data_source
+            # Existing and new dimension values will be (strictly) monotonic.
+            # Given that, check that the combination still will be ...
+            end_old_data = file_unlim_data[-2:]
+            start_new_data = save_unlim_data[:2]
+            end_old_data, start_new_data = (
+                as_concrete_data(data)
+                for data in (end_old_data, start_new_data))
+            diffs = np.diff(np.concatenate((end_old_data, start_new_data)))
+            mindiff, maxdiff = np.min(diffs), np.max(diffs)
+            if mindiff * maxdiff <= 1.0e-9:
+                # NOTE: bit tricky this ...
+                # Triggers if *either* there are diffs both above + below 0,
+                # *or* one of them is close to 0 --> not *strictly* monotonic.
+                msg = ('Append failure : append of new to old coordinate '
+                       'values along the unlimited "{}" dimension will not be '
+                       'monotonic : old values = ..., {} : '
+                       'new values = {}, ...')
+                old_vals_str = ', '.join(str(val) for val in list(end_old_data))
+                new_vals_str = ', '.join(str(val) for val in list(start_new_data))
+                msg = msg.format(var_identity_name(file_unlim_dimvar),
+                                 old_vals_str, new_vals_str)
+                raise ValueError(msg)
+
+        # Return our representation of the original file.
+        return filedata, file_unlimited_dim
 
     def _make_variable_in_dataset(self, var):
         """
@@ -2358,9 +2940,26 @@ class Saver(object):
 
         return nc_var
 
-    def _write_variable_values_in_dataset(self, nc_var, var):
+    def _write_variable_values_in_dataset(self, nc_var, var,
+                                          write_axis=None, write_offset=0):
         """
         Write data values into a file variable.
+
+        Args:
+
+        * nc_var (:class:`netCDF4.Variable`):
+            The netCDF4 variable object to write into.
+        * var (:class:`_SaveVar`):
+            A _SaveVar whose .data_source provides the data to write.
+            Either real or lazy data can be written, in the lazy case we
+            perform a Dask streaming write.
+
+        Kwargs:
+
+        * write_axis (int):
+        * offset (int):
+            Keys to apply when writing to the target variable.
+            (Used for appending along a dimension).
 
         Note : for safe "append"s, this must not raise Exceptions.
 
@@ -2368,13 +2967,22 @@ class Saver(object):
         # Decide whether to write or stream data into the variable.
         # If netcdf3, avoid streaming due to dtype handling.
         data = var.data_source
+
         if (not is_lazy_data(data) or
                 self._dataset.file_format in ('NETCDF3_CLASSIC',
                                               'NETCDF3_64BIT')):
             data = as_concrete_data(data)
+            # Construct indexing keys for the data target.
+            if write_offset == 0:
+                # Normal writes just use var[:]
+                write_slices = slice(None)
+            else:
+                # Appended writes require var[:, :, ... n_existing:, ...]
+                write_slices = [slice(None)] * data.ndim
+                write_slices[write_axis] = slice(write_offset, None)
 
             def store(data, cf_var, fill_value):
-                cf_var[:] = data
+                cf_var[write_slices] = data
                 is_masked = ma.is_masked(data)
                 contains_value = fill_value is not None and fill_value in data
                 return is_masked, contains_value
@@ -2384,7 +2992,9 @@ class Saver(object):
             def store(data, cf_var, fill_value):
                 # Store lazy data and check whether it is masked and contains
                 # the fill value
-                target = _FillValueMaskCheckAndStoreTarget(cf_var, fill_value)
+                target = _FillValueMaskCheckAndStoreTarget(
+                    cf_var, fill_value,
+                    write_offset_axis=write_axis, write_offset=write_offset)
                 da.store([data], [target])
                 return target.is_masked, target.contains_value
 
@@ -2462,7 +3072,8 @@ class Saver(object):
 def save(cube, filename, netcdf_format='NETCDF4', local_keys=None,
          unlimited_dimensions=None, zlib=False, complevel=4, shuffle=True,
          fletcher32=False, contiguous=False, chunksizes=None, endian='native',
-         least_significant_digit=None, packing=None, fill_value=None):
+         least_significant_digit=None, packing=None, fill_value=None,
+         append=False):
     """
     Save cube(s) to a netCDF file, given the cube and the filename.
 
@@ -2584,6 +3195,11 @@ def save(cube, filename, netcdf_format='NETCDF4', local_keys=None,
         `:class:`iris.cube.CubeList`, or a single element, and each element of
         this argument will be applied to each cube separately.
 
+    * append (bool):
+        If True, append all data to an existing file, instead of writing a new
+        file as when append=False (the default).
+        TODO: much explaining ...
+
     Returns:
         None.
 
@@ -2679,7 +3295,7 @@ def save(cube, filename, netcdf_format='NETCDF4', local_keys=None,
                 raise ValueError(msg)
 
     # Initialise Manager for saving
-    with Saver(filename, netcdf_format) as sman:
+    with Saver(filename, netcdf_format, append=append) as sman:
         # Iterate through the cubelist.
         for cube, packspec, fill_value in zip(cubes, packspecs, fill_values):
             sman.write(cube, local_keys, unlimited_dimensions, zlib, complevel,
