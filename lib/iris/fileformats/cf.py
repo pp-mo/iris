@@ -916,6 +916,10 @@ class CFGroup(MutableMapping, object):
         return '<%s of %s>' % (self.__class__.__name__, ', '.join(result))
 
 
+
+_WRAP_LOADS_WITH_XARRAY_FILELIKE = False
+
+
 ################################################################################
 class CFReader(object):
     """
@@ -934,12 +938,18 @@ class CFReader(object):
         #: Collection of CF-netCDF variables associated with this netCDF file
         self.cf_group = CFGroup()
 
-        self._dataset = netCDF4.Dataset(self._filename, mode='r')
+        if not _WRAP_LOADS_WITH_XARRAY_FILELIKE:
+            self._dataset = netCDF4.Dataset(self._filename, mode='r')
 
-        # Issue load optimisation warning.
-        if warn and self._dataset.file_format in ['NETCDF3_CLASSIC', 'NETCDF3_64BIT']:
-            warnings.warn('Optimise CF-netCDF loading by converting data from NetCDF3 ' \
-                          'to NetCDF4 file format using the "nccopy" command.')
+            # Issue load optimisation warning.
+            if warn and self._dataset.file_format in ['NETCDF3_CLASSIC', 'NETCDF3_64BIT']:
+                warnings.warn('Optimise CF-netCDF loading by converting data from NetCDF3 ' \
+                              'to NetCDF4 file format using the "nccopy" command.')
+        else:
+            from xarray import open_dataset
+            from xarray_filelike_wrapper import fake_nc4python_dataset
+            xrds = open_dataset(self._filename)
+            self._dataset = fake_nc4python_dataset(xrds)
 
         self._check_monotonic = monotonic
 
