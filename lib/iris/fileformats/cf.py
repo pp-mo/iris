@@ -949,6 +949,8 @@ class CFReader(object):
             from xarray import open_dataset
             from xarray_filelike_wrapper import fake_nc4python_dataset
             xrds = open_dataset(self._filename)
+            # Label so we can see the difference (!).
+            xrds.attrs['Xarray_dataset'] = 'yes'
             self._dataset = fake_nc4python_dataset(xrds)
 
         self._check_monotonic = monotonic
