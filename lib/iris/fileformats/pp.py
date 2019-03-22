@@ -1117,11 +1117,11 @@ class PPField(six.with_metaclass(abc.ABCMeta, object)):
         ::
 
             # to append the field to a file
-            with open(filename, 'ab') as fh:
+            with open(filename_or_nclike, 'ab') as fh:
                 a_pp_field.save(fh)
 
             # to overwrite/create a file
-            with open(filename, 'wb') as fh:
+            with open(filename_or_nclike, 'wb') as fh:
                 a_pp_field.save(fh)
 
 
@@ -1274,7 +1274,7 @@ class PPField(six.with_metaclass(abc.ABCMeta, object)):
         if not hasattr(file_handle, 'write'):
             raise TypeError('The file_handle argument must be an instance of a'
                             ' Python file object, but got %r. \n e.g. '
-                            'open(filename, "wb") to open a binary file with'
+                            'open(filename_or_nclike, "wb") to open a binary file with'
                             ' write permission.' % type(file_handle))
 
         pp_file = file_handle
@@ -1972,13 +1972,13 @@ def save(cube, target, append=False, field_coords=None):
     Args:
 
         * cube         - A :class:`iris.cube.Cube`
-        * target       - A filename or open file handle.
+        * target       - A filename_or_nclike or open file handle.
 
     Kwargs:
 
         * append       - Whether to start a new file afresh or add the cube(s)
                          to the end of the file.
-                         Only applicable when target is a filename, not a file
+                         Only applicable when target is a filename_or_nclike, not a file
                          handle.
                          Default is False.
 

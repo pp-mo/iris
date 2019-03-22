@@ -779,14 +779,15 @@ class _FillValueMaskCheckAndStoreTarget(object):
 class Saver(object):
     """A manager for saving netcdf files."""
 
-    def __init__(self, filename, netcdf_format):
+    def __init__(self, filename_or_nclike, netcdf_format):
         """
         A manager for saving netcdf files.
 
         Args:
 
-        * filename (string):
-            Name of the netCDF file to save the cube.
+        * filename_or_nclike (string):
+            Name of the netCDF file to save the cube, *or* a
+            netCDF4-dataset-like object (identified by a "getncattr" method).
 
         * netcdf_format (string):
             Underlying netCDF file format, one of 'NETCDF4', 'NETCDF4_CLASSIC',
@@ -822,15 +823,18 @@ class Saver(object):
         self._formula_terms_cache = {}
         #: NetCDF dataset
         try:
-            self._dataset = netCDF4.Dataset(filename, mode='w',
-                                            format=netcdf_format)
+            if hasattr(filename_or_nclike, 'getncattr'):
+                self._dataset = filename_or_nclike
+            else:
+                self._dataset = netCDF4.Dataset(filename_or_nclike, mode='w',
+                                                format=netcdf_format)
         except RuntimeError:
-            dir_name = os.path.dirname(filename)
+            dir_name = os.path.dirname(filename_or_nclike)
             if not os.path.isdir(dir_name):
                 msg = 'No such file or directory: {}'.format(dir_name)
                 raise IOError(msg)
             if not os.access(dir_name, os.R_OK | os.W_OK):
-                msg = 'Permission denied: {}'.format(filename)
+                msg = 'Permission denied: {}'.format(filename_or_nclike)
                 raise IOError(msg)
             else:
                 raise
@@ -2123,12 +2127,12 @@ class Saver(object):
         return '{}_{}'.format(varname, num)
 
 
-def save(cube, filename, netcdf_format='NETCDF4', local_keys=None,
+def save(cube, filename_or_nclike, netcdf_format='NETCDF4', local_keys=None,
          unlimited_dimensions=None, zlib=False, complevel=4, shuffle=True,
          fletcher32=False, contiguous=False, chunksizes=None, endian='native',
          least_significant_digit=None, packing=None, fill_value=None):
     """
-    Save cube(s) to a netCDF file, given the cube and the filename.
+    Save cube(s) to a netCDF file, given the cube and the filename_or_nclike.
 
     * Iris will write CF 1.5 compliant NetCDF files.
     * The attributes dictionaries on each cube in the saved cube list
@@ -2148,8 +2152,9 @@ def save(cube, filename, netcdf_format='NETCDF4', local_keys=None,
         A :class:`iris.cube.Cube`, :class:`iris.cube.CubeList` or other
         iterable of cubes to be saved to a netCDF file.
 
-    * filename (string):
-        Name of the netCDF file to save the cube(s).
+    * filename_or_nclike (string):
+        Name of the netCDF file to save the cube(s), *or* a
+        netCDF4-dataset-like object (identified by a "getncattr" method).
 
     Kwargs:
 
@@ -2343,7 +2348,7 @@ def save(cube, filename, netcdf_format='NETCDF4', local_keys=None,
                 raise ValueError(msg)
 
     # Initialise Manager for saving
-    with Saver(filename, netcdf_format) as sman:
+    with Saver(filename_or_nclike, netcdf_format) as sman:
         # Iterate through the cubelist.
         for cube, packspec, fill_value in zip(cubes, packspecs, fill_values):
             sman.write(cube, local_keys, unlimited_dimensions, zlib, complevel,

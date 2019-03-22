@@ -927,8 +927,8 @@ class CFReader(object):
     to the 'NetCDF Climate and Forecast (CF) Metadata Conventions'.
 
     """
-    def __init__(self, filename, warn=False, monotonic=False):
-        self._filename = os.path.expanduser(filename)
+    def __init__(self, filename_or_nclike, warn=False, monotonic=False):
+        self._filename = os.path.expanduser(filename_or_nclike)
         # All CF variable types EXCEPT for the "special cases" of
         # CFDataVariable, CFCoordinateVariable and _CFFormulaTermsVariable.
         self._variable_types = (CFAncillaryDataVariable, CFAuxiliaryCoordinateVariable,

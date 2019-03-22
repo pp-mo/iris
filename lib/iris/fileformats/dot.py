@@ -70,7 +70,7 @@ def save(cube, target):
     Args:
 
         * cube   - A :class:`iris.cube.Cube`.
-        * target - A filename or open file handle.
+        * target - A filename_or_nclike or open file handle.
 
     See also :func:`iris.io.save`.
 
@@ -82,7 +82,7 @@ def save(cube, target):
             raise ValueError("Target is binary")
         dot_file = target
     else:
-        raise ValueError("Can only save dot to filename or filehandle")
+        raise ValueError("Can only save dot to filename_or_nclike or filehandle")
 
     try:
         dot_file.write(cube_text(cube))

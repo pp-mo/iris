@@ -308,7 +308,7 @@ class FFHeader(object):
 
     GRID_STAGGERING_CLASS = {3: NewDynamics, 6: ENDGame}
 
-    def __init__(self, filename, word_depth=DEFAULT_FF_WORD_DEPTH):
+    def __init__(self, filename_or_nclike, word_depth=DEFAULT_FF_WORD_DEPTH):
         """
         Create a FieldsFile header instance by reading the
         FIXED_LENGTH_HEADER section of the FieldsFile, making the names
@@ -316,7 +316,7 @@ class FFHeader(object):
 
         Args:
 
-        * filename (string):
+        * filename_or_nclike (string):
             Specify the name of the FieldsFile.
 
         Returns:
@@ -325,11 +325,11 @@ class FFHeader(object):
         """
 
         #: File name of the FieldsFile.
-        self.ff_filename = filename
+        self.ff_filename = filename_or_nclike
         self._word_depth = word_depth
 
         # Read the FF header data
-        with open(filename, 'rb') as ff_file:
+        with open(filename_or_nclike, 'rb') as ff_file:
             # typically 64-bit words (aka. int64 or ">i8")
             header_data = np.fromfile(ff_file,
                                       dtype='>i{0}'.format(word_depth),
@@ -437,7 +437,7 @@ class FF2PP(object):
 
     """
 
-    def __init__(self, filename, read_data=False,
+    def __init__(self, filename_or_nclike, read_data=False,
                  word_depth=DEFAULT_FF_WORD_DEPTH):
         """
         Create a FieldsFile to Post Process instance that returns a generator
@@ -445,7 +445,7 @@ class FF2PP(object):
 
         Args:
 
-        * filename (string):
+        * filename_or_nclike (string):
             Specify the name of the FieldsFile.
 
         Kwargs:
@@ -459,14 +459,14 @@ class FF2PP(object):
 
         For example::
 
-            >>> for field in ff.FF2PP(filename):
+            >>> for field in ff.FF2PP(filename_or_nclike):
             ...     print(field)
 
         """
 
-        self._ff_header = FFHeader(filename, word_depth=word_depth)
+        self._ff_header = FFHeader(filename_or_nclike, word_depth=word_depth)
         self._word_depth = word_depth
-        self._filename = filename
+        self._filename = filename_or_nclike
         self._read_data = read_data
 
     def _payload(self, field):

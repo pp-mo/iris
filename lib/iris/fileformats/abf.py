@@ -59,24 +59,24 @@ class ABFField(object):
     Capable of creating a :class:`~iris.cube.Cube`.
 
     """
-    def __init__(self, filename):
+    def __init__(self, filename_or_nclike):
         """
-        Create an ABFField object from the given filename.
+        Create an ABFField object from the given filename_or_nclike.
 
         Args:
 
-            * filename - An ABF filename.
+            * filename_or_nclike - An ABF filename_or_nclike.
 
         Example::
 
             field = ABFField("AVHRRBUVI01.1985feba.abl")
 
         """
-        basename = os.path.basename(filename)
+        basename = os.path.basename(filename_or_nclike)
         if len(basename) != 24:
-            raise ValueError("ABFField expects a filename of 24 characters: "
+            raise ValueError("ABFField expects a filename_or_nclike of 24 characters: "
                              "{}".format(basename))
-        self._filename = filename
+        self._filename = filename_or_nclike
 
     def __getattr__(self, key):
         # Do we need to load now?

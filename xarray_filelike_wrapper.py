@@ -8,10 +8,9 @@ quasi-datasets into the Iris project (https://github.com/SciTools/iris) :
 The emulation of any behaviours *not* used there are currently uncertain.
 
 """
-
 from collections import OrderedDict
 
-from xarray.coding.times import CFDatetimeCoder, CFTimedeltaCoder
+import xarray as xr
 
 
 def variable_original_style(xr_variable):
@@ -173,7 +172,10 @@ class GroupLike(Nc4ComponentAttrsLike):
     """
     def __init__(self, *args, **kwargs):
         super(GroupLike, self).__init__(*args, **kwargs)
+        self._precaching_dims = True
+        self._reread_components()
 
+    def _reread_components(self):        
         # Dims: NOTE xarray does not store/presevere unlimited aspect of dims.
         self.dimensions = OrderedDict(
             [(name,
@@ -192,11 +194,35 @@ class GroupLike(Nc4ComponentAttrsLike):
 #            [(grp.name, GroupLike(grp, parent_grp=self))
 #             for grp in self._xrobj.groups])
 
+    def createDimension(self, dim_name, size, unlimited=False):
+        if not self._precaching_dims:
+            raise ValueError('dataset already initialised.')
+        
+        self._xrobj.dims[dim_name] = size
+
+
+    def createVariable(self, varname, datatype, dimensions=(),
+                       zlib=False, complevel=4, shuffle=True,
+                       fletcher32=False, contiguous=False, chunksizes=None,
+                       endian='native', least_significant_digit=None,
+                       fill_value=None):
+        if self._precaching_dims:
+            # replace underlying object with one of the required dimensions. 
+            self._xrobj = xr.Dataset(data_vars, coords, attrs, compat)
+        else:
+            # add an additional variable.
+            self._xrobj[varname] = xr.Variable(
+                dims=dimensions,
+                data=, attrs, encoding, fastpath)
+
 
 class Nc4DatasetLike(GroupLike):
     def close(self):
         # ?should we not be doing "something" here ??
         return
+
+    def sync(self):
+        pass
 
 
 def fake_nc4python_dataset(xarray_dataset):
