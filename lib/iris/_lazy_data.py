@@ -259,14 +259,32 @@ def multidim_lazy_stack(stack):
     """
     if stack.ndim == 0:
         # A 0-d array cannot be stacked.
+        stack_done = False
         result = stack.item()
     elif stack.ndim == 1:
         # Another base case : simple 1-d goes direct in dask.
+        stack_done = True
         result = da.stack(list(stack))
     else:
         # Recurse because dask.stack does not do multi-dimensional.
+        stack_done = True
         result = da.stack([multidim_lazy_stack(subarray)
                            for subarray in stack])
+
+    if stack_done:
+        # Consider a possible rechunking.
+        # Get size of the first chunk, which should be the 'full' size.
+        old_chunksize = [max(sizes) for sizes in result.chunks]
+        # Calculate our 'ideal' rescaled version of that size.
+        new_chunksize = _optimum_chunksize(old_chunksize,
+                                           shape=result.shape,
+                                           dtype=result.dtype)
+        # Consider rechunking if the new size is significantly bigger.
+        scaleup_factor = np.prod(new_chunksize) * 1.0 / np.prod(old_chunksize)
+        if scaleup_factor > 4.0 :
+            # "New" chunksize is significantly larger, so it is worth doing.
+            result = result.rechunk(new_chunksize)
+
     return result
 
 
