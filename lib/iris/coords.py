@@ -135,22 +135,8 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
         # view on another metadata.
         values = values.copy()
 
-        # If the metadata is a coordinate and it has bounds, repeat the above
-        # with the bounds.
-        if isinstance(self, Coord):
-            if self.has_bounds():
-                bounds = self._bounds_dm.core_data()
-                _, bounds = iris.util._slice_data_with_keys(bounds, keys)
-                bounds = bounds.copy()
-            else:
-                bounds = None
-
-            copy_args = dict(points=values, bounds=bounds)
-        else:
-            copy_args = dict(values=values)
-
         # The new metadata is a copy of the old one with replaced content.
-        new_metadata = self.copy(**copy_args)
+        new_metadata = self.copy(values)
 
         return new_metadata
 
@@ -173,7 +159,8 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
 
         return new_metadata
 
-    def _sanitise_array(self, src, ndmin):
+    @staticmethod
+    def _sanitise_array(src, ndmin):
         if _lazy.is_lazy_data(src):
             # Lazy data : just ensure ndmin requirement.
             ndims_missing = ndmin - src.ndim
@@ -255,49 +242,40 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
         return result
 
     def _str_dates(self, dates_as_numbers):
-        date_obj_array = self.units.num2date(dates_as_numbers)
-        kwargs = {'separator': ', ', 'prefix': '      '}
-        return np.core.arrayprint.array2string(date_obj_array,
-                                               formatter={'all': str},
-                                               **kwargs)
+        result = dates_as_numbers
+        units = self.units
+        if units.is_time_reference() and not units.is_long_time_interval():
+            # Note: a time unit with a long time interval ("months" or "years")
+            # cannot be converted to a date using `num2date` so gracefully
+            # fall back to printing points as numbers, not datetimes.
+            date_obj_array = self.units.num2date(dates_as_numbers)
+            kwargs = {'separator': ', ', 'prefix': '      '}
+            result = np.core.arrayprint.array2string(date_obj_array,
+                                                     formatter={'all': str},
+                                                     **kwargs)
+        return result
 
-    def __str__(self):
-        if self.units.is_time_reference():
-            fmt = '{cls}({values}{bounds}' \
-                  ', standard_name={self.standard_name!r}' \
-                  ', calendar={self.units.calendar!r}{other_metadata})'
-            if self.units.is_long_time_interval():
-                # A time unit with a long time interval ("months" or "years")
-                # cannot be converted to a date using `num2date` so gracefully
-                # fall back to printing points as numbers, not datetimes.
-                values = self._values
-            else:
-                values = self._str_dates(self._values)
-            bounds = ''
-            if self.has_bounds():
-                if self.units.is_long_time_interval():
-                    bounds_vals = self.bounds
-                else:
-                    bounds_vals = self._str_dates(self.bounds)
-                bounds = ', bounds={vals}'.format(vals=bounds_vals)
-            result = fmt.format(self=self, cls=type(self).__name__,
-                                values=values, bounds=bounds,
-                                other_metadata=self._repr_other_metadata())
-        else:
-            result = repr(self)
+    def __str__(self, postvalues_insert=None):
+        if postvalues_insert is None:
+            postvalues_insert = ''
+        fmt = '{cls}({values}{extra}' \
+              ', standard_name={self.standard_name!r}' \
+              ', calendar={self.units.calendar!r}{other_metadata})'
+        values = self._str_dates(self._values)
+        result = fmt.format(self=self, cls=type(self).__name__,
+                            values=values, extra=postvalues_insert,
+                            other_metadata=self._repr_other_metadata())
 
         return result
 
-    def __repr__(self):
-        fmt = '{cls}({self._values!r}{bounds}' \
+    def __repr__(self, postvalues_insert=''):
+        if postvalues_insert is None:
+            postvalues_insert = ''
+        fmt = '{cls}({self._values!r}{extra}' \
               ', standard_name={self.standard_name!r}, units={self.units!r}' \
               '{other_metadata})'
-        bounds = ''
-        # if coordinate, handle the bounds
-        if self.has_bounds():
-            bounds = ', bounds=' + repr(self.bounds)
         result = fmt.format(self=self, cls=type(self).__name__,
-                            bounds=bounds,
+                            extra=postvalues_insert,
                             other_metadata=self._repr_other_metadata())
         return result
 
@@ -407,8 +385,7 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
 
     def convert_units(self, unit):
         """Change the units, converting the values of the metadata."""
-        # If the coord has units convert the values in points (and bounds if
-        # present).
+        # If the coord has units convert the values in points.
         if self.units.is_unknown():
             raise iris.exceptions.UnitConversionError(
                 'Cannot convert from unknown units. '
@@ -430,13 +407,6 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
         else:
             new_values = self.units.convert(self._values, unit)
         self._values = new_values
-        if self.has_bounds():
-            if self.has_lazy_bounds():
-                new_bounds = _lazy.lazy_elementwise(self.lazy_bounds(),
-                                                    pointwise_convert)
-            else:
-                new_bounds = self.units.convert(self.bounds, unit)
-            self.bounds = new_bounds
         self.units = unit
 
     def is_compatible(self, other, ignore=None):
@@ -1185,10 +1155,32 @@ class Coord(_DimensionalMetadata):
         #: Relevant coordinate system (if any).
         self.coord_system = coord_system
 
-        # Set up bounds DataManager attributes and the bounds values.
-        self._bounds_dm = None
+        # Set up definitive _bounds property and optional init bounds values.
+        self._bounds = None
         self.bounds = bounds
         self.climatological = climatological
+
+    def __getitem__(self, keys):
+        """
+        Returns a new dimensional metadata whose values are obtained by
+        conventional array indexing.
+
+        .. note::
+
+            Indexing of a circular coordinate results in a non-circular
+            coordinate if the overall shape of the coordinate changes after
+            indexing.
+
+        """
+        # Fetch the values.
+        new_coord = super().__getitem__(keys)
+        new_coord.bounds = None  # Ensures it is initially valid.
+
+        # If this has bounds, extract + attach those too.
+        if self.has_bounds():
+            new_coord.bounds = self._bounds.__getitem__(keys)
+
+        return new_coord
 
     def copy(self, points=None, bounds=None):
         """
@@ -1260,26 +1252,55 @@ class Coord(_DimensionalMetadata):
         """
         bounds = None
         if self.has_bounds():
-            bounds = self._bounds_dm.data.view()
+            bounds = self._bounds._values
         return bounds
 
     @bounds.setter
     def bounds(self, bounds):
-        # Ensure the bounds are a compatible shape.
         if bounds is None:
-            self._bounds_dm = None
+            self._bounds = None
             self._climatological = False
         else:
-            bounds = self._sanitise_array(bounds, 2)
+            if not hasattr(bounds, 'shape'):
+                # Allow us to pass in any array-like.
+                bounds = np.asanyarray(bounds)
             if self.shape != bounds.shape[:-1]:
-                raise ValueError("Bounds shape must be compatible with points "
-                                 "shape.")
-            if not self.has_bounds() \
-                    or self.core_bounds().shape != bounds.shape:
-                # Construct a new bounds DataManager.
-                self._bounds_dm = DataManager(bounds)
-            else:
-                self._bounds_dm.data = bounds
+                # Need to adjust shape (add extra dimensions).
+                if isinstance(bounds, _DimensionalMetadata):
+                    # Need to work with a real array (and convert back later).
+                    bounds = bounds._values
+                # Ensure the new bounds are a compatible shape.
+                bounds = self._sanitise_array(bounds, 2)
+                # Re-check adjusted shape + error if not suitable.
+                if self.shape != bounds.shape[:-1]:
+                    raise ValueError("Bounds shape must be compatible with points "
+                                     "shape.")
+            # Wrap bounds as a _DimensionalMetadata object.
+            # NOTE: also copy units, in case we need to convert dates.
+            if not isinstance(bounds, _DimensionalMetadata):
+                bounds = _DimensionalMetadata(bounds, units=self.units)
+
+        self._bounds = bounds
+
+    def __str__(self):
+        bounds = self.bounds
+        if bounds is None:
+            bounds_str = ''
+        else:
+            if self.units.is_time_reference():
+                bounds = self._str_dates(bounds)
+            bounds_str = ', bounds={}'.format(bounds)
+        return super().__str__(postvalues_insert=bounds_str)
+
+    def __repr__(self):
+        bounds = self.bounds
+        if bounds is None:
+            bounds_str = ''
+        else:
+            if self.units.is_time_reference():
+                bounds = self._str_dates(bounds)
+            bounds_str = ', bounds={!r}'.format(bounds)
+        return super().__str__(postvalues_insert=bounds_str)
 
     @property
     def climatological(self):
@@ -1345,7 +1366,7 @@ class Coord(_DimensionalMetadata):
         """
         lazy_bounds = None
         if self.has_bounds():
-            lazy_bounds = self._bounds_dm.lazy_data()
+            lazy_bounds = self._bounds._lazy_values()
         return lazy_bounds
 
     def core_points(self):
@@ -1364,7 +1385,7 @@ class Coord(_DimensionalMetadata):
         """
         result = None
         if self.has_bounds():
-            result = self._bounds_dm.core_data()
+            result = self._bounds._core_values()
             if not _lazy.is_lazy_data(result):
                 result = result.view()
         return result
@@ -1385,7 +1406,7 @@ class Coord(_DimensionalMetadata):
         """
         result = False
         if self.has_bounds():
-            result = self._bounds_dm.has_lazy_data()
+            result = self._bounds._has_lazy_values()
         return result
 
     def _repr_other_metadata(self):
@@ -1423,32 +1444,20 @@ class Coord(_DimensionalMetadata):
         return hash(id(self))
 
     def __binary_operator__(self, other, mode_constant):
-        if isinstance(other, Coord):
-            emsg = 'coord {} coord'.format(
-                self._MODE_SYMBOL[mode_constant])
+        if isinstance(other, _DimensionalMetadata):
+            emsg = '{classname} {operator} {classname}'.format(
+                classname=self.__class__.__name__,
+                operator=self._MODE_SYMBOL[mode_constant])
             raise iris.exceptions.NotYetImplementedError(emsg)
 
-        new_coord = super(Coord, self).__binary_operator__(
+        new_coord = super().__binary_operator__(
             other=other, mode_constant=mode_constant)
 
-        if new_coord is not NotImplemented:
-            if self.has_bounds():
-                bounds = self._bounds_dm.core_data()
-
-                if mode_constant == self._MODE_ADD:
-                    new_bounds = bounds + other
-                elif mode_constant == self._MODE_SUB:
-                    new_bounds = bounds - other
-                elif mode_constant == self._MODE_MUL:
-                    new_bounds = bounds * other
-                elif mode_constant == self._MODE_DIV:
-                    new_bounds = bounds / other
-                elif mode_constant == self._MODE_RDIV:
-                    new_bounds = other / bounds
-
-            else:
-                new_bounds = None
+        if new_coord is not NotImplemented and self.has_bounds():
+            new_bounds = self._bounds.__binary_operator__(
+                other, mode_constant)
             new_coord.bounds = new_bounds
+
         return new_coord
 
     def __neg__(self):
@@ -1472,6 +1481,8 @@ class Coord(_DimensionalMetadata):
 
         """
         super(Coord, self).convert_units(unit=unit)
+        if self.has_bounds():
+            self._bounds = self._bounds.convert_units(unit)
 
     def cells(self):
         """
@@ -1702,7 +1713,7 @@ class Coord(_DimensionalMetadata):
         """
         result = None
         if self.has_bounds():
-            result = self._bounds_dm.dtype
+            result = self._bounds.dtype
         return result
 
     @property
@@ -1713,12 +1724,12 @@ class Coord(_DimensionalMetadata):
         """
         nbounds = 0
         if self.has_bounds():
-            nbounds = self._bounds_dm.shape[-1]
+            nbounds = self._bounds.shape[-1]
         return nbounds
 
     def has_bounds(self):
         """Return a boolean indicating whether the coord has a bounds array."""
-        return self._bounds_dm is not None
+        return self._bounds is not None
 
     def cell(self, index):
         """
@@ -1789,7 +1800,7 @@ class Coord(_DimensionalMetadata):
             bounds = None
             string_type_fmt = 'S{}' if six.PY2 else 'U{}'
             if self.has_bounds():
-                shape = self._bounds_dm.shape[1:]
+                shape = self._bounds.shape[1:]
                 bounds = []
                 for index in np.ndindex(shape):
                     index_slice = (slice(None),) + tuple(index)
@@ -2210,8 +2221,8 @@ class DimCoord(Coord):
         new_coord = copy.deepcopy(super(DimCoord, self), memo)
         # Ensure points and bounds arrays are read-only.
         new_coord._values_dm.data.flags.writeable = False
-        if new_coord._bounds_dm is not None:
-            new_coord._bounds_dm.data.flags.writeable = False
+        if new_coord._bounds is not None:
+            new_coord._bounds._values_dm.data.flags.writeable = False
         return new_coord
 
     def copy(self, points=None, bounds=None):
@@ -2219,7 +2230,7 @@ class DimCoord(Coord):
         # Make the arrays read-only.
         new_coord._values_dm.data.flags.writeable = False
         if bounds is not None:
-            new_coord._bounds_dm.data.flags.writeable = False
+            new_coord._bounds._values_dm.data.flags.writeable = False
         return new_coord
 
     def __eq__(self, other):
@@ -2362,6 +2373,10 @@ class DimCoord(Coord):
     @Coord.bounds.setter
     def bounds(self, bounds):
         if bounds is not None:
+            if isinstance(bounds, _DimensionalMetadata):
+                # DimCoord checking needs a plain array to work with.
+                bounds = bounds._values
+
             # Ensure we have a realised array of new bounds values.
             bounds = _lazy.as_concrete_data(bounds)
             # Make sure we have an array (any type of array).
@@ -2375,9 +2390,9 @@ class DimCoord(Coord):
         # Call the parent bounds setter.
         super(DimCoord, self.__class__).bounds.fset(self, bounds)
 
-        if self._bounds_dm is not None:
+        if self.has_bounds():
             # Re-fetch the core array, as the super call may replace it.
-            bounds = self._bounds_dm.core_data()
+            bounds = self._bounds._core_values()
             # N.B. always a *real* array, as we realised 'bounds' at the start.
 
             # Ensure the array is read-only.
