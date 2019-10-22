@@ -417,7 +417,7 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
             new_values = op(self._values_dm.core_data())
             result = self.copy(new_values)
             if self.has_bounds():
-                self.bounds = op(self._bounds_dm.core_data())
+                result.bounds = op(self._bounds_dm.core_data())
 
         return result
 
