@@ -380,8 +380,8 @@ class _DimensionalMetadata(six.with_metaclass(ABCMeta, CFVariableMixin)):
         # Note: this method includes bounds handling code, but it only runs
         # within Coord type instances, as only these allow bounds to be set.
 
-        if (isinstance(other, _DimensionalMetadata) or 
-            not isinstance(other, (int, float, np.number))):
+        if (isinstance(other, _DimensionalMetadata) or
+                not isinstance(other, (int, float, np.number))):
 
             def typename(obj):
                 if isinstance(obj, Coord):
