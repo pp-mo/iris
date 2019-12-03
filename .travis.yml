@@ -163,8 +163,11 @@ script:
 
   # Split the organisation out of the slug. See https://stackoverflow.com/a/5257398/741316 for description.
   - >
-    export ORG=(${TRAVIS_REPO_SLUG//\// });
+    ORG=(${TRAVIS_REPO_SLUG//\// });
+    export ORG;
     echo "Check ORG=${ORG}"
+
+  - echo "Following command: check ORG=${ORG}"
 
   - echo "org=:${ORG}:, event=:${TRAVIS_EVENT_TYPE}:, push=:${PUSH_BUILT_DOCS}:"
   - >
