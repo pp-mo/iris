@@ -166,9 +166,9 @@ script:
     echo "SLUG=:${TRAVIS_REPO_SLUG}:";
     ORG=$(echo ${TRAVIS_REPO_SLUG} | cut -d/ -f1);
     export ORG;
-    echo "Check ORG=${ORG}"
+    echo "Check ORG=${ORG} ."
 
-  - echo "Following command: check ORG=${ORG}"
+  - echo "Following command: check ORG=${ORG} ."
 
   - echo "org=:${ORG}:, event=:${TRAVIS_EVENT_TYPE}:, push=:${PUSH_BUILT_DOCS}:"
   - >
