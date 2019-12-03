@@ -165,7 +165,7 @@ script:
   - >
     ORG=(${TRAVIS_REPO_SLUG//\// });
     export ORG;
-    echo "Check ORG=${ORG}"
+    echo "Check ORG=${ORG}";
 
   - echo "Following command: check ORG=${ORG}"
 
