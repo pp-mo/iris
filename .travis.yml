@@ -164,7 +164,8 @@ script:
   # Split the organisation out of the slug. See https://stackoverflow.com/a/5257398/741316 for description.
   - >
     echo "SLUG=:${TRAVIS_REPO_SLUG}:";
-    export ORG=$(cat ${TRAVIS_REPO_SLUG} | cut -d/ -f1);
+    ORG=$(cat ${TRAVIS_REPO_SLUG} | cut -d/ -f1);
+    export ORG;
     echo "Check ORG=${ORG} ."
 
   - >
