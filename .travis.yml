@@ -167,9 +167,12 @@ script:
     ORG="pp-mo";
     echo "Check ORG=${ORG} ."
 
-  - echo "Following command: check ORG=${ORG} ."
+  - >
+    echo "Following command: check ORG=${ORG} ."
 
-  - echo "org=:${ORG}:, event=:${TRAVIS_EVENT_TYPE}:, push=:${PUSH_BUILT_DOCS}:"
+  - >
+    echo "org=:${ORG}:, event=:${TRAVIS_EVENT_TYPE}:, push=:${PUSH_BUILT_DOCS}:"
+
   - >
     if [[ "${ORG}" == 'pp-mo' && 1 == 1 ]]; then
       echo "ORG=${ORG} : match";
