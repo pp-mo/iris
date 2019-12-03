@@ -162,23 +162,26 @@ script:
     fi
 
   # Split the organisation out of the slug. See https://stackoverflow.com/a/5257398/741316 for description.
-  - export ORG=(${TRAVIS_REPO_SLUG//\// })
+  - >
+    export ORG=(${TRAVIS_REPO_SLUG//\// });
+    echo "Check ORG=${ORG}"
+
   - echo "org=:${ORG}:, event=:${TRAVIS_EVENT_TYPE}:, push=:${PUSH_BUILT_DOCS}:"
   - >
     if [[ "${ORG}" == 'pp-mo' && 1 == 1 ]]; then
-      echo "ORG match";
+      echo "ORG=${ORG} : match";
     else
-      echo "ORG nomatch";
+      echo "ORG=${ORG} : nomatch";
     fi;
     if [[ "${TRAVIS_EVENT_TYPE}" == 'push' ]]; then
-      echo "EV match";
+      echo "EV=${TRAVIS_EVENT_TYPE} : match";
     else
-      echo "EV nomatch";
+      echo "EV=${TRAVIS_EVENT_TYPE} : nomatch";
     fi;
     if [[ "${PUSH_BUILT_DOCS}" == 'true' ]]; then
-      echo "PUSH true";
+      echo "PUSH=${PUSH_BUILT_DOCS} : true";
     else
-      echo "PUSH untrue";
+      echo "PUSH=${PUSH_BUILT_DOCS} : untrue";
     fi;
 
   # When we merge a change to SciTools/iris, we can push docs to github pages.
