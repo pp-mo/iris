@@ -171,6 +171,8 @@ script:
 
   - >
     echo "org=:${ORG}:, event=:${TRAVIS_EVENT_TYPE}:, push=:${PUSH_BUILT_DOCS}:"
+    echo "TRAVIS_BRANCH=:${TRAVIS_BRANCH}:, TRAVIS_TAG=:${TRAVIS_TAG}:"
+    echo "'BRANCH-TAG' --> :${TRAVIS_BRANCH:-${TRAVIS_TAG}}:"
 
   - >
     if [[ "${ORG}" == 'pp-mo' && 1 == 1 ]]; then
