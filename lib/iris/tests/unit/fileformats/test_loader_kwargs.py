@@ -108,6 +108,7 @@ class LoadFunctionMixin:
             dict(fnames=[self.test_filepath], callback=None, loader_kwargs={}),
         )
 
+    @tests.skip_data
     def test_wrong_loader_noargs_ok(self):
         filepath = tests.get_data_path(
             ["NetCDF", "global", "xyz_t", "GEMS_CO2_Apr2006.nc"]
@@ -115,6 +116,7 @@ class LoadFunctionMixin:
         result = self._load_a_cube(filepath, "co2")
         self.assertIsNot(result, None)
 
+    @tests.skip_data
     def test_wrong_loader_withargs__fail(self):
         filepath = tests.get_data_path(
             ["NetCDF", "global", "xyz_t", "GEMS_CO2_Apr2006.nc"]
