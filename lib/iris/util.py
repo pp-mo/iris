@@ -1718,3 +1718,254 @@ def mask_cube(cube, points_to_mask):
     cube.data = ma.masked_array(cube.data)
     cube.data[points_to_mask] = ma.masked
     return cube
+
+
+def cubelike_array_as_cube(
+        item, cube, cube_dimensions,
+        name=None, standard_name=None, long_name=None, var_name=None,
+        units=None):
+    """
+    Make a new cube from data mapped over an existing cube's dimensions.
+
+    Args:
+
+    * item (array-like or cube- or coord-like):
+        An object which is either array-like object, or cube-like or
+        coordinate-like.
+        It provides array-like data, and must have a shape.
+        It may also optionally define a phenomemon identity (names), units and
+        attributes.
+        Cube data is drawn from the item 'points' or 'data' properties if it
+        has them, or the item itself.  Any of these must then be array-like.
+        Masked data is also supported.
+        Units, name properties and attributes are taken from the item if it has
+        them, or set with additional keywords, or may remain unspecified.
+
+    * cube (:class:`~iris.cube.Cube`):
+        A reference cube providing reference coordinate information for the
+        result.
+        All its coordinates which map the specified cube_dimensions are copied
+        onto the result cube.
+
+    * cube_dimensions (iterable of int or iterable of coord-specifier):
+        Specifies which cube dimension corresponds to each item dimension.
+        Each entry can be a dimension number, coord or coord specifier.
+        Must have one entry for each dimension of the item.
+        Each cube dimension must have the same size as the corresponding item
+        dimension.
+
+    Kwargs:
+
+    * name (string):
+        Set the result name.
+
+    * standard_name, long_name, var_name (string):
+        Set the equivalent result specific name properties.
+
+    * units (:class:`cf_units.Unit`):
+        Set the result units.
+
+    .. note::
+
+        The naming keywords may not be used if 'item' already possesses name
+        properties (including a 'name()' method).
+        Likewise, the 'units' key may not be used if 'item' possesses units.
+
+    """
+    # Define data depending on properties of the input item.
+    if hasattr(item, 'points'):
+        # Treat as coordinate-like :  Take data from its points.
+        data = item.points
+    elif hasattr(item, 'coords'):
+        # Treat as cube-like :  Copy the data.
+        # NOTE: we don't preserve lazy arrays here.
+        data = item.data
+    else:
+        # Treat the original 'item' as an array (possibly masked).
+        # Cube creation will make a copy.
+        data = item
+
+    # Regularise cube_dimensions to a list of dimension indices.
+    cube_dims = []
+    for cube_dim_spec in cube_dimensions:
+        dim_spec = cube_dim_spec
+        try:
+            coords = cube.coords(cube_dim_spec)
+        except AttributeError:
+            coords = []
+        if len(coords) == 1:
+            # Replace a coord specifier with the actual coordinate.
+            dim_spec = coords[0]
+        if hasattr(dim_spec, 'points'):
+            # Convert a coordinate to a dimension index.
+            coord_dims = cube.coord_dims(dim_spec)
+            if len(coord_dims) != 1:
+                if isinstance(cube_dim_spec, iris.coords.Coord):
+                    spec_str = '{}("{}")'.format(
+                        type(dim_spec), cube_dim_spec.name())
+                else:
+                    spec_str = repr(cube_dim_spec)
+                msg = ('The cube dimension specifier "{}" refers to the '
+                       'coordinate {!s}, which does not identify a dimension '
+                       'as it is {}-dimensional.')
+                raise ValueError(msg.format(spec_str, len(coord_dims)))
+            dim_index = coord_dims[0]
+        else:
+            # If not a coord or specifier, expect just a dimension number.
+            if not isinstance(dim_spec, int):
+                msg = ('dimension specifier {!r} not recognised: must specify '
+                       'either a single coord, or a dimension index.')
+                raise ValueError(msg.format(dim_spec))
+            dim_index = dim_spec
+        cube_dims.append(dim_index)
+    cube_dimensions = cube_dims
+
+    # Check the number of given cube dimensions matches the item shape.
+    shape = data.shape
+    if len(cube_dimensions) != len(shape):
+        msg = ("dimensionality of 'item' {} does not match the number of "
+               "provided 'cube_dimensions', {}.")
+        raise ValueError(len(shape), len(cube_dimensions))
+
+    # Check all specified cube-dims are different.
+    cube_dimensions = list(cube_dimensions)
+    if len(set(cube_dimensions)) != len(cube_dimensions):
+        raise ValueError('provided cube_dimensions are not all unique : {!r}',
+                         cube_dimensions)
+
+    # Check all dimension indices are in the valid range of cube dimensions.
+    for cube_dim in cube_dimensions:
+        if cube_dim < 0 or cube_dim > cube.ndim:
+            msg = ('the provided cube_dimensions of {!r} include the value {} '
+                   'which is < 0')
+            raise ValueError(msg.format(cube_dimensions, cube_dim))
+        if cube_dim > cube.ndim:
+            msg = ('the provided cube_dimensions of {!r} include the value {} '
+                   'which is not valid as the cube has only {} dimensions')
+            raise ValueError(msg.format(cube_dimensions, cube_dim, cube.ndim))
+
+    # Check the item shape matches the specified dims of the cube.
+    cube_dims_shape = [cube.shape[cube_dim] for cube_dim in cube_dimensions]
+    if cube_dims_shape != list(shape):
+        msg = ('The item shape is {!r} but the provided cube over the '
+               'requested_dimensions has a shape of {!r}[{!r}] = {!r}.')
+        raise ValueError(msg.format(
+            shape, cube.shape, cube_dimensions, cube_dims_shape))
+
+    # Create the basic cube.
+    result = iris.cube.Cube(data)
+
+    # Copy across all the coordinates which map to "our" dimensions.
+    itemdims_from_cubedims = {
+        cube_dim: item_dim
+        for item_dim, cube_dim in enumerate(cube_dimensions)}
+    dim_coords = cube.coords(dim_coords=True)
+    all_coords = cube.coords()
+    for coord in all_coords:
+        coord_cube_dims = cube.coord_dims(coord)
+        if not coord_cube_dims:
+            # Do *not* copy scalar coords, as they don't necessarily form part
+            # of the "grid" relevant to the provided item data.
+            continue
+        if all(cube_dim in cube_dimensions for cube_dim in coord_cube_dims):
+            # This coordinate can be added to the output.
+            coord_result_dims = [itemdims_from_cubedims[cube_dim]
+                                 for cube_dim in coord_cube_dims]
+            if coord in dim_coords:
+                result.add_dim_coord(coord.copy(), coord_result_dims)
+            else:
+                result.add_aux_coord(coord.copy(), coord_result_dims)
+
+    # TODO unresolved issues:
+    #   * what about factories + their coordinates ?
+
+    # Handle naming, units and attributes, allowing passed keywords to override
+    # the item properties.
+    keysdict = locals()
+    for property_name in ('var_name', 'long_name', 'standard_name', 'units'):
+        property = keysdict.get(property_name, None)
+        if property is not None:
+            # Set properties from keyword, preferentially.
+            setattr(result, property_name, property)
+        else:
+            # Else copy any property from the item.
+            property = getattr(item, property_name, None)
+            if property is not None:
+                # Set properties from keyword, preferentially.
+                setattr(result, property_name, property)
+    # Handle a 'name' keyword, which overrides any of the others.
+    if name is not None:
+        result.rename(name)
+
+    return result
+
+
+def attach_cube_as_aux_coord(parent_cube, daughter_cube):
+    # Preliminary...
+    # It insists on parent cube coords matching the daughter coords.
+    # It throws away all other coords (including scalars).
+    # It retains attributes, names and units.
+    # It can handle multi-dim coords.
+
+    # Create an AuxCoord from the cube data and metadata.
+    new_coord = iris.coords.AuxCoord(
+        daughter_cube.data,
+        standard_name=daughter_cube.standard_name,
+        long_name=daughter_cube.long_name,
+        units=daughter_cube.units,
+        attributes=daughter_cube.attributes,
+        coord_system=daughter_cube.coord_system())
+
+    # Find coords covering every dimension of the source data, and identify
+    # matching ones in the parent cube, to construct a list of parent cube
+    # dimensions for the new aux-coord.
+    n_daughter_dims = daughter_cube.ndim
+    dims_to_do = list(range(n_daughter_dims))
+    parent_dim_assignments = [None] * n_daughter_dims
+    while dims_to_do:
+        # Identify the first remaining unmapped dimension that comes to hand.
+        i_dim_next = dims_to_do[0]
+
+        # Find a coord which maps to this dimension in the daughter.
+        daughter_coords = daughter_cube.coords(
+            contains_dimension=i_dim_next, dim_coord=True)
+        # Prefer dimension coords, but don't insist (so we can do multidim).
+        if not daughter_coords:
+            daughter_coords = daughter_cube.coords(
+                contains_dimension=i_dim_next)
+        if not daughter_coords:
+            msg = ("Could not find any coords in 'daughter_cube' for "
+                   "dimension {}.")
+            raise ValueError(msg.format(i_dim_next))
+        # If several coords, just take the first.
+        daughter_coord = daughter_coords[0]
+
+        # Find a unique matching coord in the parent.
+        parent_coords = parent_cube.coord(daughter_coord)
+        if len(parent_coords) != 1:
+            msg = ("Could not find a unique coord in 'parent_cube' matching "
+                   "{!r} in the daughter.")
+            raise ValueError(msg.format(daughter_coord.name()))
+        parent_coord = parent_coords[0]
+
+        # Fill in the parent-dimensions map for each dimension of this coord.
+        daughter_dims = daughter_cube.coord_dims(daughter_coord)
+        parent_dims = parent_cube.coord_dims(parent_coord)
+        for daughter_dim, parent_dim in zip(daughter_dims, parent_dims):
+            existing_dim_mapping = parent_dim_assignments[daughter_dim]
+            if existing_dim_mapping:
+                msg = "Dimension {} is mapped by both coords {!r} and {!r}."
+                raise ValueError(
+                    msg.format(parent_dim,
+                               daughter_coord.name(),
+                               existing_dim_mapping[0].name()))
+            parent_dim_assignments[daughter_dim] = (daughter_coord, parent_dim)
+            # Remove mapped daughter dims from the to-do list.
+            dims_to_do.pop(daughter_dim)
+
+    # Extract just the parent dimensions from the mapping data into a list.
+    parent_dims = [dim_assignment[1]
+                   for dim_assignment in parent_dim_assignments]
+    # Add the daughter_coord into the parent cube.
+    parent_cube.add_aux_coord(new_coord,
+                              parent_dims)
