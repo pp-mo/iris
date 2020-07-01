@@ -276,11 +276,8 @@ class Lenient(threading.local):
                 active = self.__dict__["active"]
                 if active is not None and active in self:
                     services = self.__dict__[active]
-                    if isinstance(services, str) or not isinstance(
-                        services, Iterable
-                    ):
-                        services = (services,)
-                    result = service in services
+                    found = [val for svc, val in services if svc == service]
+                    result = found[0] if found else False
         return result
 
     def __contains__(self, name):
@@ -356,11 +353,18 @@ class Lenient(threading.local):
 
         def update_client(client, services):
             if client in self.__dict__:
-                existing_services = self.__dict__[client]
+                # Convert existing set of pairs to dict
+                new_services = {svc: val for svc, val in self.__dict__[client]}
             else:
-                existing_services = ()
+                new_services = {}
 
-            self.__dict__[client] = tuple(set(existing_services + services))
+            # Update dict with new settings.
+            if not hasattr(services, "keys"):
+                services = {svc: True for svc in services}
+            new_services.update(services)
+            self.__dict__[client] = set(
+                (svc, val) for svc, val in new_services.items()
+            )
 
         # Save the original state.
         original_state = deepcopy(self.__dict__)
@@ -375,6 +379,83 @@ class Lenient(threading.local):
         if args:
             # Update the client with the provided services.
             new_services = tuple([qualname(arg) for arg in args])
+
+            if active is None:
+                # Ensure not to use "context" as the ephemeral name
+                # of the context manager runtime "active" lenient client,
+                # as this causes a namespace clash with this method
+                # i.e., Lenient.context, via Lenient.__getattr__
+                active = "__context"
+                self.__dict__["active"] = active
+                #                 self.__dict__[active] = new_services
+                update_client(active, new_services)
+
+            else:
+                # Append provided services to any pre-existing services of the active client.
+                update_client(active, new_services)
+        else:
+            # Append previous ephemeral services (for non-specific client) to the active client.
+            if (
+                active is not None
+                and active != "__context"
+                and "__context" in self.__dict__
+            ):
+                new_services = self.__dict__["__context"]
+                update_client(active, new_services)
+
+        try:
+            yield
+        finally:
+            # Restore the original state.
+            self.__dict__.clear()
+            self.__dict__.update(original_state)
+
+    @contextmanager
+    def context2(
+        self, active=None, services=None, enable=None, **service_values
+    ):
+        """
+        Return a context manager which allows temporary modification of
+        the lenient option state for the active thread.
+
+        For example::
+            with iris.LENIENT.context(client, (srv1, srv2)):
+                # ... code that expects some lenient behaviour
+
+            with iris.LENIENT.context(client, srv1=True, srv2=True):
+                # ... code that expects some lenient behaviour
+
+            with iris.LENIENT.context(client, srv2=False, modify_existing=True):
+                # ... code that expects some non-lenient behaviour
+
+        """
+
+        def update_client(client, services):
+            if client in self.__dict__:
+                existing_services = self.__dict__[client]
+            else:
+                existing_services = ()
+
+            self.__dict__[client] = tuple(set(existing_services + services))
+
+        # Save the original state.
+        original_state = deepcopy(self.__dict__)
+
+        # First update the state with the fixed keyword controls.
+        if active is not None:
+            self.active = active
+        if enable is not None:
+            self.enable = enable
+
+        # Get the active client.
+        active = self.__dict__["active"]
+
+        if services or service_values:
+            # Update the client with the provided services.
+            new_services = {qualname(srv): True for srv in services}
+            new_services.update(
+                {qualname(srv): val for srv, val in service_values.items()}
+            )
 
             if active is None:
                 # Ensure not to use "context" as the ephemeral name
@@ -429,14 +510,14 @@ class Lenient(threading.local):
             raise ValueError(emsg)
         self.__dict__["enable"] = state
 
-    def register_client(self, func, services, append=False):
+    def register_client(self, client, services, append=False):
         """
         Add the provided mapping of lenient client function/method to
         required lenient service function/methods.
 
         Args:
 
-        * func (callable or str):
+        * client (callable or str):
             A client function/method or fully qualified string name of the
             client function/method.
 
@@ -451,26 +532,40 @@ class Lenient(threading.local):
             services for the provided lenient client. Default is False.
 
         """
-        func = qualname(func)
+        client = qualname(client)
         cls = self.__class__.__name__
 
-        if func in LENIENT_PROTECTED:
-            emsg = (
-                f"Cannot register {cls!r} protected non-client, got {func!r}."
-            )
+        if client in LENIENT_PROTECTED:
+            emsg = f"Cannot register {cls!r} protected non-client, got {client!r}."
             raise ValueError(emsg)
+
         if isinstance(services, str) or not isinstance(services, Iterable):
             services = (services,)
         if not len(services):
             emsg = f"Require at least one {cls!r} lenient client service."
             raise ValueError(emsg)
-        services = tuple([qualname(service) for service in services])
+
+        if hasattr(services, "items"):
+            # Dictionary form contains setting values e.g. {'x':1, 'y':2}.
+            services = {
+                qualname(service): value for service, value in services.items()
+            }
+        else:
+            # List form (x, y) is equivalent to {x:True. y:True}
+            services = {qualname(service): True for service in services}
+
         if append:
             # Service order is not significant, therefore there is no
             # requirement to preserve it.
-            existing = self.__dict__[func] if func in self else ()
-            services = tuple(sorted(set(existing) | set(services)))
-        self.__dict__[func] = services
+            existing = self.__dict__[client] if client in self else ()
+            updated = dict(existing)
+            updated.update(services)
+            services = updated
+
+        # Convert dictionary to a set of pairs.
+        services = set((svc, services[svc]) for svc in sorted(services.keys()))
+        # N.B. must be in standard order??
+        self.__dict__[client] = services
 
     def register_service(self, func):
         """

@@ -129,7 +129,7 @@ class Test(tests.IrisTest):
         qualname_client = self.client.format("test_call_kwargs_single")
         self.assertEqual(result[self.active], qualname_client)
         self.assertIn(qualname_client, result)
-        self.assertEqual(result[qualname_client], (service,))
+        self.assertEqual(result[qualname_client], set([(service, True)]))
 
     def test_call_kwargs_single_callable(self):
         def myservice():
@@ -145,8 +145,10 @@ class Test(tests.IrisTest):
         qualname_client = self.client.format(test_name)
         self.assertEqual(result[self.active], qualname_client)
         self.assertIn(qualname_client, result)
-        qualname_services = (self.service.format(test_name),)
-        self.assertEqual(result[qualname_client], qualname_services)
+        qualname_service = self.service.format(test_name)
+        self.assertEqual(
+            result[qualname_client], set([(qualname_service, True)])
+        )
 
     def test_call_kwargs_iterable(self):
         services = (sentinel.service1, sentinel.service2)
@@ -160,7 +162,9 @@ class Test(tests.IrisTest):
         qualname_client = self.client.format("test_call_kwargs_iterable")
         self.assertEqual(result[self.active], qualname_client)
         self.assertIn(qualname_client, result)
-        self.assertEqual(set(result[qualname_client]), set(services))
+        self.assertEqual(
+            result[qualname_client], set((svc, True) for svc in services)
+        )
 
     def test_call_client_args_kwargs(self):
         @lenient_client()
