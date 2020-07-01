@@ -538,6 +538,21 @@ class Test_context(tests.IrisTest):
         self.assertEqual(context, expected)
         self.assertEqual(post, self.default)
 
+    #     def test_kwargs(self):
+    #         client = "client"
+    #         self.lenient.__dict__["service1"] = False
+    #         self.lenient.__dict__["service2"] = False
+    #         pre = self.copy()
+    #         with self.lenient.context(active=client, service1=True, service2=True):
+    #             context = self.copy()
+    #         post = self.copy()
+    #         self.default.update(dict(service1=False, service2=False))
+    #         self.assertEqual(pre, self.default)
+    #         expected = self.default.copy()
+    #         expected.update(dict(active=client, service1=True, service2=True))
+    #         self.assertEqual(context, expected)
+    #         self.assertEqual(post, self.default)
+
     def test_args_str(self):
         client = "client"
         services = ("service1", "service2")
