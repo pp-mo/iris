@@ -21,8 +21,9 @@ from iris.common.lenient import LENIENT, lenient_client
 class Test(tests.IrisTest):
     def setUp(self):
         module_name = getmodule(self).__name__
-        self.client = f"{module_name}" + ".Test.{}.<locals>.myclient"
-        self.service = f"{module_name}" + ".Test.{}.<locals>.myservice"
+        module_name = module_name.replace(".", "_x_")
+        self.client = f"{module_name}" + "_x_Test_x_{}_x_<locals>_x_myclient"
+        self.service = f"{module_name}" + "_x_Test_x_{}_x_<locals>_x_myservice"
         self.active = "active"
         self.args_in = sentinel.arg1, sentinel.arg2
         self.kwargs_in = dict(kwarg1=sentinel.kwarg1, kwarg2=sentinel.kwarg2)

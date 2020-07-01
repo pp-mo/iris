@@ -21,7 +21,8 @@ from iris.common.lenient import qualname
 class Test(tests.IrisTest):
     def setUp(self):
         module_name = getmodule(self).__name__
-        self.locals = f"{module_name}" + ".Test.{}.<locals>.{}"
+        module_name = module_name.replace(".", "_x_")
+        self.locals = f"{module_name}" + "_x_Test_x_{}_x_<locals>_x_{}"
 
     def test_pass_thru_non_callable(self):
         func = sentinel.func
@@ -42,7 +43,7 @@ class Test(tests.IrisTest):
         import iris
 
         result = qualname(iris.load)
-        self.assertEqual(result, "iris.load")
+        self.assertEqual(result, "iris_x_load")
 
     def test_callable_method_local(self):
         class MyClass:
@@ -50,7 +51,7 @@ class Test(tests.IrisTest):
                 pass
 
         qualname_method = self.locals.format(
-            "test_callable_method_local", "MyClass.mymethod"
+            "test_callable_method_local", "MyClass_x_mymethod"
         )
         result = qualname(MyClass.mymethod)
         self.assertEqual(result, qualname_method)
@@ -59,7 +60,7 @@ class Test(tests.IrisTest):
         import iris
 
         result = qualname(iris.cube.Cube.add_ancillary_variable)
-        self.assertEqual(result, "iris.cube.Cube.add_ancillary_variable")
+        self.assertEqual(result, "iris_x_cube_x_Cube_x_add_ancillary_variable")
 
 
 if __name__ == "__main__":

@@ -214,7 +214,7 @@ def qualname(func):
     if callable(func):
         module = getmodule(func)
         result = f"{module.__name__}.{func.__qualname__}"
-
+        result = result.replace(".", "_x_")
     return result
 
 
