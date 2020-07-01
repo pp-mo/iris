@@ -117,7 +117,7 @@ def lenient_client(*dargs, services=None):
                 as active at runtime before executing it.
 
                 """
-                with LENIENT.context(qualname(func), services=services):
+                with LENIENT.context(qualname(func), services):
                     result = func(*args, **kwargs)
                 return result
 
@@ -331,6 +331,26 @@ class Lenient(threading.local):
                 value = tuple([qualname(item) for item in value])
             self.__dict__[name] = value
 
+    @staticmethod
+    def _services_asdict(services):
+        # Convert list of services, or dict(service:value) to dictionary form.
+        # For lists, also accepts callables, converting to qualnames.
+        if services is None:
+            services = {}
+        elif isinstance(services, str) or not isinstance(services, Iterable):
+            services = [services]
+
+        if hasattr(services, "items"):
+            # Dictionary form contains setting values e.g. {'x':1, 'y':2}.
+            services = {
+                qualname(service): value for service, value in services.items()
+            }
+        else:
+            # List form (x, y) is equivalent to {x:True. y:True}
+            services = {qualname(service): True for service in services}
+
+        return services
+
     @contextmanager
     def context(
         self,
@@ -338,7 +358,7 @@ class Lenient(threading.local):
         services=None,
         enable=None,
         modify_existing=False,
-        **service_values,
+        **service_values_dict,
     ):
         """
         Return a context manager which allows temporary modification of
@@ -388,13 +408,10 @@ class Lenient(threading.local):
         # Get the active client.
         active = self.__dict__["active"]
 
-        if services or service_values:
+        if services or service_values_dict:
             # Update the client with the provided services.
-            services = services or []
-            new_services = {qualname(srv): True for srv in services}
-            new_services.update(
-                {qualname(srv): val for srv, val in service_values.items()}
-            )
+            new_services = self._services_asdict(services)
+            new_services.update(self._services_asdict(service_values_dict))
 
             if active is None:
                 # Ensure not to use "context" as the ephemeral name
@@ -477,20 +494,10 @@ class Lenient(threading.local):
             emsg = f"Cannot register {cls!r} protected non-client, got {client!r}."
             raise ValueError(emsg)
 
-        if isinstance(services, str) or not isinstance(services, Iterable):
-            services = (services,)
-        if not len(services):
+        services = self._services_asdict(services)
+        if not services:
             emsg = f"Require at least one {cls!r} lenient client service."
             raise ValueError(emsg)
-
-        if hasattr(services, "items"):
-            # Dictionary form contains setting values e.g. {'x':1, 'y':2}.
-            services = {
-                qualname(service): value for service, value in services.items()
-            }
-        else:
-            # List form (x, y) is equivalent to {x:True. y:True}
-            services = {qualname(service): True for service in services}
 
         if append:
             # Service order is not significant, therefore there is no
