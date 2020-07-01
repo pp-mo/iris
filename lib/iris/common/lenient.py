@@ -374,7 +374,7 @@ class Lenient(threading.local):
             self[name] = value
 
         # Get the active client.
-        active = self.__dict__["active"]
+        active = self.active
 
         if args:
             # Update the client with the provided services.
@@ -386,13 +386,10 @@ class Lenient(threading.local):
                 # as this causes a namespace clash with this method
                 # i.e., Lenient.context, via Lenient.__getattr__
                 active = "__context"
-                self.__dict__["active"] = active
-                #                 self.__dict__[active] = new_services
-                update_client(active, new_services)
+                self.active = active
 
-            else:
-                # Append provided services to any pre-existing services of the active client.
-                update_client(active, new_services)
+            update_client(active, new_services)
+
         else:
             # Append previous ephemeral services (for non-specific client) to the active client.
             if (
@@ -400,7 +397,7 @@ class Lenient(threading.local):
                 and active != "__context"
                 and "__context" in self.__dict__
             ):
-                new_services = self.__dict__["__context"]
+                new_services = self.__context
                 update_client(active, new_services)
 
         try:
