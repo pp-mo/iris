@@ -96,7 +96,7 @@ def lenient_client(*dargs, services=None):
             as active at runtime before executing it.
 
             """
-            with LENIENT.context(active=qualname(func)):
+            with LENIENT.context2(active=qualname(func)):
                 result = func(*args, **kwargs)
             return result
 
@@ -117,7 +117,7 @@ def lenient_client(*dargs, services=None):
                 as active at runtime before executing it.
 
                 """
-                with LENIENT.context(*services, active=qualname(func)):
+                with LENIENT.context2(qualname(func), services=services):
                     result = func(*args, **kwargs)
                 return result
 
@@ -409,7 +409,12 @@ class Lenient(threading.local):
 
     @contextmanager
     def context2(
-        self, active=None, services=None, enable=None, **service_values
+        self,
+        active=None,
+        services=None,
+        enable=None,
+        modify_existing=False,
+        **service_values,
     ):
         """
         Return a context manager which allows temporary modification of
@@ -423,24 +428,36 @@ class Lenient(threading.local):
                 # ... code that expects some lenient behaviour
 
             with iris.LENIENT.context(client, srv2=False, modify_existing=True):
-                # ... code that expects some non-lenient behaviour
+                # ... code that amends for some NON-lenient behaviour
+
+            with iris.LENIENT.context(client, set1=3, set3='adjust'):
+                # ... code using non-binary settings.
 
         """
 
         def update_client(client, services):
             if client in self.__dict__:
-                existing_services = self.__dict__[client]
+                # Convert existing set of pairs to dict
+                new_services = {svc: val for svc, val in self.__dict__[client]}
             else:
-                existing_services = ()
+                new_services = {}
 
-            self.__dict__[client] = tuple(set(existing_services + services))
+            # Update dict with new settings.
+            if not hasattr(services, "keys"):
+                services = {svc: True for svc in services}
+            new_services.update(services)
+
+            # Save back, as a set-of-pairs.
+            self.__dict__[client] = set(
+                (svc, val) for svc, val in new_services.items()
+            )
 
         # Save the original state.
         original_state = deepcopy(self.__dict__)
 
         # First update the state with the fixed keyword controls.
         if active is not None:
-            self.active = active
+            self.active = qualname(active)
         if enable is not None:
             self.enable = enable
 
@@ -449,6 +466,7 @@ class Lenient(threading.local):
 
         if services or service_values:
             # Update the client with the provided services.
+            services = services or []
             new_services = {qualname(srv): True for srv in services}
             new_services.update(
                 {qualname(srv): val for srv, val in service_values.items()}
@@ -460,11 +478,10 @@ class Lenient(threading.local):
                 # as this causes a namespace clash with this method
                 # i.e., Lenient.context, via Lenient.__getattr__
                 active = "__context"
-                self.__dict__["active"] = active
-                self.__dict__[active] = new_services
-            else:
-                # Append provided services to any pre-existing services of the active client.
-                update_client(active, new_services)
+                self.active = active
+
+            update_client(active, new_services)
+
         else:
             # Append previous ephemeral services (for non-specific client) to the active client.
             if (
@@ -472,7 +489,7 @@ class Lenient(threading.local):
                 and active != "__context"
                 and "__context" in self.__dict__
             ):
-                new_services = self.__dict__["__context"]
+                new_services = self.__context
                 update_client(active, new_services)
 
         try:

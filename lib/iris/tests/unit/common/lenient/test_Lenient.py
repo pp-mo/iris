@@ -611,6 +611,244 @@ class Test_context(tests.IrisTest):
         self.assertEqual(post, self.default)
 
 
+class Test_context2__oldstyles(tests.IrisTest):
+    def setUp(self):
+        self.lenient = Lenient()
+        self.default = dict(active=None, enable=LENIENT_ENABLE_DEFAULT)
+
+    def copy(self):
+        return self.lenient.__dict__.copy()
+
+    def test_nop(self):
+        pre = self.copy()
+        with self.lenient.context2():
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        self.assertEqual(context, self.default)
+        self.assertEqual(post, self.default)
+
+    def test_active_str(self):
+        client = "client"
+        pre = self.copy()
+        with self.lenient.context2(active=client):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(dict(active=client))
+        self.assertEqual(context, expected)
+        self.assertEqual(post, self.default)
+
+    def test_active_callable(self):
+        def client():
+            pass
+
+        pre = self.copy()
+        with self.lenient.context2(active=client):
+            context = self.copy()
+        post = self.copy()
+        qualname_client = qualname(client)
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(dict(active=qualname_client))
+        self.assertEqual(context, expected)
+        self.assertEqual(post, self.default)
+
+    def test_args_str(self):
+        client = "client"
+        services = ("service1", "service2")
+        pre = self.copy()
+        # ref: self.lenient.context(*services, active=client):
+        with self.lenient.context2(client, services=services):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(active=client, client=set((svc, True) for svc in services))
+        )
+        self.assertEqual(context["active"], expected["active"])
+        self.assertEqual(set(context["client"]), set(expected["client"]))
+        self.assertEqual(post, self.default)
+
+    def test_args_callable(self):
+        def service1():
+            pass
+
+        def service2():
+            pass
+
+        client = "client"
+        services = (service1, service2)
+        pre = self.copy()
+        # ref: self.lenient.context(*services, active=client):
+        with self.lenient.context2(client, services=services):
+            context = self.copy()
+        post = self.copy()
+        qualname_services = tuple([qualname(service) for service in services])
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(
+                active=client,
+                client=set((svc, True) for svc in qualname_services),
+            )
+        )
+        self.assertEqual(context["active"], expected["active"])
+        self.assertEqual(context["client"], expected["client"])
+        self.assertEqual(post, self.default)
+
+    def test_context_runtime(self):
+        services = ("service1", "service2")
+        pre = self.copy()
+        # ref: self.lenient.context(*services):
+        with self.lenient.context2(services=services):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(
+                active="__context",
+                __context=set([(srv, True) for srv in services]),
+            )
+        )
+        self.assertEqual(context, expected)
+        self.assertEqual(post, self.default)
+
+
+class Test_context2__newstyles(tests.IrisTest):
+    def setUp(self):
+        self.lenient = Lenient()
+        self.default = dict(active=None, enable=LENIENT_ENABLE_DEFAULT)
+
+    def copy(self):
+        return self.lenient.__dict__.copy()
+
+    def test_args_str(self):
+        client = "client"
+        services = ("service1", "service2")
+        pre = self.copy()
+        # ref: self.lenient.context(*services, active=client):
+        with self.lenient.context2(client, service1=True, service2=True):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(active=client, client=set((svc, True) for svc in services))
+        )
+        self.assertEqual(context["active"], expected["active"])
+        self.assertEqual(set(context["client"]), set(expected["client"]))
+        self.assertEqual(post, self.default)
+
+    def test_args_callable(self):
+        def service1():
+            pass
+
+        def service2():
+            pass
+
+        client = "client"
+        service_qualnames = [qualname(svc) for svc in (service1, service2)]
+        pre = self.copy()
+        # ref: self.lenient.context(*services, active=client):
+        with self.lenient.context2(
+            client, **{name: True for name in service_qualnames}
+        ):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(
+                active=client,
+                client=set((svc, True) for svc in service_qualnames),
+            )
+        )
+        self.assertEqual(context["active"], expected["active"])
+        self.assertEqual(context["client"], set(expected["client"]))
+        self.assertEqual(post, self.default)
+
+    def test_context_runtime(self):
+        services = ("service1", "service2")
+        pre = self.copy()
+        # ref: self.lenient.context(*services):
+        with self.lenient.context2(services=services):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(
+                active="__context",
+                __context=set([(srv, True) for srv in services]),
+            )
+        )
+        self.assertEqual(context, expected)
+        self.assertEqual(post, self.default)
+
+    def test_args_switchoff(self):
+        def service1():
+            pass
+
+        def service2():
+            pass
+
+        qualname1, qualname2 = [qualname(svc) for svc in (service1, service2)]
+        pre = self.copy()
+
+        # Note: make dict for keywords, as the names are really long !
+        settings = {qualname1: True, qualname2: False}
+
+        # ref: self.lenient.context(*services, active=client):
+        with self.lenient.context2("client", **settings):
+            context = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected = self.default.copy()
+        expected.update(
+            dict(
+                active="client",
+                client=set((k, v) for k, v in settings.items()),
+            )
+        )
+        self.assertEqual(context["active"], expected["active"])
+        self.assertEqual(context["client"], expected["client"])
+        self.assertEqual(post, self.default)
+
+    def test_args_modify(self):
+        pre = self.copy()
+
+        # ref: self.lenient.context(*services, active=client):
+        with self.lenient.context2("client", set1=1, set2=2):
+            context1 = self.copy()
+            with self.lenient.context2(
+                "client", set2="not two", modify_existing=True
+            ):
+                context2 = self.copy()
+        post = self.copy()
+        self.assertEqual(pre, self.default)
+        expected1 = self.default.copy()
+        expected1.update(
+            dict(active="client", client=set([("set1", 1), ("set2", 2)]),)
+        )
+        self.assertEqual(context1["active"], "client")
+        self.assertEqual(context1["client"], expected1["client"])
+        self.assertEqual(post, self.default)
+        expected2 = self.default.copy()
+        expected2.update(
+            dict(
+                active="client",
+                client=set([("set1", 1), ("set2", "not two")]),
+            )
+        )
+        self.assertEqual(context2["active"], "client")
+        self.assertEqual(context2["client"], expected2["client"])
+        self.assertEqual(post, self.default)
+
+
 class Test_enable(tests.IrisTest):
     def setUp(self):
         self.lenient = Lenient()
