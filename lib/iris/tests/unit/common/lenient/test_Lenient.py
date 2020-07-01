@@ -564,7 +564,7 @@ class Test_context(tests.IrisTest):
             dict(active=client, client=set((svc, True) for svc in services))
         )
         self.assertEqual(context["active"], expected["active"])
-        self.assertEqual(set(context["client"]), set(expected["client"]))
+        self.assertEqual(context["client"], expected["client"])
         self.assertEqual(post, self.default)
 
     def test_args_callable(self):
@@ -590,7 +590,7 @@ class Test_context(tests.IrisTest):
             )
         )
         self.assertEqual(context["active"], expected["active"])
-        self.assertEqual(set(context["client"]), set(expected["client"]))
+        self.assertEqual(context["client"], expected["client"])
         self.assertEqual(post, self.default)
 
     def test_context_runtime(self):
