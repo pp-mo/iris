@@ -96,7 +96,7 @@ def lenient_client(*dargs, services=None):
             as active at runtime before executing it.
 
             """
-            with LENIENT.context2(active=qualname(func)):
+            with LENIENT.context(active=qualname(func)):
                 result = func(*args, **kwargs)
             return result
 
@@ -117,7 +117,7 @@ def lenient_client(*dargs, services=None):
                 as active at runtime before executing it.
 
                 """
-                with LENIENT.context2(qualname(func), services=services):
+                with LENIENT.context(qualname(func), services=services):
                     result = func(*args, **kwargs)
                 return result
 
@@ -332,83 +332,7 @@ class Lenient(threading.local):
             self.__dict__[name] = value
 
     @contextmanager
-    def context(self, *args, **kwargs):
-        """
-        Return a context manager which allows temporary modification of
-        the lenient option state for the active thread.
-
-        On entry to the context manager, all provided keyword arguments are
-        applied. On exit from the context manager, the previous lenient option
-        state is restored.
-
-        For example::
-            with iris.LENIENT.context(example_lenient_flag=False):
-                # ... code that expects some non-lenient behaviour
-
-        .. note::
-            iris.LENIENT.example_lenient_flag does not exist and is
-            provided only as an example.
-
-        """
-
-        def update_client(client, services):
-            if client in self.__dict__:
-                # Convert existing set of pairs to dict
-                new_services = {svc: val for svc, val in self.__dict__[client]}
-            else:
-                new_services = {}
-
-            # Update dict with new settings.
-            if not hasattr(services, "keys"):
-                services = {svc: True for svc in services}
-            new_services.update(services)
-            self.__dict__[client] = set(
-                (svc, val) for svc, val in new_services.items()
-            )
-
-        # Save the original state.
-        original_state = deepcopy(self.__dict__)
-
-        # Temporarily update the state with the kwargs first.
-        for name, value in kwargs.items():
-            self[name] = value
-
-        # Get the active client.
-        active = self.active
-
-        if args:
-            # Update the client with the provided services.
-            new_services = tuple([qualname(arg) for arg in args])
-
-            if active is None:
-                # Ensure not to use "context" as the ephemeral name
-                # of the context manager runtime "active" lenient client,
-                # as this causes a namespace clash with this method
-                # i.e., Lenient.context, via Lenient.__getattr__
-                active = "__context"
-                self.active = active
-
-            update_client(active, new_services)
-
-        else:
-            # Append previous ephemeral services (for non-specific client) to the active client.
-            if (
-                active is not None
-                and active != "__context"
-                and "__context" in self.__dict__
-            ):
-                new_services = self.__context
-                update_client(active, new_services)
-
-        try:
-            yield
-        finally:
-            # Restore the original state.
-            self.__dict__.clear()
-            self.__dict__.update(original_state)
-
-    @contextmanager
-    def context2(
+    def context(
         self,
         active=None,
         services=None,
