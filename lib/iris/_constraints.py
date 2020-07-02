@@ -111,6 +111,25 @@ class Constraint:
                 _CoordConstraint(coord_name, coord_thing)
             )
 
+    def __eq__(self, other):
+        # Equivalence is defined, but Constraints based on callables, i.e.
+        # cube_func or value functions for attributes/names/coords.
+        # : these can only be == if they contain the *same callable*.
+        eq = (
+            type(other) == Constraint
+            and self._name == other._name
+            and self._cube_func == other._cube_func
+            and self._coord_constraints == other._coord_constraints
+        )
+        # NOTE: theoretically, you could compare coord constraints as a *set*.
+        # Not totally sure that is wise, so let's not.
+        return eq
+
+    def __hash__(self):
+        # Must define to use the objects as dict keys, etc.
+        # Just use basic object identity.
+        return id(self)
+
     def __repr__(self):
         args = []
         if self._name:
@@ -198,6 +217,19 @@ class ConstraintCombination(Constraint):
         self.rhs = rhs_constraint
         self.operator = operator
 
+    def __eq__(self, other):
+        eq = (
+            type(other) == ConstraintCombination
+            and self.lhs == other.lhs
+            and self.rhs == other.rhs
+            and self.operator == other.operator
+        )
+        return eq
+
+    def __hash__(self):
+        # Must re-define if you overload __eq__ : Use object identity.
+        return id(self)
+
     def _coordless_match(self, cube):
         return self.operator(
             self.lhs._coordless_match(cube), self.rhs._coordless_match(cube)
@@ -240,6 +272,29 @@ class _CoordConstraint:
             self.coord_name,
             self._coord_thing,
         )
+
+    def __eq__(self, other):
+        # Note: the so-called 'coord_name' can in fact also be a coord or defn.
+        # However it is only *used* to select a coord, as "cube(coord_name)"
+        # (see in 'extract', below).
+        # Hence, in comparing actual coords, we must compare only the defns.
+        def _comparer(co):
+            if isinstance(co, iris.coords.Coord):
+                co = co._as_defn()
+            # NOTE: a CoordDefn can anyway only == another one, as it cannot
+            # behave identically to a simple string.
+            return co
+
+        eq = (
+            type(other) == _CoordConstraint
+            and _comparer(self.coord_name) == _comparer(other.coord_name)
+            and self._coord_thing == other._coord_thing
+        )
+        return eq
+
+    def __hash__(self):
+        # Must re-define if you overload __eq__ : Use object identity.
+        return id(self)
 
     def extract(self, cube):
         """
@@ -471,6 +526,17 @@ class AttributeConstraint(Constraint):
         self._attributes = attributes
         super().__init__(cube_func=self._cube_func)
 
+    def __eq__(self, other):
+        eq = (
+            type(other) == AttributeConstraint
+            and self._attributes == other._attributes
+        )
+        return eq
+
+    def __hash__(self):
+        # Must re-define if you overload __eq__ : Use object identity.
+        return id(self)
+
     def _cube_func(self, cube):
         match = True
         for name, value in self._attributes.items():
@@ -552,6 +618,17 @@ class NameConstraint(Constraint):
         self.STASH = STASH
         self._names = ("standard_name", "long_name", "var_name", "STASH")
         super().__init__(cube_func=self._cube_func)
+
+    def __eq__(self, other):
+        eq = type(other) == NameConstraint and all(
+            getattr(self, attname) == getattr(other, attname)
+            for attname in self._names
+        )
+        return eq
+
+    def __hash__(self):
+        # Must re-define if you overload __eq__ : Use object identity.
+        return id(self)
 
     def _cube_func(self, cube):
         def matcher(target, value):
