@@ -112,21 +112,26 @@ class Constraint:
             )
 
     def __eq__(self, other):
-        # Equivalence is defined, but Constraints based on callables, i.e.
-        # cube_func or value functions for attributes/names/coords.
-        # : these can only be == if they contain the *same callable*.
+        # Equivalence is defined, but is naturally limited for any Constraints
+        # based on callables, i.e. "cube_func", or value functions for
+        # attributes/names/coords :  These can only be == if they contain the
+        # *same* callable object (i.e. same object identity).
         eq = (
             type(other) == Constraint
             and self._name == other._name
             and self._cube_func == other._cube_func
             and self._coord_constraints == other._coord_constraints
         )
-        # NOTE: theoretically, you could compare coord constraints as a *set*.
-        # Not totally sure that is wise, so let's not.
+        # NOTE: theoretically, you could compare coord constraints as a *set*,
+        # as order should not affect matching.
+        # Not totally sure, so for now let's not.
         return eq
 
     def __hash__(self):
-        # Must define to use the objects as dict keys, etc.
+        # We want constraints to have hashes, so they can act as e.g.
+        # dictionary keys or tuple elements.
+        # So, we *must* provide this, as overloading '__eq__' automatically
+        # disables it.
         # Just use basic object identity.
         return id(self)
 
