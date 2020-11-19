@@ -11,7 +11,7 @@ import iris.tests as tests
 
 import numpy as np
 
-from iris.coords import AuxCoord, _DimensionalMetadata
+from iris.coords import AuxCoord, _DimensionalMetadata, Coord
 import iris.tests.stock as istk
 
 
@@ -78,7 +78,12 @@ class MinimalCoordlikeDimmeta(_DimensionalMetadata):
         # This is abstract in _DimMeta, so we must provide it.
         return cube.coord_dims(
             self
-        )  # We should behave like a Coord in this respect.
+        )  # We should behave like a Coord in this respect.In
+
+    @property
+    def __class__(self):
+        # Fake the "isinstance" behaviour (for now).
+        return Coord
 
 
 class Test_MinimalCoordlikeDimmeta(
@@ -88,15 +93,13 @@ class Test_MinimalCoordlikeDimmeta(
         cube = istk.lat_lon_cube()
         ny, nx = cube.shape
         # Absolute minimal thing : not even a name
-        mock_co = MinimalCoordlikeDimmeta(
-            np.zeros(nx),
-        )  # , long_name='mock_x', units=1)
+        mock_co = MinimalCoordlikeDimmeta(np.zeros(nx), long_name="mock_x")
         cube.add_aux_coord(mock_co, 1)
         self.mock_co = mock_co
         self.cube = cube
 
     def _check_mock_coord(self, cube):
-        self.assertIn(self.mock_co, cube.aux_coords)
+        self.assertIsInstance(cube.coord("mock_x"), MinimalCoordlikeDimmeta)
 
 
 if __name__ == "__main__":
