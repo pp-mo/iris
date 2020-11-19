@@ -16,7 +16,7 @@ import iris.tests.stock as istk
 
 
 class MixinMockcoordOperationsTests:
-    def test_coord_access(self):
+    def test_coord_present(self):
         # Check the type of the coord seen in the original cube
         cube = self.cube
         self._check_mock_coord(cube)
