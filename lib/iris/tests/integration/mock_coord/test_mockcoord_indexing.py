@@ -82,25 +82,21 @@ class MinimalCoordlikeDimmeta(_DimensionalMetadata):
 
 
 class Test_MinimalCoordlikeDimmeta(
-    tests.IrisTest
-):  # , MixinMockcoordOperationsTests):
+    tests.IrisTest, MixinMockcoordOperationsTests
+):
     def setUp(self):
         cube = istk.lat_lon_cube()
         ny, nx = cube.shape
+        # Absolute minimal thing : not even a name
         mock_co = MinimalCoordlikeDimmeta(
-            np.zeros(nx)
+            np.zeros(nx),
         )  # , long_name='mock_x', units=1)
         cube.add_aux_coord(mock_co, 1)
+        self.mock_co = mock_co
         self.cube = cube
 
     def _check_mock_coord(self, cube):
-        self.assertIsInstance(cube.coord("mock_x"), MinimalCoordlikeDimmeta)
-
-    def test_coord_access(self):
-        # Check the type of the coord seen in the original cube
-        cube = self.cube
-        print(cube)
-        self._check_mock_coord(cube)
+        self.assertIn(self.mock_co, cube.aux_coords)
 
 
 if __name__ == "__main__":
