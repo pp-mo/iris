@@ -3,7 +3,7 @@
 # This file is part of Iris and is released under the LGPL license.
 # See COPYING and COPYING.LESSER in the root of the repository for full
 # licensing details.
-"""Integration tests for cube html representation."""
+"""Integration tests for indexing of various MockCoord approaches."""
 
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
