@@ -1,0 +1,17 @@
+    # *** Linear ***
+    # Linear.regridder --> i.a._regrid.RectilinearRegridder
+    #   --> i.a._interpolation.snapshot_grid -->  i.a._interpolation.get_xy_dim_coords
+    # So it can't work over AuxCoords.
+
+    # *** Nearest ***
+    # Nearest.regridder --> i.a._regrid.RectilinearRegridder
+    # So, just like the above : can only use DimCoords.
+
+    # *** AreaWeighted ***
+    # ALL THE SAME PROBLEMS : can't use AuxCoords.
+
+    # *** UnstructuredNearest ***
+    # This permits the X and Y source-cube coords to be aux-coords
+    # It can function when one is a MockCoord -- but the result has none of course (replaced by target coords)
+    # Meanwhile... the *target* grid can't have a MockCoord, because it again insists on DimCoords.
+
