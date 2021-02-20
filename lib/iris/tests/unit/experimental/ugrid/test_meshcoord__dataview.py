@@ -24,6 +24,45 @@ def array_index_with_missing(array, index_array):
     return result
 
 
+class ArrayMimic:
+    """
+    An array-like object which gets its data from a function.
+
+    The function takes a (keys) arg, which tells it to calculate some part of a full result array.
+    The point of this is to enable Dask to ask for only what is needed, making a sub-indexable deferred calculation.
+
+    """
+
+    def __init__(self, access_func, shape, dtype, *axs_args, **axs_kwargs):
+        """
+        Args:
+        * dtype (np.dtype), shape (list of int):
+            properties of the "whole" array mimicked.
+            Must match those of 'self.[:]'.
+
+        * access_func (()(keys, *axs_args, **axs_kwargs) --> ndarray):
+            Function called with indexing keys, returning a concrete array
+            result.
+            Must have the assumed signature, and return an array of the
+            correct shape, like that of 'np.zeros(self.shape)[keys]'.
+
+        """
+        # Define sufficient instance properties for this to be recognised
+        # as an array-like by Dask.
+        self.shape = shape
+        self.dtype = dtype
+        self.ndim = len(
+            shape
+        )  # Though this one may look redundant, Dask seems to require it.
+        self._axs_func = access_func
+        self._axs_args = axs_args
+        self._axs_kwargs = axs_kwargs
+
+    def __getitem__(self, keys):
+        # Array access : return a section of the notional 'whole' array.
+        return self._axs_func(keys, *self._axs_args, **self._axs_kwargs)
+
+
 def create_meshcoordlike(
     cube, face_x_coordname, node_x_coordname, face_node_inds_coordname
 ):
@@ -44,44 +83,6 @@ def create_meshcoordlike(
     # defer to accesses on the "mesh" (i.e. cube).
     # Using Dask, in the most straightforward way
     # (i.e. no efficiency considerations, not even chunking)
-
-    class ArrayMimic:
-        """
-        An array-like object which gets its data from a function.
-
-        Note: the basic access interface is the __getitem__ call.
-        The function also receives the getitem 'keys', in case that is useful.
-
-        """
-
-        def __init__(self, access_func, shape, dtype, *axs_args, **axs_kwargs):
-            """
-            Args:
-            * dtype (np.dtype), shape (list of int):
-                properties of the "whole" array mimicked.
-                Must match those of 'self.[:]'.
-
-            * access_func (()(keys, *axs_args, **axs_kwargs) --> ndarray):
-                Function called with indexing keys, returning a concrete array
-                result.
-                Must have the assumed signature, and return an array of the
-                correct shape, like that of 'np.zeros(self.shape)[keys]'.
-
-            """
-            # Define sufficient instance properties for this to be recognised
-            # as an array-like by Dask.
-            self.shape = shape
-            self.dtype = dtype
-            self.ndim = len(
-                shape
-            )  # Though this one may look redundant, Dask seems to require it.
-            self._axs_func = access_func
-            self._axs_args = axs_args
-            self._axs_kwargs = axs_kwargs
-
-        def __getitem__(self, keys):
-            # Array access : return a section of the notional 'whole' array.
-            return self._axs_func(keys, *self._axs_args, **self._axs_kwargs)
 
     # Define a array accessor function for each input to our calculations.
     # N.B. these function definitions are specific to each call, referencing
@@ -185,6 +186,42 @@ def create_meshcoordlike(
         units=cube.coord(face_x_coordname).units,
     )
     return result
+
+
+class ArrayWrapper:
+    """
+    Generate an "array-like" object that wraps an array, recording all the accesses to it.
+
+    Used as an array, as "array-like" doesn't support anything but essential properties and indexing.
+    But it can be wrapped as a Dask lazy array.
+
+    """
+
+    def __init__(self, array):
+        self._array = array
+        # Define enough properties to satisfy da.from_array
+        self.shape = array.shape
+        self.dtype = array.dtype
+        self.ndim = array.ndim
+        self.accesses = []
+
+    def __getitem__(self, keys):
+        self.accesses.append(keys)
+        return self._array.__getitem__(keys)
+
+
+def access_wrapped_array(array, chunks="auto"):
+    """
+    Wrap an array with a lazy wrapper which records all the accesses.
+
+    For debugging what accesses Dask performs on a data source.
+
+    """
+    wrapper = ArrayWrapper(array)
+    lazy_array = da.from_array(
+        wrapper, chunks=chunks, meta=type(array)
+    )  # NB this avoids an initial 0-length access.
+    return lazy_array, wrapper
 
 
 class Test_MeshCoord__dataview(tests.IrisTest):
@@ -407,33 +444,11 @@ class Test_MeshCoord__dataview(tests.IrisTest):
             if co.has_bounds():
                 self.assertTrue(co.has_lazy_bounds())
 
-    @staticmethod
-    def access_wrapped_array(array, chunks="auto"):
-        # Wrap an array with a getitem wrapper that records all accesses.
-        class ArrayWrapper:
-            def __init__(self, array):
-                self._array = array
-                # Define enough properties to satisfy da.from_array
-                self.shape = array.shape
-                self.dtype = array.dtype
-                self.ndim = array.ndim
-                self.accesses = []
-
-            def __getitem__(self, keys):
-                self.accesses.append(keys)
-                return self._array.__getitem__(keys)
-
-        wrapper = ArrayWrapper(array)
-        lazy_array = da.from_array(
-            wrapper, chunks=chunks, meta=type(array)
-        )  # NB this avoids an initial 0-length access.
-        return lazy_array, wrapper
-
     def test_partial_access_points(self):
         # Show that fetching part of MeshCoord.points uses only part of face_x.
         cube = self.cube
         co_face_x = cube.coord("face_x")
-        lazy_wrapped, wrapper = self.access_wrapped_array(co_face_x.points)
+        lazy_wrapped, wrapper = access_wrapped_array(co_face_x.points)
         co_face_x.points = lazy_wrapped
 
         mesh_coord = self.mesh_coord
@@ -453,7 +468,7 @@ class Test_MeshCoord__dataview(tests.IrisTest):
         # " fetching part of MeshCoord.bounds uses only part of node_x ".
         cube = self.cube
         co_node_x = cube.coord("node_x")
-        lazy_wrapped, wrapper = self.access_wrapped_array(co_node_x.points)
+        lazy_wrapped, wrapper = access_wrapped_array(co_node_x.points)
         co_node_x.points = lazy_wrapped
 
         mesh_coord = self.mesh_coord
@@ -498,7 +513,7 @@ class Test_MeshCoord__dataview(tests.IrisTest):
         # face_node_connectivity.
         cube = self.cube
         co_face_nodes = cube.coord("face_node_connectivity")
-        lazy_wrapped, wrapper = self.access_wrapped_array(co_face_nodes.bounds)
+        lazy_wrapped, wrapper = access_wrapped_array(co_face_nodes.bounds)
         co_face_nodes.bounds = lazy_wrapped
 
         mesh_coord = self.mesh_coord
