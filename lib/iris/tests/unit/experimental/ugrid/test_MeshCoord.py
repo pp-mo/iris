@@ -172,7 +172,7 @@ class Test__points_and_bounds(tests.IrisTest):
     #  when we support that.
     def test_node(self):
         meshcoord = _create_test_meshcoord(location="node")
-        self.assertFalse(meshcoord.has_lazy_points())
+        self.assertTrue(meshcoord.has_lazy_points())
         self.assertIsNone(meshcoord.core_bounds())
         self.assertArrayAllClose(
             meshcoord.points, 1100 + np.arange(_TEST_N_NODES)
@@ -180,8 +180,8 @@ class Test__points_and_bounds(tests.IrisTest):
 
     def test_edge(self):
         meshcoord = _create_test_meshcoord(location="edge")
-        self.assertFalse(meshcoord.has_lazy_points())
-        self.assertFalse(meshcoord.has_lazy_bounds())
+        self.assertTrue(meshcoord.has_lazy_points())
+        self.assertTrue(meshcoord.has_lazy_bounds())
         points, bounds = meshcoord.core_points(), meshcoord.core_bounds()
         self.assertEqual(points.shape, meshcoord.shape)
         self.assertEqual(bounds.shape, meshcoord.shape + (2,))
@@ -201,8 +201,8 @@ class Test__points_and_bounds(tests.IrisTest):
 
     def test_face(self):
         meshcoord = _create_test_meshcoord(location="face")
-        self.assertFalse(meshcoord.has_lazy_points())
-        self.assertFalse(meshcoord.has_lazy_bounds())
+        self.assertTrue(meshcoord.has_lazy_points())
+        self.assertTrue(meshcoord.has_lazy_bounds())
         points, bounds = meshcoord.core_points(), meshcoord.core_bounds()
         self.assertEqual(points.shape, meshcoord.shape)
         self.assertEqual(bounds.shape, meshcoord.shape + (4,))

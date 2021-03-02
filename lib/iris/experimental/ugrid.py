@@ -2681,6 +2681,105 @@ class _Mesh2DConnectivityManager(_MeshConnectivityManagerBase):
         return self._members["face_node_connectivity"]
 
 
+class _ArrayLike:
+    """
+    An object with just enough properties for Dask.from_array to treat it as
+    an Array-like, to create a lazy array based on a deferred calculation.
+
+    It defines the dtype and shape of a notional 'whole result' array.
+    When __getitem__ is called, it returns an indexed section of that.
+    The method to_dask_array() returns the content wrapped as a Dask array.
+
+    An abstract class: to use, must subclass it and define '__getitem__'.
+
+    """
+
+    def __init__(self, shape, dtype, chunks=None):
+        # Set default for chunking control, and store it.
+        if chunks is None:
+            # Unless told otherwise, default is whole-array chunking
+            chunks = -1
+        self.chunks = chunks
+        # Define sufficient instance properties for this to be
+        # recognisable as an array-like by
+        # :meth:`dask.array.from_array`.
+        self.shape = shape
+        self.dtype = dtype
+        self.ndim = len(
+            shape
+        )  # 'ndim' looks redundant, but Dask seems to require it.
+
+    def to_dask_array(self):
+        """Create a dask lazy array from this array-like."""
+        # Note: specifying 'meta' prevents Dask from making a preliminary
+        # zero-length access call to determine the class of the result array.
+        return da.from_array(self, chunks=self.chunks, meta=np.ndarray)
+
+    @abstractmethod
+    def __getitem__(self, keys):
+        # Subclasses must override this with code to deliver a section of the
+        # 'whole' array result.
+        # In principle, the use of 'keys' allows for optimised calculations,
+        # however this will require chunking set to something other than -1.
+        pass
+
+
+def _fetch_mesh_coord(mesh, location, axis):
+    # Return a coord from a mesh, selected by location + axis.
+    coord_dict = mesh.coord(**{f"include_{location}s": True, "axis": axis})
+    (coord,) = coord_dict.values()
+    return coord
+
+
+def _fetch_mesh_connectivity(mesh, src_location, tgt_location):
+    # Return a connectivity from a mesh, selected by source and target location.
+    attname = f"{src_location}_{tgt_location}_connectivity"
+    conn = getattr(mesh, attname)
+    return conn
+
+
+class MeshCoordArray(_ArrayLike):
+    def __init__(self, mesh, location, axis, **kwargs):
+        self.mesh = mesh
+        self.location = location
+        self.axis = axis
+        # Pre-fetch the coord, just to get the array shape + dtype.
+        # We don't store it, because the coord *might* be different when we
+        # fetch data.  Effectively, we don't expect shape/dtype to change.
+        # (However, in practice, Dask can probably cope if they do).
+        coord = _fetch_mesh_coord(mesh, location, axis)
+        shape, dtype = coord.shape, coord.dtype
+        super().__init__(shape, dtype, **kwargs)
+
+    def __getitem__(self, keys):
+        # Return dynamically-accessed node coordinate values (points).
+        coord = _fetch_mesh_coord(self.mesh, self.location, self.axis)
+        result = coord.core_points()
+        result = result[keys]
+        return result
+
+
+class MeshConnectivityArray(_ArrayLike):
+    def __init__(self, mesh, src_location, tgt_location, **kwargs):
+        self.mesh = mesh
+        self.src = src_location
+        self.tgt = tgt_location
+        # Pre-fetch the connectivity, just to get the array shape + dtype.
+        # We don't store it, because the connectivity *might* be different when
+        # we fetch data.  Effectively, we don't expect shape/dtype to change.
+        # (However, in practice, Dask can probably cope if they do).
+        conn = _fetch_mesh_connectivity(mesh, src_location, tgt_location)
+        shape, dtype = conn.shape, conn.dtype
+        super().__init__(shape, dtype, **kwargs)
+
+    def __getitem__(self, keys):
+        # Return dynamically-accessed connectivity values (indices).
+        conn = _fetch_mesh_connectivity(self.mesh, self.src, self.tgt)
+        result = conn.core_indices()
+        result = result[keys]
+        return result
+
+
 class MeshCoord(AuxCoord):
     """
     Geographic coordinate values of data on an unstructured mesh.
@@ -2897,7 +2996,7 @@ class MeshCoord(AuxCoord):
         Mesh, according to the location and axis.
 
         Returns:
-        * points, bounds (array or None)
+        * points, bounds (array or None):
             lazy arrays which calculate the correct points and bounds from the
             Mesh data, based on the location and axis.
             The Mesh coordinates accessed are not identified on construction,
@@ -2905,29 +3004,39 @@ class MeshCoord(AuxCoord):
             the result is always based on current content in the Mesh.
 
         """
-        # TODO: cheat for now : correct calculations, but not dynamic.
-        # TODO: replace wth fully dynamic lazy calcs (slightly more complex).
         mesh, location, axis = self.mesh, self.location, self.axis
-        # N.B. mesh.coord returns a dict
-        node_coords = self.mesh.coord(include_nodes=True, axis=axis)
-        (node_coord,) = list(node_coords.values())
+
+        node_points = MeshCoordArray(
+            mesh=mesh, location="node", axis=axis
+        ).to_dask_array()
+
         if location == "node":
-            points = node_coord.core_points()
+            points = node_points
             bounds = None
         elif location == "edge":
-            # N.B. mesh.coord returns a dict
-            edge_coords = self.mesh.coord(include_edges=True, axis=self.axis)
-            (edge_coord,) = list(edge_coords.values())
-            points = edge_coord.core_points()
-            inds = mesh.edge_node_connectivity.core_indices()
-            bounds = node_coord.core_points()[inds]
+            points = MeshCoordArray(
+                mesh=mesh, location="edge", axis=axis
+            ).to_dask_array()
+            edge_node_inds = MeshConnectivityArray(
+                mesh=mesh, src_location="edge", tgt_location="node"
+            ).to_dask_array()
+            # NODE: Dask cannot index with a multi-dimensional array.
+            # So flatten the indices, and reshape afterwards.
+            flat_inds = edge_node_inds.flatten()
+            bounds = node_points[flat_inds]
+            bounds = bounds.reshape(edge_node_inds.shape)
         elif location == "face":
-            # N.B. mesh.coord returns a dict
-            face_coords = self.mesh.coord(include_faces=True, axis=self.axis)
-            (face_coord,) = list(face_coords.values())
-            points = face_coord.core_points()  # For now, this always exists
-            inds = mesh.face_node_connectivity.core_indices()
-            bounds = node_coord.core_points()[inds]
+            points = MeshCoordArray(
+                mesh=mesh, location="face", axis=axis
+            ).to_dask_array()
+            face_node_inds = MeshConnectivityArray(
+                mesh=mesh, src_location="face", tgt_location="node"
+            ).to_dask_array()
+            # NODE: Dask cannot index with a multi-dimensional array.
+            # So flatten the indices, and reshape afterwards.
+            flat_inds = face_node_inds.flatten()
+            bounds = node_points[flat_inds]
+            bounds = bounds.reshape(face_node_inds.shape)
 
         return points, bounds
 
