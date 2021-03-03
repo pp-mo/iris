@@ -2774,8 +2774,14 @@ class MeshConnectivityArray(_ArrayLike):
 
     def __getitem__(self, keys):
         # Return dynamically-accessed connectivity values (indices).
+        # NOTE: we return -1s, not missing points, both because this is easier
+        # to use in the indexing operation, and because da.from_array does not
+        # handle masked data well.
         conn = _fetch_mesh_connectivity(self.mesh, self.src, self.tgt)
         result = conn.core_indices()
+        result = np.ma.asanyarray(result).filled(
+            -1
+        )  # Use -1 for "missing" indices.
         result = result[keys]
         return result
 
@@ -3020,10 +3026,10 @@ class MeshCoord(AuxCoord):
             edge_node_inds = MeshConnectivityArray(
                 mesh=mesh, src_location="edge", tgt_location="node"
             ).to_dask_array()
-            # NODE: Dask cannot index with a multi-dimensional array.
-            # So flatten the indices, and reshape afterwards.
+            # NOTE: the lazy connectivity array has -1 at missing locations.
+            # So mask results where the index < 0.
             flat_inds = edge_node_inds.flatten()
-            bounds = node_points[flat_inds]
+            bounds = da.ma.masked_where(flat_inds < 0, node_points[flat_inds])
             bounds = bounds.reshape(edge_node_inds.shape)
         elif location == "face":
             points = MeshCoordArray(
@@ -3032,10 +3038,12 @@ class MeshCoord(AuxCoord):
             face_node_inds = MeshConnectivityArray(
                 mesh=mesh, src_location="face", tgt_location="node"
             ).to_dask_array()
-            # NODE: Dask cannot index with a multi-dimensional array.
+            # NOTE: Dask cannot index with a multi-dimensional array.
             # So flatten the indices, and reshape afterwards.
             flat_inds = face_node_inds.flatten()
-            bounds = node_points[flat_inds]
+            # NOTE: the lazy connectivity array has -1 at missing locations.
+            # So mask results where the index < 0.
+            bounds = da.ma.masked_where(flat_inds < 0, node_points[flat_inds])
             bounds = bounds.reshape(face_node_inds.shape)
 
         return points, bounds

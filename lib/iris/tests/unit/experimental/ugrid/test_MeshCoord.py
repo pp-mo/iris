@@ -16,7 +16,7 @@ import unittest.mock as mock
 
 from iris.cube import Cube
 from iris.coords import AuxCoord, Coord
-from iris.experimental.ugrid import Connectivity, Mesh
+from iris.experimental.ugrid import Connectivity, Mesh, _fetch_mesh_coord
 
 from iris.experimental.ugrid import MeshCoord
 
@@ -388,6 +388,234 @@ class Test_auxcoord_conversion(tests.IrisTest):
         # Also check array content.
         self.assertArrayAllClose(auxcoord.points, meshcoord.points)
         self.assertArrayAllClose(auxcoord.bounds, meshcoord.bounds)
+
+
+#
+# Testing for dynamic views + behaviour :
+#   * missing-points handling, i.e. non-square faces (or similar)
+#   * dynamic action (fetch from Mesh at compute time)
+#   *
+#
+# BIG, BIG PROBLEM FOUND :
+#   *** True dynamic action implies nested compute() calls. ***
+#   *** we can't do this.
+#   *** See :
+#   ***    * https://github.com/SciTools/iris/issues/3237
+#   ***    * https://github.com/SciTools/iris/pull/3255
+#
+
+
+class Test_MeshCoord__dataviews(tests.IrisTest):
+    def setUp(self):
+        # Construct a miniature face+nodes mesh for testing.
+        face_nodes_array = np.array(
+            [
+                [0, 2, 1, 3],
+                [1, 3, 10, 13],
+                [2, 7, 9, 19],
+                [
+                    3,
+                    4,
+                    7,
+                    -1,
+                ],  # This one has a "missing" point (it's a triangle)
+                [8, 1, 7, 2],
+            ]
+        )
+        # Connectivity uses *masked* for missing points.
+        face_nodes_array = np.ma.masked_less(face_nodes_array, 0)
+        n_faces = face_nodes_array.shape[0]
+        n_nodes = int(face_nodes_array.max() + 1)
+        face_xs = 500.0 + np.arange(n_faces)
+        node_xs = 100.0 + np.arange(n_nodes)
+
+        # Record all these for re-use in tests
+        self.n_faces = n_faces
+        self.n_nodes = n_nodes
+        self.face_xs = face_xs
+        self.node_xs = node_xs
+        self.face_nodes_array = face_nodes_array
+
+        # Build a mesh with this info stored in it.
+
+        co_nodex = AuxCoord(
+            node_xs, standard_name="longitude", long_name="node_x", units=1
+        )
+        co_facex = AuxCoord(
+            face_xs, standard_name="longitude", long_name="face_x", units=1
+        )
+        # N.B. the Mesh requires 'Y's as well.
+        co_nodey = co_nodex.copy()
+        co_nodey.rename("latitude")
+        co_nodey.long_name = "node_y"
+        co_facey = co_facex.copy()
+        co_facey.rename("latitude")
+        co_facey.long_name = "face_y"
+
+        face_node_conn = Connectivity(
+            face_nodes_array,
+            cf_role="face_node_connectivity",
+            long_name="face_nodes",
+        )
+
+        self.mesh = Mesh(
+            topology_dimension=2,
+            node_coords_and_axes=[(co_nodex, "x"), (co_nodey, "y")],
+            connectivities=[face_node_conn],
+            face_coords_and_axes=[(co_facex, "x"), (co_facey, "y")],
+        )
+
+        # Construct the new meshcoord.
+        meshcoord = MeshCoord(mesh=self.mesh, location="face", axis="x")
+        self.meshcoord = meshcoord
+
+    # def assertArraysMaskedAllClose(self, arr1, arr2, fill=-999.0):
+    #     # Test 2 arrays for ~equal values, including matching any NaNs.
+    #     wherenans = np.isnan(arr1)
+    #     self.assertArrayAllClose(np.isnan(arr2), wherenans)
+    #     arr1 = np.where(wherenans, fill, arr1)
+    #     arr2 = np.where(wherenans, fill, arr2)
+    #     self.assertArrayAllClose(arr1, arr2)
+    #
+    def test_points_values(self):
+        # Basic points content check.
+        meshcoord = self.meshcoord
+        self.assertTrue(meshcoord.has_lazy_points())
+        # The points are just the face_x-s
+        self.assertArrayAllClose(meshcoord.points, self.face_xs)
+
+    def test_bounds_values(self):
+        # Basic bounds content check.
+        mesh_coord = self.meshcoord
+        self.assertTrue(mesh_coord.has_lazy_bounds())
+        # The bounds are selected node_x-s :  all == node_number + 100.0
+        result = mesh_coord.bounds
+        # N.B. result should be masked where the masked indices are.
+        expected = 100.0 + self.face_nodes_array
+        # Check there are *some* masked points.
+        self.assertTrue(np.count_nonzero(expected.mask) > 0)
+        # Check results match, including masked points.
+        self.assertMaskedArrayAlmostEqual(result, expected)
+
+    def test_points_deferred_access(self):
+        # Check that MeshCoord.points always fetches from the current "face_x"
+        # coord in the cube.
+        mesh = self.mesh
+        mesh_coord = self.meshcoord
+        fetch_without_realise = mesh_coord.lazy_points().compute()
+        all_points_vals = self.face_xs
+        self.assertArrayAllClose(fetch_without_realise, all_points_vals)
+
+        # Replace 'face_x' coord with one having different values, same name
+        face_x_coord = _fetch_mesh_coord(mesh, "face", "x")
+        face_x_coord_2 = face_x_coord.copy()
+        face_x_coord_2.long_name = "face_x_2"
+        all_points_vals_2 = np.array(
+            all_points_vals + 1.0, dtype=int
+        )  # Change both values and dtype.
+        face_x_coord_2.points = all_points_vals_2
+        mesh.remove_coords(include_faces=True, axis="x")
+        mesh.add_coords(face_x=face_x_coord_2)
+
+        # Check that new values + different dtype are now produced by the
+        # MeshCoord bounds access.
+        fetch_without_realise = mesh_coord.lazy_points().compute()
+        self.assertArrayAllClose(fetch_without_realise, all_points_vals_2)
+        self.assertEqual(fetch_without_realise.dtype, all_points_vals_2.dtype)
+        self.assertNotEqual(fetch_without_realise.dtype, all_points_vals.dtype)
+
+    # def test_bounds_deferred_access__node_x(self):
+    #     # Show that MeshCoord.points always fetches from the current "node_x"
+    #     # coord in the cube.
+    #     cube = self.cube
+    #     mesh_coord = self.mesh_coord
+    #     fetch_without_realise = mesh_coord.lazy_bounds().compute()
+    #     all_bounds_vals = array_index_with_missing(
+    #         self.node_xs, self.face_nodes_array
+    #     )
+    #     self.assertArraysNanAllClose(fetch_without_realise, all_bounds_vals)
+    #
+    #     # Replace 'node_x' coord with one having different values, same name
+    #     face_x_coord = self.cube.coord("node_x")
+    #     face_x_coord_2 = face_x_coord.copy()
+    #     all_face_points = face_x_coord.points
+    #     all_face_points_2 = np.array(
+    #         all_face_points + 1.0
+    #     )  # Change the values.
+    #     self.assertFalse(np.allclose(all_face_points_2, all_face_points))
+    #     face_x_coord_2.points = all_face_points_2
+    #     dims = cube.coord_dims(face_x_coord)
+    #     cube.remove_coord(face_x_coord)
+    #     cube.add_aux_coord(face_x_coord_2, dims)
+    #
+    #     # Check that new, different values are now delivered by the MeshCoord.
+    #     expected_new_values = all_bounds_vals + 1.0
+    #     fetch_without_realise = mesh_coord.lazy_bounds().compute()
+    #     self.assertArraysNanAllClose(
+    #         fetch_without_realise, expected_new_values
+    #     )
+
+    # def test_bounds_deferred_access__facenodes(self):
+    #     # Show that MeshCoord.points always fetches from the current
+    #     # "face_node_connectivity" coord in the cube.
+    #     cube = self.cube
+    #     mesh_coord = self.mesh_coord
+    #     fetch_without_realise = mesh_coord.lazy_bounds().compute()
+    #     all_bounds_vals = array_index_with_missing(
+    #         self.node_xs, self.face_nodes_array
+    #     )
+    #     self.assertArraysNanAllClose(fetch_without_realise, all_bounds_vals)
+    #
+    #     # Replace the index coord with one having different values, same name
+    #     face_nodes_coord = self.cube.coord("face_node_connectivity")
+    #     face_nodes_coord_2 = face_nodes_coord.copy()
+    #     conns = face_nodes_coord.bounds
+    #     conns_2 = np.array(conns % 10)  # Change some values
+    #     self.assertFalse(np.allclose(conns, conns_2))
+    #     face_nodes_coord_2.bounds = conns_2
+    #     dims = cube.coord_dims(face_nodes_coord)
+    #     cube.remove_coord(face_nodes_coord)
+    #     cube.add_aux_coord(face_nodes_coord_2, dims)
+    #
+    #     # Check that new + different values are now delivered by the MeshCoord.
+    #     expected_new_values = self.node_xs[conns_2]
+    #     fetch_without_realise = mesh_coord.lazy_bounds().compute()
+    #     self.assertArrayAllClose(fetch_without_realise, expected_new_values)
+
+    # def test_meshcoord_leaves_originals_lazy(self):
+    #     cube = self.cube
+    #
+    #     # Ensure all the source coords are lazy.
+    #     source_coords = ("face_x", "node_x", "face_node_connectivity")
+    #     for name in source_coords:
+    #         co = cube.coord(name)
+    #         co.points = co.lazy_points()
+    #         co.bounds = co.lazy_bounds()
+    #
+    #     # Check all the source coords are lazy.
+    #     for name in source_coords:
+    #         co = cube.coord(name)
+    #         co.points = co.lazy_points()
+    #         self.assertTrue(co.has_lazy_points())
+    #         if co.has_bounds():
+    #             self.assertTrue(co.has_lazy_bounds())
+    #
+    #     # Calculate both points + bounds of the meshcoord
+    #     mesh_coord = self.mesh_coord
+    #     self.assertTrue(mesh_coord.has_lazy_points())
+    #     self.assertTrue(mesh_coord.has_lazy_bounds())
+    #     mesh_coord.points
+    #     mesh_coord.bounds
+    #     self.assertFalse(mesh_coord.has_lazy_points())
+    #     self.assertFalse(mesh_coord.has_lazy_bounds())
+    #
+    #     # Check all the source coords are still lazy.
+    #     for name in source_coords:
+    #         co = cube.coord(name)
+    #         co.points = co.lazy_points()
+    #         self.assertTrue(co.has_lazy_points())
+    #         if co.has_bounds():
+    #             self.assertTrue(co.has_lazy_bounds())
 
 
 if __name__ == "__main__":
