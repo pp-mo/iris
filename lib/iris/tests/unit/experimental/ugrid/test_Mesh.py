@@ -725,6 +725,8 @@ class TestOperations1D(TestMeshCommon):
         default = ugrid.Mesh1DNames("Mesh1d_node", "Mesh1d_edge")
         self.assertEqual(default, self.mesh.dimension_names())
 
+        ugrid.logger.setLevel("DEBUG")
+        self.mesh.dimension_names("foo", "bar", "baz")
         with self.assertLogs(ugrid.logger, level="DEBUG") as log:
             self.mesh.dimension_names("foo", "bar", "baz")
             self.assertIn("Not setting face_dimension", log.output[0])
@@ -746,6 +748,8 @@ class TestOperations1D(TestMeshCommon):
         self.assertEqual("foo", self.mesh.edge_dimension)
 
     def test_face_dimension_set(self):
+        # ugrid.logger.setLevel('DEBUG')
+        # self.mesh.face_dimension = "foo"
         with self.assertLogs(ugrid.logger, level="DEBUG") as log:
             self.mesh.face_dimension = "foo"
             self.assertIn("Not setting face_dimension", log.output[0])

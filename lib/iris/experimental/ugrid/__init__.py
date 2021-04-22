@@ -1229,7 +1229,7 @@ class Mesh(CFVariableMixin):
                     "Not setting face_dimension (inappropriate for "
                     f"topology_dimension={self.topology_dimension} ."
                 )
-                logger.debug(message)
+                logger.debug(message, extra=dict(cls=None))
         elif not name or not isinstance(name, str):
             face_dimension = f"Mesh{self.topology_dimension}d_face"
         else:
