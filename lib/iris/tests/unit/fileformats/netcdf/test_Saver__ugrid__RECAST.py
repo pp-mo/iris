@@ -23,6 +23,9 @@ from iris.experimental.ugrid.mesh import Connectivity, Mesh
 from iris.experimental.ugrid.save import save_mesh
 from iris.tests.stock import realistic_4d
 
+from .nc_dataset_scan import (
+    NcFileSummary, NcDimSummary, NcVariableSummary,  scan_dataset)
+
 XY_LOCS = ("x", "y")
 XY_NAMES = ("longitude", "latitude")
 
@@ -239,56 +242,42 @@ def add_height_dim(cube):
 _VAR_DIMS = "<variable dimensions>"
 
 
-def scan_dataset(filepath):
+def vars_w_props(scan, **kwargs):
     """
-    Snapshot a netcdf dataset (the key metadata).
-
-    Returns:
-        dimsdict, varsdict
-        * dimsdict (dict):
-            A map of dimension-name: length.
-        * varsdict (dict):
-            A map of each variable's properties, {var_name: propsdict}
-            Each propsdict is {attribute-name: value} over the var's ncattrs().
-            Each propsdict ALSO contains a [_VAR_DIMS] entry listing the
-            variable's dims.
-
-    """
-    ds = nc.Dataset(filepath)
-    # dims dict is {name: len}
-    dimsdict = {name: dim.size for name, dim in ds.dimensions.items()}
-    # vars dict is {name: {attr:val}}
-    varsdict = {}
-    for name, var in ds.variables.items():
-        varsdict[name] = {prop: getattr(var, prop) for prop in var.ncattrs()}
-        varsdict[name][_VAR_DIMS] = list(var.dimensions)
-    ds.close()
-    return dimsdict, varsdict
-
-
-def vars_w_props(varsdict, **kwargs):
-    """
-    Subset a vars dict, {name:props}, returning only those where each
+    Extract vars from a dataset scan  dict, {name:props}, returning only those where each
     <attribute>=<value>, defined by the given keywords.
     Except that '<key>="*"' means that '<key>' merely _exists_, with any value.
 
+    Kwargs:
+    * scan (NcFileSummary):
+        dataset summary, as returned by :meth:`scan_dataset`.
+
+    Returns:
+    * extracted_vars (map name: NcVariableSummary):
+        a map containing the dataset variables with the reequired properties.
+
     """
 
-    def check_attrs_match(attrs):
+    def check_attrs_match(var):
         result = True
         for key, val in kwargs.items():
-            result = key in attrs
-            if result:
-                # val='*'' for a simple existence check
+            if key == '_DIMS':
+                result = var.dimensions == val
+            else:
+                result = key in var.attributes
+                if result:
+                    # val='*'' for a simple existence check
+                    pass
                 result = (val == "*") or attrs[key] == val
             if not result:
                 break
         return result
 
-    varsdict = {
-        name: attrs
-        for name, attrs in varsdict.items()
-        if check_attrs_match(attrs)
+    varsdict = {}
+    for name, var in scan.variables:
+        name: NcVariableSummary(name=)
+        for name, var in
+        if check_attrs_match(var.attributes)
     }
     return varsdict
 
