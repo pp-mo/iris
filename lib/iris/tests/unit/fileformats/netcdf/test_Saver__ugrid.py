@@ -23,6 +23,8 @@ from iris.experimental.ugrid.mesh import Connectivity, Mesh
 from iris.experimental.ugrid.save import save_mesh
 from iris.tests.stock import realistic_4d
 
+from .nc_dataset_scan import scan_dataset
+
 XY_LOCS = ("x", "y")
 XY_NAMES = ("longitude", "latitude")
 
@@ -235,48 +237,35 @@ def add_height_dim(cube):
     return cube
 
 
-# Special key-string for storing the dimensions of a variable
-_VAR_DIMS = "<variable dimensions>"
-
-
-def scan_dataset(filepath):
-    """
-    Snapshot a netcdf dataset (the key metadata).
-
-    Returns:
-        dimsdict, varsdict
-        * dimsdict (dict):
-            A map of dimension-name: length.
-        * varsdict (dict):
-            A map of each variable's properties, {var_name: propsdict}
-            Each propsdict is {attribute-name: value} over the var's ncattrs().
-            Each propsdict ALSO contains a [_VAR_DIMS] entry listing the
-            variable's dims.
-
-    """
-    ds = nc.Dataset(filepath)
-    # dims dict is {name: len}
-    dimsdict = {name: dim.size for name, dim in ds.dimensions.items()}
-    # vars dict is {name: {attr:val}}
-    varsdict = {}
-    for name, var in ds.variables.items():
-        varsdict[name] = {prop: getattr(var, prop) for prop in var.ncattrs()}
-        varsdict[name][_VAR_DIMS] = list(var.dimensions)
-    ds.close()
-    return dimsdict, varsdict
+def property_namelist(np_property_value):
+    # extract a list of names from a numpy string property.
+    assert np_property_value.dtype.kind == "U"
+    return str(np_property_value).split()
 
 
 def vars_w_props(varsdict, **kwargs):
     """
-    Subset a vars dict, {name:props}, returning only those where each
+    Extract vars from a dataset scan  dict, {name:props}, returning only those where each
     <attribute>=<value>, defined by the given keywords.
     Except that '<key>="*"' means that '<key>' merely _exists_, with any value.
 
+    Kwargs:
+    * varsdict (map name: NcVariableSummary):
+        dataset vars, as in  a :class:`NcFileSummary`.variables.
+
+    Returns:
+    * extracted_vars (map name: NcVariableSummary):
+        a map containing the dataset variables with the required properties.
+
     """
 
-    def check_attrs_match(attrs):
+    def check_attrs_match(var):
         result = True
         for key, val in kwargs.items():
+            # if key == '_DIMS':
+            #     result = var.dimensions == val
+            # else:
+            attrs = var.attributes
             result = key in attrs
             if result:
                 # val='*'' for a simple existence check
@@ -285,30 +274,29 @@ def vars_w_props(varsdict, **kwargs):
                 break
         return result
 
-    varsdict = {
-        name: attrs
-        for name, attrs in varsdict.items()
-        if check_attrs_match(attrs)
+    result = {
+        name: var for name, var in varsdict.items() if check_attrs_match(var)
     }
-    return varsdict
+
+    return result
 
 
 def vars_w_dims(varsdict, dim_names):
     """Subset a vars dict, returning those which map all the specified dims."""
-    varsdict = {
-        name: propsdict
-        for name, propsdict in varsdict.items()
-        if all(dim in propsdict[_VAR_DIMS] for dim in dim_names)
+    result = {
+        name: var
+        for name, var in varsdict.items()
+        if all(dim in var.dimensions for dim in dim_names)
     }
-    return varsdict
+    return result
 
 
-def vars_meshnames(vars):
+def vars_meshnames(varsdict):
     """Return the names of all the mesh variables (found by cf_role)."""
-    return list(vars_w_props(vars, cf_role="mesh_topology").keys())
+    return list(vars_w_props(varsdict, cf_role="mesh_topology").keys())
 
 
-def vars_meshdim(vars, location, mesh_name=None):
+def vars_meshdim(varsdict, location, mesh_name=None):
     """
     Extract a dim-name for a given element location.
 
@@ -331,10 +319,10 @@ def vars_meshdim(vars, location, mesh_name=None):
     """
     if mesh_name is None:
         # Find "the" meshvar -- assuming there is just one.
-        (mesh_name,) = vars_meshnames(vars)
-    mesh_props = vars[mesh_name]
-    loc_coords = mesh_props[f"{location}_coordinates"].split(" ")
-    (single_location_dim,) = vars[loc_coords[0]][_VAR_DIMS]
+        (mesh_name,) = vars_meshnames(varsdict)
+    mesh_props = varsdict[mesh_name].attributes
+    loc_coords = property_namelist(mesh_props[f"{location}_coordinates"])
+    (single_location_dim,) = varsdict[loc_coords[0]].dimensions
     return single_location_dim
 
 
@@ -373,15 +361,17 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes(cube)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
 
         # There is exactly 1 mesh var.
+        vars = scan.variables
         (mesh_name,) = vars_meshnames(vars)
 
         # There is exactly 1 mesh-linked (data)var
         data_vars = vars_w_props(vars, mesh="*")
-        ((a_name, a_props),) = data_vars.items()
-        mesh_props = vars[mesh_name]
+        ((a_name, a_var),) = data_vars.items()
+        mesh_props = vars[mesh_name].attributes
+        a_props = a_var.attributes
 
         # The mesh var links to the mesh, with location 'faces'
         self.assertEqual(a_name, "unknown")
@@ -389,20 +379,20 @@ class TestSaveUgrid__cube(tests.IrisTest):
         self.assertEqual(a_props["location"], "face")
 
         # There are 2 face coords == those listed in the mesh
-        face_coords = mesh_props["face_coordinates"].split(" ")
+        face_coords = property_namelist(mesh_props["face_coordinates"])
         self.assertEqual(len(face_coords), 2)
 
         # The face coords should both map that single dim.
         face_dim = vars_meshdim(vars, "face")
         self.assertTrue(
-            all(vars[co][_VAR_DIMS] == [face_dim] for co in face_coords)
+            all(vars[co].dimensions == (face_dim,) for co in face_coords)
         )
 
         # The dims of the datavar also == [<faces-dim>]
-        self.assertEqual(a_props[_VAR_DIMS], [face_dim])
+        self.assertEqual(a_var.dimensions, (face_dim,))
 
         # There are 2 node coordinates == those listed in the mesh.
-        node_coords = mesh_props["node_coordinates"].split(" ")
+        node_coords = property_namelist(mesh_props["node_coordinates"])
         self.assertEqual(len(node_coords), 2)
         # These are the *only* ones using the 'nodes' dimension.
         node_dim = vars_meshdim(vars, "node")
@@ -418,7 +408,7 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # The dims are precisely (nodes, faces, nodes-per-face), in that order.
         self.assertEqual(
-            list(dims.keys()),
+            list(scan.dimensions.keys()),
             ["Mesh2d_nodes", "Mesh2d_faces", "Mesh2d_face_N_nodes"],
         )
 
@@ -446,13 +436,14 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes([cube1, cube2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # there is exactly 1 mesh in the file
         (mesh_name,) = vars_meshnames(vars)
 
         # both the main variables reference the same mesh, and 'face' location
-        v_a, v_b = vars["a"], vars["b"]
+        v_a, v_b = vars["a"].attributes, vars["b"].attributes
         self.assertEqual(v_a["mesh"], mesh_name)
         self.assertEqual(v_a["location"], "face")
         self.assertEqual(v_b["mesh"], mesh_name)
@@ -464,23 +455,25 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes([cube1, cube2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # there is exactly 1 mesh in the file
         (mesh_name,) = vars_meshnames(vars)
 
         # the main variables reference the same mesh at different locations
-        v_a, v_b = vars["a"], vars["b"]
-        self.assertEqual(v_a["mesh"], mesh_name)
-        self.assertEqual(v_a["location"], "face")
-        self.assertEqual(v_b["mesh"], mesh_name)
-        self.assertEqual(v_b["location"], "node")
+        var_a, var_b = vars["a"], vars["b"]
+        a_props, b_props = var_a.attributes, var_b.attributes
+        self.assertEqual(a_props["mesh"], mesh_name)
+        self.assertEqual(a_props["location"], "face")
+        self.assertEqual(b_props["mesh"], mesh_name)
+        self.assertEqual(b_props["location"], "node")
 
         # the main variables map the face and node dimensions
         face_dim = vars_meshdim(vars, "face")
         node_dim = vars_meshdim(vars, "node")
-        self.assertEqual(v_a[_VAR_DIMS], [face_dim])
-        self.assertEqual(v_b[_VAR_DIMS], [node_dim])
+        self.assertEqual(var_a.dimensions, (face_dim,))
+        self.assertEqual(var_b.dimensions, (node_dim,))
 
     def test_multi_cubes_identical_meshes(self):
         # Make 2 identical meshes
@@ -492,7 +485,8 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes([cube1, cube2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # there are exactly 2 meshes in the file
         mesh_names = vars_meshnames(vars)
@@ -517,15 +511,16 @@ class TestSaveUgrid__cube(tests.IrisTest):
         self.assertEqual(["a", "b"], list(mesh_datavars))
 
         # the data variables reference the two separate meshes
-        a_props, b_props = vars["a"], vars["b"]
+        var_a, var_b = vars["a"], vars["b"]
+        a_props, b_props = var_a.attributes, var_b.attributes
         self.assertEqual(a_props["mesh"], "Mesh2d")
         self.assertEqual(a_props["location"], "face")
         self.assertEqual(b_props["mesh"], "Mesh2d_0")
         self.assertEqual(b_props["location"], "face")
 
         # the data variables map the appropriate node dimensions
-        self.assertEqual(a_props[_VAR_DIMS], ["Mesh2d_faces"])
-        self.assertEqual(b_props[_VAR_DIMS], ["Mesh2d_faces_0"])
+        self.assertEqual(var_a.dimensions, ("Mesh2d_faces",))
+        self.assertEqual(var_b.dimensions, ("Mesh2d_faces_0",))
 
     def test_multi_cubes_different_mesh(self):
         # Check that we can correctly distinguish 2 different meshes.
@@ -534,7 +529,8 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes([cube1, cube2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # there are 2 meshes in the file
         mesh_names = vars_meshnames(vars)
@@ -546,7 +542,7 @@ class TestSaveUgrid__cube(tests.IrisTest):
         self.assertEqual(["a", "b"], sorted(mesh_datavars.keys()))
 
         # the main variables reference the correct meshes, and 'face' location
-        a_props, b_props = vars["a"], vars["b"]
+        a_props, b_props = vars["a"].attributes, vars["b"].attributes
         mesh_a, loc_a = a_props["mesh"], a_props["location"]
         mesh_b, loc_b = b_props["mesh"], b_props["location"]
         self.assertNotEqual(mesh_a, mesh_b)
@@ -560,7 +556,8 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes(cube)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # have just 1 mesh, including a face and node coordinates.
         (mesh_name,) = vars_meshnames(vars)
@@ -570,10 +567,11 @@ class TestSaveUgrid__cube(tests.IrisTest):
         vars_meshdim(vars, "node", mesh_name)
 
         # have just 1 data-variable
-        ((data_name, data_props),) = vars_w_props(vars, mesh="*").items()
+        ((data_name, data_var),) = vars_w_props(vars, mesh="*").items()
+        data_props = data_var.attributes
 
         # data maps to the height + mesh dims
-        self.assertEqual(data_props[_VAR_DIMS], ["height", face_dim])
+        self.assertEqual(data_var.dimensions, ("height", face_dim))
         self.assertEqual(data_props["mesh"], mesh_name)
         self.assertEqual(data_props["location"], "face")
 
@@ -605,7 +603,8 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes(cube)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # have just 1 mesh, including face and node coordinates.
         (mesh_name,) = vars_meshnames(vars)
@@ -613,7 +612,7 @@ class TestSaveUgrid__cube(tests.IrisTest):
         _ = vars_meshdim(vars, "node", mesh_name)
 
         # have hybrid vertical dimension, with all the usual term variables.
-        self.assertIn("model_level_number", dims)
+        self.assertIn("model_level_number", scan.dimensions)
         vert_vars = list(vars_w_dims(vars, ["model_level_number"]).keys())
         # The list of file variables mapping the vertical dimension:
         # = the data-var, plus all the height terms
@@ -630,10 +629,9 @@ class TestSaveUgrid__cube(tests.IrisTest):
         )
 
         # have just 1 data-variable, which maps to hybrid-height and mesh dims
-        ((data_name, data_props),) = vars_w_props(vars, mesh="*").items()
-        self.assertEqual(
-            data_props[_VAR_DIMS], ["model_level_number", face_dim]
-        )
+        ((data_name, data_var),) = vars_w_props(vars, mesh="*").items()
+        data_props = data_var.attributes
+        self.assertEqual(data_var.dimensions, ("model_level_number", face_dim))
         self.assertEqual(data_props["mesh"], mesh_name)
         self.assertEqual(data_props["location"], "face")
 
@@ -649,21 +647,23 @@ class TestSaveUgrid__cube(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_cubes([cube_1, cube_2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # There is only 1 mesh
         (mesh_name,) = vars_meshnames(vars)
 
         # both variables reference the same mesh
-        v_a, v_b = vars["a"], vars["b"]
-        self.assertEqual(v_a["mesh"], mesh_name)
-        self.assertEqual(v_a["location"], "face")
-        self.assertEqual(v_b["mesh"], mesh_name)
-        self.assertEqual(v_b["location"], "face")
+        var_a, var_b = vars["a"], vars["b"]
+        a_props, b_props = var_a.attributes, var_b.attributes
+        self.assertEqual(a_props["mesh"], mesh_name)
+        self.assertEqual(a_props["location"], "face")
+        self.assertEqual(b_props["mesh"], mesh_name)
+        self.assertEqual(b_props["location"], "face")
 
         # Check the var dimensions
-        self.assertEqual(v_a[_VAR_DIMS], ["height", "Mesh2d_faces"])
-        self.assertEqual(v_b[_VAR_DIMS], ["Mesh2d_faces", "height"])
+        self.assertEqual(var_a.dimensions, ("height", "Mesh2d_faces"))
+        self.assertEqual(var_b.dimensions, ("Mesh2d_faces", "height"))
 
 
 class TestSaveUgrid__mesh(tests.IrisTest):
@@ -720,27 +720,29 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh(mesh2)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # Check shape and dimensions of the associated connectivity variables.
         (mesh_name,) = vars_meshnames(vars)
-        mesh_props = vars[mesh_name]
-        faceconn_name = mesh_props["face_node_connectivity"]
-        edgeconn_name = mesh_props["edge_node_connectivity"]
-        faceconn_props = vars[faceconn_name]
-        edgeconn_props = vars[edgeconn_name]
+        mesh_props = vars[mesh_name].attributes
+        faceconn_name = str(mesh_props["face_node_connectivity"])
+        edgeconn_name = str(mesh_props["edge_node_connectivity"])
+        faceconn = vars[faceconn_name]
+        edgeconn = vars[edgeconn_name]
         self.assertEqual(
-            faceconn_props[_VAR_DIMS], ["Mesh_2d_face_N_nodes", "Mesh2d_face"]
+            faceconn.dimensions, ("Mesh_2d_face_N_nodes", "Mesh2d_face")
         )
         self.assertEqual(
-            edgeconn_props[_VAR_DIMS], ["Mesh_2d_edge_N_nodes", "Mesh2d_edge"]
+            edgeconn.dimensions, ("Mesh_2d_edge_N_nodes", "Mesh2d_edge")
         )
 
         # Check the dimension lengths are also as expected
-        self.assertEqual(dims["Mesh2d_face"], 2)
-        self.assertEqual(dims["Mesh_2d_face_N_nodes"], 4)
-        self.assertEqual(dims["Mesh2d_edge"], 7)
-        self.assertEqual(dims["Mesh_2d_edge_N_nodes"], 2)
+        dims = scan.dimensions
+        self.assertEqual(dims["Mesh2d_face"].length, 2)
+        self.assertEqual(dims["Mesh_2d_face_N_nodes"].length, 4)
+        self.assertEqual(dims["Mesh2d_edge"].length, 7)
+        self.assertEqual(dims["Mesh_2d_edge_N_nodes"].length, 2)
 
         # the mesh has extra location-dimension properties
         self.assertEqual(mesh_props["face_dimension"], "Mesh2d_face")
@@ -769,15 +771,16 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh(mesh2)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # Check shape and dimensions of the associated connectivity variables.
         (mesh_name,) = vars_meshnames(vars)
-        mesh_props = vars[mesh_name]
-        faceconn_name = mesh_props["face_node_connectivity"]
-        edgeconn_name = mesh_props["edge_node_connectivity"]
-        faceconn_props = vars[faceconn_name]
-        edgeconn_props = vars[edgeconn_name]
+        mesh_props = vars[mesh_name].attributes
+        faceconn_name = str(mesh_props["face_node_connectivity"])
+        edgeconn_name = str(mesh_props["edge_node_connectivity"])
+        faceconn_props = vars[faceconn_name].attributes
+        edgeconn_props = vars[edgeconn_name].attributes
         self.assertEqual(faceconn_props["start_index"], 0)
         self.assertEqual(edgeconn_props["start_index"], 1)
 
@@ -803,25 +806,27 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh(mesh)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # Check that the mesh saved with the additional connectivity
         (mesh_name,) = vars_meshnames(vars)
-        mesh_props = vars[mesh_name]
+        mesh_props = vars[mesh_name].attributes
         self.assertIn("face_face_connectivity", mesh_props)
-        ff_conn_name = mesh_props["face_face_connectivity"]
+        ff_conn_name = str(mesh_props["face_face_connectivity"])
 
         # check that the connectivity has the corrects dims and fill-property
-        ff_props = vars[ff_conn_name]
+        ff_conn = vars[ff_conn_name]
         self.assertEqual(
-            ff_props[_VAR_DIMS], ["Mesh2d_faces", "Mesh2d_face_N_faces"]
+            ff_conn.dimensions, ("Mesh2d_faces", "Mesh2d_face_N_faces")
         )
+        ff_props = ff_conn.attributes
         self.assertIn("_FillValue", ff_props)
         self.assertEqual(ff_props["_FillValue"], -1)
 
         # Check that a 'normal' connectivity does *not* have a _FillValue
-        fn_conn_name = mesh_props["face_node_connectivity"]
-        fn_props = vars[fn_conn_name]
+        fn_conn_name = str(mesh_props["face_node_connectivity"])
+        fn_props = vars[fn_conn_name].attributes
         self.assertNotIn("_FillValue", fn_props)
 
         # For what it's worth, *also* check the actual data array in the file
@@ -844,14 +849,15 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh(mesh)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # there is a single mesh-var
         (mesh_name,) = vars_meshnames(vars)
 
         # the dims include edges but not faces
         self.assertEqual(
-            list(dims.keys()),
+            list(scan.dimensions.keys()),
             ["Mesh1d_node", "Mesh1d_edge", "Mesh1d_edge_N_nodes"],
         )
         self.assertEqual(vars_meshdim(vars, "node"), "Mesh1d_node")
@@ -859,7 +865,7 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # check suitable mesh properties
         self.assertEqual(mesh_name, "Mesh1d")
-        mesh_props = vars[mesh_name]
+        mesh_props = vars[mesh_name].attributes
         self.assertEqual(mesh_props["topology_dimension"], 1)
         self.assertIn("edge_node_connectivity", mesh_props)
         self.assertNotIn("face_node_connectivity", mesh_props)
@@ -899,33 +905,34 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh(mesh)
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
-        # there is a single mesh-var
-        (mesh_name,) = vars_meshnames(vars)
+        # just check there is a single mesh-var
+        _ = vars_meshnames(vars)
 
         # find the node- and face-coordinate variables
-        node_x = vars["node_x"]
-        node_y = vars["node_y"]
-        face_x = vars["face_x"]
-        face_y = vars["face_y"]
+        node_x_props = vars["node_x"].attributes
+        node_y_props = vars["node_y"].attributes
+        face_x_props = vars["face_x"].attributes
+        face_y_props = vars["face_y"].attributes
 
         # Check that units are as expected.
         # 1. 'long/lat' degree units are converted to east/north
         # 2. non- (plain) lonlat are NOT converted
         # 3. other names remain as whatever was given
         # 4. no units on input --> none on output
-        self.assertEqual(node_x["units"], "degrees")
-        self.assertEqual(node_y["units"], "ms-1")
-        self.assertNotIn("units", face_x)
-        self.assertEqual(face_y["units"], "degrees_north")
+        self.assertEqual(node_x_props["units"], "degrees")
+        self.assertEqual(node_y_props["units"], "ms-1")
+        self.assertNotIn("units", face_x_props)
+        self.assertEqual(face_y_props["units"], "degrees_north")
 
         # Check also that we did not add 'axis' properties.
         # We should *only* do that for dim-coords.
-        self.assertNotIn("axis", node_x)
-        self.assertNotIn("axis", node_y)
-        self.assertNotIn("axis", face_x)
-        self.assertNotIn("axis", face_y)
+        self.assertNotIn("axis", node_x_props)
+        self.assertNotIn("axis", node_y_props)
+        self.assertNotIn("axis", face_x_props)
+        self.assertNotIn("axis", face_y_props)
 
     @staticmethod
     def _namestext(names):
@@ -992,10 +999,11 @@ class TestSaveUgrid__mesh(tests.IrisTest):
             mesh = make_mesh(mesh_kwargs=mesh_name_kwargs)
 
             filepath = self.check_save_mesh(mesh)
-            dims, vars = scan_dataset(filepath)
+            scan = scan_dataset(filepath)
+            vars = scan.variables
 
             (mesh_name,) = vars_meshnames(vars)
-            mesh_props = vars[mesh_name]
+            mesh_props = vars[mesh_name].attributes
             result_names = (
                 mesh_props.get("standard_name", None),
                 mesh_props.get("long_name", None),
@@ -1057,11 +1065,15 @@ class TestSaveUgrid__mesh(tests.IrisTest):
                 setattr(coord, key, name)
 
             filepath = self.check_save_mesh(mesh)
-            dims, vars = scan_dataset(filepath)
+            scan = scan_dataset(filepath)
+            vars = scan.variables
 
             (mesh_name,) = vars_meshnames(vars)
-            coord_varname = vars[mesh_name]["node_coordinates"].split(" ")[0]
-            coord_props = vars[coord_varname]
+            mesh_props = vars[mesh_name].attributes
+            coord_varname = property_namelist(mesh_props["node_coordinates"])[
+                0
+            ]
+            coord_props = vars[coord_varname].attributes
             result_names = (
                 coord_props.get("standard_name", None),
                 coord_props.get("long_name", None),
@@ -1087,11 +1099,13 @@ class TestSaveUgrid__mesh(tests.IrisTest):
             mesh = make_mesh(mesh_kwargs={"face_dimension": given_name})
 
             filepath = self.check_save_mesh(mesh)
-            dims, vars = scan_dataset(filepath)
+            scan = scan_dataset(filepath)
+            vars = scan.variables
 
             (mesh_name,) = vars_meshnames(vars)
-            conn_varname = vars[mesh_name]["face_node_connectivity"]
-            face_dim = vars[conn_varname][_VAR_DIMS][0]
+            mesh_props = vars[mesh_name].attributes
+            conn_varname = str(mesh_props["face_node_connectivity"])
+            face_dim = vars[conn_varname].dimensions[0]
             fail_msg = (
                 f'Unexpected resulting dimension name "{face_dim}" '
                 f'when saving mesh with dimension name of "{given_name}".'
@@ -1151,12 +1165,13 @@ class TestSaveUgrid__mesh(tests.IrisTest):
                 setattr(conn, key, name)
 
             filepath = self.check_save_mesh(mesh)
-            dims, vars = scan_dataset(filepath)
+            scan = scan_dataset(filepath)
+            vars = scan.variables
 
             (mesh_name,) = vars_meshnames(vars)
-            mesh_props = vars[mesh_name]
-            conn_name = mesh_props["face_node_connectivity"]
-            conn_props = vars[conn_name]
+            mesh_props = vars[mesh_name].attributes
+            conn_name = str(mesh_props["face_node_connectivity"])
+            conn_props = vars[conn_name].attributes
             result_names = (
                 conn_props.get("standard_name", None),
                 conn_props.get("long_name", None),
@@ -1182,7 +1197,7 @@ class TestSaveUgrid__mesh(tests.IrisTest):
         self.assertEqual(
             vars_meshdim(vars, "face", mesh_name="Mesh2d"), "Mesh2d_faces"
         )
-        if "edge_coordinates" in vars["Mesh2d"]:
+        if "edge_coordinates" in vars["Mesh2d"].attributes:
             self.assertEqual(
                 vars_meshdim(vars, "edge", mesh_name="Mesh2d"), "Mesh2d_edge"
             )
@@ -1194,7 +1209,7 @@ class TestSaveUgrid__mesh(tests.IrisTest):
         self.assertEqual(
             vars_meshdim(vars, "face", mesh_name="Mesh2d_0"), "Mesh2d_faces_0"
         )
-        if "edge_coordinates" in vars["Mesh2d_0"]:
+        if "edge_coordinates" in vars["Mesh2d_0"].attributes:
             self.assertEqual(
                 vars_meshdim(vars, "edge", mesh_name="Mesh2d_0"),
                 "Mesh2d_edge_0",
@@ -1202,31 +1217,33 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # the relevant coords + connectivities are also distinct
         # mesh1
-        self.assertEqual(vars["node_x"][_VAR_DIMS], ["Mesh2d_nodes"])
-        self.assertEqual(vars["face_x"][_VAR_DIMS], ["Mesh2d_faces"])
+        self.assertEqual(vars["node_x"].dimensions, ("Mesh2d_nodes",))
+        self.assertEqual(vars["face_x"].dimensions, ("Mesh2d_faces",))
         self.assertEqual(
-            vars["mesh2d_faces"][_VAR_DIMS],
-            ["Mesh2d_faces", "Mesh2d_face_N_nodes"],
+            vars["mesh2d_faces"].dimensions,
+            ("Mesh2d_faces", "Mesh2d_face_N_nodes"),
         )
-        if "edge_coordinates" in vars["Mesh2d"]:
-            self.assertEqual(vars["longitude"][_VAR_DIMS], ["Mesh2d_edge"])
+        if "edge_coordinates" in vars["Mesh2d"].attributes:
+            self.assertEqual(vars["longitude"].dimensions, ("Mesh2d_edge",))
             self.assertEqual(
-                vars["mesh2d_edge"][_VAR_DIMS],
-                ["Mesh2d_edge", "Mesh2d_edge_N_nodes"],
+                vars["mesh2d_edge"].dimensions,
+                ("Mesh2d_edge", "Mesh2d_edge_N_nodes"),
             )
 
         # mesh2
-        self.assertEqual(vars["node_x_0"][_VAR_DIMS], ["Mesh2d_nodes_0"])
-        self.assertEqual(vars["face_x_0"][_VAR_DIMS], ["Mesh2d_faces_0"])
+        self.assertEqual(vars["node_x_0"].dimensions, ("Mesh2d_nodes_0",))
+        self.assertEqual(vars["face_x_0"].dimensions, ("Mesh2d_faces_0",))
         self.assertEqual(
-            vars["mesh2d_faces_0"][_VAR_DIMS],
-            ["Mesh2d_faces_0", "Mesh2d_0_face_N_nodes"],
+            vars["mesh2d_faces_0"].dimensions,
+            ("Mesh2d_faces_0", "Mesh2d_0_face_N_nodes"),
         )
-        if "edge_coordinates" in vars["Mesh2d_0"]:
-            self.assertEqual(vars["longitude_0"][_VAR_DIMS], ["Mesh2d_edge_0"])
+        if "edge_coordinates" in vars["Mesh2d_0"].attributes:
             self.assertEqual(
-                vars["mesh2d_edge_0"][_VAR_DIMS],
-                ["Mesh2d_edge_0", "Mesh2d_0_edge_N_nodes"],
+                vars["longitude_0"].dimensions, ("Mesh2d_edge_0",)
+            )
+            self.assertEqual(
+                vars["mesh2d_edge_0"].dimensions,
+                ("Mesh2d_edge_0", "Mesh2d_0_edge_N_nodes"),
             )
 
     def test_multiple_identical_meshes(self):
@@ -1235,10 +1252,10 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh([mesh1, mesh2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
 
         # Check there are two independent meshes
-        self._check_two_different_meshes(vars)
+        self._check_two_different_meshes(scan.variables)
 
     def test_multiple_different_meshes(self):
         # Create 2 meshes with different faces, but same edges.
@@ -1248,16 +1265,18 @@ class TestSaveUgrid__mesh(tests.IrisTest):
 
         # Save and snapshot the result
         tempfile_path = self.check_save_mesh([mesh1, mesh2])
-        dims, vars = scan_dataset(tempfile_path)
+        scan = scan_dataset(tempfile_path)
+        vars = scan.variables
 
         # Check there are two independent meshes
         self._check_two_different_meshes(vars)
 
         # Check the dims are as expected
-        self.assertEqual(dims["Mesh2d_faces"], 3)
-        self.assertEqual(dims["Mesh2d_faces_0"], 4)
-        self.assertEqual(dims["Mesh2d_edge"], 2)
-        self.assertEqual(dims["Mesh2d_edge_0"], 2)
+        dims = scan.dimensions
+        self.assertEqual(dims["Mesh2d_faces"].length, 3)
+        self.assertEqual(dims["Mesh2d_faces_0"].length, 4)
+        self.assertEqual(dims["Mesh2d_edge"].length, 2)
+        self.assertEqual(dims["Mesh2d_edge_0"].length, 2)
 
 
 if __name__ == "__main__":

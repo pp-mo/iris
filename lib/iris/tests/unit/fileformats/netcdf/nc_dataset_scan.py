@@ -101,19 +101,20 @@ def scan_dataset(filepath):
         )
         for name, var in ds.variables.items()
     }
+
     attrs_summary = allattrs(ds)
     file_summary = NcFileSummary(
         dimensions=dims_summary,
         variables=vars_summary,
         attributes=attrs_summary,
     )
+
+    ds.close()
     return file_summary
 
 
 if __name__ == "__main__":
-    # Crude exercise of code
-    import os
-
+    # Crude exercise test of code
     import iris.tests as itsts
 
     filepath = itsts.get_data_path(
