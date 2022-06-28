@@ -132,7 +132,7 @@ FORMAT_AGENT.add_spec(
         UriProtocol(),
         lambda protocol: protocol in ["http", "https"],
         netcdf.load_cubes,
-        priority=6,
+        priority=4,
         constraint_aware_handler=True,
     )
 )
