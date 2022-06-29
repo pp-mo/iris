@@ -3017,12 +3017,27 @@ class Saver:
 
         if is_lazy_data(data):
 
-            def store(data, cf_var, fill_value):
-                # Store lazy data and check whether it is masked and contains
-                # the fill value
-                target = _FillValueMaskCheckAndStoreTarget(cf_var, fill_value)
-                da.store([data], [target])
-                return target.is_masked, target.contains_value
+            if hasattr(cf_var, "_ACCEPTS_LAZY_DATA_WRITES"):
+                # A special case : we can write a lazy array directly into the
+                # the output target.
+                # In this case, instead of performing an actual streaming
+                # write, we simply assign a lazy array into the variable.
+                # CAVEAT: this does not actually write the file, nor perform
+                # the expected fill-value check ...
+                def store(data, cf_var, fill_value):
+                    cf_var[:] = data
+                    return False, False
+
+            else:
+
+                def store(data, cf_var, fill_value):
+                    # Store lazy data and check whether it is masked and contains
+                    # the fill value
+                    target = _FillValueMaskCheckAndStoreTarget(
+                        cf_var, fill_value
+                    )
+                    da.store([data], [target])
+                    return target.is_masked, target.contains_value
 
         else:
 

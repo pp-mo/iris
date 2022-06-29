@@ -116,6 +116,16 @@ class TestSave:
         iris.save(cubes, nc_faked_xr, saver="nc")
         ds = nc_faked_xr.to_xarray_dataset()
 
+        # Special "lazy streaming" ensures that the main cube arrays are LAZY.
+        for cube in cubes:
+            assert hasattr(ds.variables[cube.var_name].data, "compute")
+
+        # print('')
+        # for varname, var in ds.variables.items():
+        #     print(f'Variable {varname!s} : shape {var.shape}, type {type(var.data)}')
+        # print('')
+
+        # Save the netcdf version.
         xr_outpath = str(Path("tmp_xr.nc").absolute())
         ds.to_netcdf(xr_outpath)
 
@@ -143,3 +153,10 @@ class TestSave:
         # save, or via iris.save --> xarray.Dataset --> xarray.Data.to_netcdf()
         # Compare, omitting the first line with the filename
         assert lines_xr_save[1:] == lines_iris_save[1:]
+
+        # Also check that the *content* is identical.
+        iris_saved_reload = iris.load("tmp_iris.nc")
+        xr_saved_reload = iris.load("tmp_xr.nc")
+        iris_saved_reload = sorted(iris_saved_reload, key=lambda c: c.name())
+        xr_saved_reload = sorted(xr_saved_reload, key=lambda c: c.name())
+        assert xr_saved_reload == iris_saved_reload
