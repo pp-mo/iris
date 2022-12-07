@@ -4,27 +4,28 @@
 # See COPYING and COPYING.LESSER in the root of the repository for full
 # licensing details.
 """
-An adaptor layer allowing an NcDataset to masquerade as a netCDF4.Dataset
+An adaptor layer allowing an NcData to masquerade as a netCDF4.Dataset object.
 
 This is provided primarily to support a re-use of the iris.fileformats.netcdf file
-format load + save, to convert cubes to+from iris.experimental.xarray_bridde.ncdata
-objects, and hence bridge to xarray.Dataset.
+format load + save, to convert cubes to+from ncdata objects, and hence convert Iris
+ cubes to+from an xarray.Dataset.
 
 These classes contain NcDataset and NcVariables, but emulating the access APIs of a
 netCDF4.Dataset.
 
-Notes:
-  (1) currently only supports what is required for Iris load/save capability
-  (2) we are proposing that this remains private, for now? -- due to (1)
+Note: currently only supports what is required for Iris load/save capability.
+It could conceivably be used for data exchange by *other* code that reads or writes
+netcdf files, but that may require API support to be extended, depending on what
+additional methods might be used.
 
 """
 import numpy as np
 
-from .ncdata import NcAttribute, NcDataset, NcDimension, NcVariable
+from ._core import NcAttribute, NcDataset, NcDimension, NcVariable
 
 
 class _Nc4DatalikeWithNcattrs:
-    # A mixin, shared by _Nc4DatasetLike and _Nc4VariableLike, which adds netcdf-like
+    # A mixin, shared by Nc4DatasetLike and Nc4VariableLike, which adds netcdf-like
     #  attribute operations'ncattrs / setncattr / getncattr', *AND* extends the local
     #  objects attribute to those things also
     # N.B. "self._ncdata" is the underlying NcData object : either an NcDataset or
@@ -67,7 +68,7 @@ class _Nc4DatalikeWithNcattrs:
             self.setncattr(attr, value)
 
 
-class _Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
+class Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
     _local_instance_props = ("_ncdata", "variables")
 
     def __init__(self, ncdata: NcDataset = None):
@@ -77,7 +78,7 @@ class _Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
         # N.B. we need to create + store our OWN variables, as they are wrappers for
         #  the underlying NcVariable objects, with different properties.
         self.variables = {
-            name: _Nc4VariableLike._from_ncvariable(ncvar)
+            name: Nc4VariableLike._from_ncvariable(ncvar)
             for name, ncvar in self._ncdata.variables.items()
         }
 
@@ -116,7 +117,7 @@ class _Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
         #  to do it.
         self._ncdata.variables[varname] = ncvar
         # Create a netCDF4-like "wrapper" variable + install that here.
-        nc4var = _Nc4VariableLike._from_ncvariable(ncvar, dtype=datatype)
+        nc4var = Nc4VariableLike._from_ncvariable(ncvar, dtype=datatype)
         self.variables[varname] = nc4var
         return nc4var
 
@@ -137,7 +138,7 @@ class _Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
         return "<Nc4DatasetLike>"
 
 
-class _Nc4VariableLike(_Nc4DatalikeWithNcattrs):
+class Nc4VariableLike(_Nc4DatalikeWithNcattrs):
     _local_instance_props = ("_ncdata", "name", "datatype", "_raw_array")
 
     def __init__(self, ncvar: NcVariable, datatype: np.dtype):

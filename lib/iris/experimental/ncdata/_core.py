@@ -26,20 +26,20 @@ import xarray as xr
 #
 
 
-class NcGroup:
+class NcData:
     def __init__(
         self,
         name: Optional[str] = None,
         dimensions: Dict[str, "NcDimension"] = None,
         variables: Dict[str, "NcVariable"] = None,
         attributes: Dict[str, "NcAttribute"] = None,
-        groups: Dict[str, "NcGroup"] = None,
+        groups: Dict[str, "NcData"] = None,
     ):
         self.name: str = name
         self.dimensions: Dict[str, "NcDimension"] = dimensions or {}
         self.variables: Dict[str, "NcVariable"] = variables or {}
         self.attributes: Dict[str, "NcAttribute"] = attributes or {}
-        self.groups: Dict[str, "NcGroup"] = groups or {}
+        self.groups: Dict[str, "NcData"] = groups or {}
 
 
 class NcDimension:
@@ -56,7 +56,7 @@ class NcVariable:
         data: np.ndarray = None,
         dtype: np.dtype = None,
         attributes: Dict[str, "NcAttribute"] = None,
-        group: "NcGroup" = None,
+        group: "NcData" = None,
     ):
         self.name = name
         self.dimensions = tuple(dimensions or ())
@@ -97,8 +97,8 @@ class NcAttribute:
         return result
 
 
-class NcDataset(NcGroup):
-    # An interface class providing an NcGroup which can be converted to/from an
+class NcDataset(NcData):
+    # An interface class providing an NcData which can be converted to/from an
     # xr.Dataset.  This is basically done by adding a small API enabling it to function
     # as an Xarray "AbstractDataStore".
     # This implies some embedded knowledge of Xarray, but it is very small.

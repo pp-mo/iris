@@ -4,24 +4,20 @@
 # See COPYING and COPYING.LESSER in the root of the repository for full
 # licensing details.
 """
-Experimental code fror interchanging data with Xarray .
+An abstract representation of Netcdf structured data, according to the
+"Common Data Model" : https://docs.unidata.ucar.edu/netcdf-java/5.3/userguide/common_data_model_overview.html
 
-
-TODO: replace this with various changes:
-  * move Iris-agnostic code outside Iris
-      - into its own repo (where it can be better tested)
-      - leaving **only** the 'to_xarray' and 'from_xarray' functions.
+TODO:
   * add consistency checking
-  * add "direct" netcdf interfacing, i.e. NcDataset.to_nc/from_nc
+  * add "direct" netcdf interfacing, i.e. to_nc4/from_nc4
 
 """
 import iris
 from iris.cube import CubeList
 import iris.fileformats.netcdf as ifn
 
-from ..ncdata.dataset_like import Nc4DatasetLike
-from ..ncdata.xarray import from_xarray as ncdata_from_xarray
-from ..ncdata.xarray import to_xarray as ncdata_to_xarray
+from .dataset_like import Nc4DatasetLike
+from .xarray import from_xarray, to_xarray
 
 #
 # The primary conversion interfaces
@@ -29,7 +25,7 @@ from ..ncdata.xarray import to_xarray as ncdata_to_xarray
 
 
 def cubes_from_xarray(xrds: "xarray.Dataset", **xr_load_kwargs):  # noqa
-    ncdata = ncdata_from_xarray(xrds, **xr_load_kwargs)
+    ncdata = from_xarray(xrds, **xr_load_kwargs)
     dslike = Nc4DatasetLike(ncdata)
     cubes = CubeList(ifn.load_cubes(dslike))
     return cubes
@@ -42,5 +38,5 @@ def cubes_to_xarray(cubes, iris_save_kwargs=None, xr_save_kwargs=None):
     iris.save(
         cubes, nc4like, saver=iris.fileformats.netcdf.save, **iris_save_kwargs
     )
-    xrds = ncdata_to_xarray(nc4like._ncdata, **xr_save_kwargs)
+    xrds = to_xarray(**xr_save_kwargs)
     return xrds
