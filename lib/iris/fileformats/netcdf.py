@@ -618,22 +618,32 @@ def _get_cf_var_data(cf_var, filename):
     # Get lazy chunked data out of a cf variable.
     dtype = _get_actual_dtype(cf_var)
 
-    # Create cube with deferred data, but no metadata
-    fill_value = getattr(
-        cf_var.cf_data,
-        "_FillValue",
-        netCDF4.default_fillvals[cf_var.dtype.str[1:]],
-    )
-    proxy = NetCDFDataProxy(
-        cf_var.shape, dtype, filename, cf_var.cf_name, fill_value
-    )
-    # Get the chunking specified for the variable : this is either a shape, or
-    # maybe the string "contiguous".
-    chunks = cf_var.cf_data.chunking()
-    # In the "contiguous" case, pass chunks=None to 'as_lazy_data'.
-    if chunks == "contiguous":
-        chunks = None
-    return as_lazy_data(proxy, chunks=chunks)
+    # Shortcut for 'emulated' netcdf data loading
+    if hasattr(cf_var.cf_data, "_raw_array"):
+        # This is a emulated variable, which simply stores an array (possibly lazy)
+        result = cf_var.cf_data._raw_array
+    else:
+        # A 'real' netCDF4.Variable : create a lazy proxy
+        # Create cube with deferred data, but no metadata
+        fill_value = getattr(
+            cf_var.cf_data,
+            "_FillValue",
+            netCDF4.default_fillvals[cf_var.dtype.str[1:]],
+        )
+        proxy = NetCDFDataProxy(
+            cf_var.shape, dtype, filename, cf_var.cf_name, fill_value
+        )
+
+        # Get the chunking specified for the variable : this is either a shape, or
+        # maybe the string "contiguous".
+        chunks = cf_var.cf_data.chunking()
+        # In the "contiguous" case, pass chunks=None to 'as_lazy_data'.
+        if chunks == "contiguous":
+            chunks = None
+
+        result = as_lazy_data(proxy, chunks=chunks)
+
+    return result
 
 
 class _OrderedAddableList(list):
@@ -3015,8 +3025,22 @@ class Saver:
             #  contains just 1 row, so the cf_var is 1D.
             data = data.squeeze(axis=0)
 
-        if is_lazy_data(data):
+        if hasattr(cf_var, "_raw_array"):
+            # The target is not an actual netCDF4.Variable in a file, but an emulation
+            #  object which can store an arraylike (including lazy) directly.
+            # -  transfer the array without any copying (or realisation).
+            def store(data, cf_var, fill_value):
+                # Store the data directly on the Variable-like object.
+                cf_var._raw_array = data
+                # TODO: for now, just ignore any possible masking issues here, because
+                #  it is tricky, at least for lazy data.  In future, we should deal
+                #  with this properly.
+                is_masked, contains_fill_value = False, False
+                return is_masked, contains_fill_value
 
+        elif is_lazy_data(data):
+            # Storing lazy data to an actual netCDF4.Variable in a file.
+            #   - use streaming.
             def store(data, cf_var, fill_value):
                 # Store lazy data and check whether it is masked and contains
                 # the fill value
@@ -3025,7 +3049,8 @@ class Saver:
                 return target.is_masked, target.contains_value
 
         else:
-
+            # Storing real data to an actual netCDF4.Variable in a file.
+            #   - just write the data.
             def store(data, cf_var, fill_value):
                 cf_var[:] = data
                 is_masked = np.ma.is_masked(data)
