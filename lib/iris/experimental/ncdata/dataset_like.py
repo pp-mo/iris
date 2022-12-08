@@ -10,7 +10,7 @@ This is provided primarily to support a re-use of the iris.fileformats.netcdf fi
 format load + save, to convert cubes to+from ncdata objects, and hence convert Iris
  cubes to+from an xarray.Dataset.
 
-These classes contain NcDataset and NcVariables, but emulating the access APIs of a
+These classes contain NcData and NcVariables, but emulating the access APIs of a
 netCDF4.Dataset.
 
 Note: currently only supports what is required for Iris load/save capability.
@@ -21,14 +21,14 @@ additional methods might be used.
 """
 import numpy as np
 
-from ._core import NcAttribute, NcDataset, NcDimension, NcVariable
+from ._core import NcAttribute, NcData, NcDimension, NcVariable
 
 
 class _Nc4DatalikeWithNcattrs:
     # A mixin, shared by Nc4DatasetLike and Nc4VariableLike, which adds netcdf-like
-    #  attribute operations'ncattrs / setncattr / getncattr', *AND* extends the local
+    #  attribute operations 'ncattrs / setncattr / getncattr', *AND* extends the local
     #  objects attribute to those things also
-    # N.B. "self._ncdata" is the underlying NcData object : either an NcDataset or
+    # N.B. "self._ncdata" is the underlying NcData object : either an NcData or
     #  NcVariable object.
     def ncattrs(self):
         return list(self._ncdata.attributes.keys())
@@ -71,9 +71,9 @@ class _Nc4DatalikeWithNcattrs:
 class Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
     _local_instance_props = ("_ncdata", "variables")
 
-    def __init__(self, ncdata: NcDataset = None):
+    def __init__(self, ncdata: NcData = None):
         if ncdata is None:
-            ncdata = NcDataset()  # an empty dataset
+            ncdata = NcData()  # an empty dataset
         self._ncdata = ncdata
         # N.B. we need to create + store our OWN variables, as they are wrappers for
         #  the underlying NcVariable objects, with different properties.
@@ -107,7 +107,7 @@ class Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
         if varname in self.variables:
             msg = f'creating duplicate variable "{varname}".'
             raise ValueError(msg)
-        # Add a variable into the underlying NcDataset object.
+        # Add a variable into the underlying NcData object.
         ncvar = NcVariable(
             name=varname,
             dimensions=dimensions,
@@ -131,7 +131,7 @@ class Nc4DatasetLike(_Nc4DatalikeWithNcattrs):
     def filepath():
         #
         # Note: for now, let's just not care about this.
-        # we *might* need this to be an optinoal defined item on an NcDataset ??
+        # we *might* need this to be an optional defined item on an NcData ??
         # .. or, we ight need to store an xarray "encoding" somewhere ?
         # TODO: more thought here ?
         # return self.ncdata.encoding.get("source", "")
