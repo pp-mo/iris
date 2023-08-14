@@ -140,12 +140,19 @@ class _NamedTupleMeta(ABCMeta):
         return super().__new__(mcs, name, bases, namespace)
 
 
-# "Extended" dictionary access, for dict-like operations which worj with regular dicts,
-# but in specific extended ways for 'CubeAttrsDict' style split dictionaries
 #
-# NOTE: the idea here is to treat a split-dictionary like one whose
+# "Extended" dictionary access, for dict-like operations which work with regular dicts,
+#  but in specific extended ways for 'CubeAttrsDict' style split dictionaries
+#
+# The idea here is to convert a split-dictionary into a "plain" one for calculations,
+#  whose keys are all pairs of the form ('global', <keyname>) or ('local', <keyname>).
+# And to convert back again after the operation, if the result is a dictionary.
+# For "strict" operations this probably does all that is needed.  For lenient ones,
+#  it's not so clear whether local+global keys with the same attribute name "should",
+#  in some cases, affect one another in some ways
 #
 def xd_is_split(dic):
+    """Detect whether a dictionary is a "split-attribute" type."""
     return hasattr(dic, " globals") and hasattr(dic, "locals")
 
 
@@ -156,16 +163,10 @@ def _global_local_items(dic):
         yield ("local", key), value
 
 
-def xd_splititems(dic):
-    if xd_is_split(dic):
-        result = _global_local_items(dic)
-    else:
-        result = dic.items()
-    return result
-
-
 def xd_to_normal(dic):
-    # Return the input if a 'normal' dict, or converted-to-normal if a split-attrs dict
+    """
+    Convert the input to a 'normal' dict with paired keys, if it is split-attrs type
+    """
     if xd_is_split(dic):
         result = dict(_global_local_items(dic))
     else:
@@ -174,39 +175,57 @@ def xd_to_normal(dic):
 
 
 def xd_from_normal(dic):
-    # Return the input if a 'normal' dict, or a converted form if a split attrs-dict
+    """
+    Convert the input to a split-attrs dict, if it has global//local paired keys.
+    """
     result = dic
+    is_first_key = True
     for key, value in dic.items():
-        if (
-            isinstance(key, tuple)
-            and len(key) == 2
-            and key[0] in ("global", "local")
-        ):
-            from iris.cube import CubeAttrsDict
+        if is_first_key:
+            if (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and key[0] in ("global", "local")
+            ):
+                # Input passes a "duck type" test for being a split dictionary.
+                # For now at least, this can *only* be a CubeAttrsDict.
+                from iris.cube import CubeAttrsDict
 
-            result = CubeAttrsDict()
+                # produce a split result
+                result = CubeAttrsDict()
+                # expect all keys to be 'split type'
+                is_first_key = False
+            else:
+                # Input is a "normal" dict : return it unchanged
+                break
+
+        # From here on, we are converting items to a 'split' dict.
+        # Assign the items with paired keys into global+local parts.
+        keytype, keyname = key
+        if keytype == "global":
+            result.globals[keyname] = value
         else:
-            break
-        # From here, we are definitely converting a regular into a 'split' dict
-        assert key[0] in ("global", "local")
-        if key[0] == "global":
-            result.globals[key[1]] = value
-        else:
-            result.locals[key[1]] = value
+            assert keytype == "local"
+            result.locals[keyname] = value
+
     return result
 
 
 def xd_normalise_input_pair(left, right):
-    # N.B. *always* deepcopy (as all our callers used to)
+    """Work out whether inputs are "split" type, and convert if so."""
     is_split = xd_is_split(left)
     if is_split:
         assert xd_is_split(right)
         left = xd_to_normal(left)
         right = xd_to_normal(right)
+    else:
+        assert not xd_is_split(right)
+
     return is_split, left, right
 
 
 def xd_reconvert_output(is_split, result):
+    """Re-form a 'split dict' result from a dict with paired keys, if needed."""
     if is_split:
         result = xd_from_normal(result)
     return result
