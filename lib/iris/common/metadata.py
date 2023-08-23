@@ -153,7 +153,7 @@ class _NamedTupleMeta(ABCMeta):
 #
 def xd_is_split(dic):
     """Detect whether a dictionary is a "split-attribute" type."""
-    return hasattr(dic, " globals") and hasattr(dic, "locals")
+    return hasattr(dic, "globals") and hasattr(dic, "locals")
 
 
 def _global_local_items(dic):

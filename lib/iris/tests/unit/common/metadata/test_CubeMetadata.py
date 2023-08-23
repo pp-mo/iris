@@ -20,6 +20,7 @@ import pytest
 
 from iris.common.lenient import _LENIENT, _qualname
 from iris.common.metadata import BaseMetadata, CubeMetadata
+from iris.cube import CubeAttrsDict
 
 
 def _make_metadata(
@@ -101,6 +102,33 @@ def fieldname(request):
 @pytest.fixture(params=["strict", "lenient"])
 def op_leniency(request):
     return request.param
+
+
+_ATTRS_TESTCASE_INPUTS = {
+    "same": "GaLb:GaLb",
+    "extra_global": "GaL-:G-L-",
+    "extra_local": "G-La:G-L-",
+    "same_global_local": "GaL-:G-La",
+    "diff_global_local": "GaL-:G-Lb",
+    "diffglobal_nolocal": "GaL-:Gb/L-",
+    "diffglobal_samelocal": "GaLc:GbLc",
+    "difflocal_noglobal": "G-La:G-/Lb",
+    "difflocal_sameglobal": "GaLc:GaLd",
+    "diff_local_and_global": "GaLc:GbLd",
+}
+_ATTRS_TESTCASE_NAMES = list(_ATTRS_TESTCASE_INPUTS)
+
+
+def attrs_check(check_testcase: str, check_lenient: bool, cases: dict):
+    # cases.keys() are the testcase names -- should match the master table
+    assert cases.keys() == _ATTRS_TESTCASE_INPUTS.keys()
+    # Each case is recorded as testcase: (<input>, [*output])
+    # The 'input' is just for readability: it should match that in the master table.
+    assert all(
+        cases[key][0] == _ATTRS_TESTCASE_INPUTS[key]
+        for key in _ATTRS_TESTCASE_INPUTS
+    )
+    # Perform the configured check, and check that the results are as expected.
 
 
 class Test___eq__:
@@ -455,6 +483,112 @@ class Test_combine:
             # Check both l+r and r+l
             assert lmetadata.combine(rmetadata)._asdict() == expected
             assert rmetadata.combine(lmetadata)._asdict() == expected
+
+    def test_op_different__attribute_extra_global(self, op_leniency):
+        # One field has an extra attribute, both strict + lenient.
+        is_lenient = op_leniency == "lenient"
+
+        self.lvalues["attributes"] = CubeAttrsDict(
+            globals={"_a_common_": mock.sentinel.dummy_a},
+            locals={"_b_common_": mock.sentinel.dummy_b},
+        )
+        self.rvalues["attributes"] = self.lvalues["attributes"].copy()
+        self.rvalues["attributes"].globals["_extra_"] = mock.sentinel.testvalue
+        lmetadata = self.cls(**self.lvalues)
+        rmetadata = self.cls(**self.rvalues)
+
+        if is_lenient:
+            # the extra attribute should appear in the result ..
+            expected = self.rvalues
+        else:
+            # .. it should not
+            expected = self.lvalues
+
+        with mock.patch(
+            "iris.common.metadata._LENIENT", return_value=is_lenient
+        ):
+            # Check both l+r and r+l
+            assert lmetadata.combine(rmetadata)._asdict() == expected
+            assert rmetadata.combine(lmetadata)._asdict() == expected
+
+    def test_op_different__attribute_extra_local(self, op_leniency):
+        # One field has an extra attribute, both strict + lenient.
+        is_lenient = op_leniency == "lenient"
+
+        self.lvalues["attributes"] = CubeAttrsDict(
+            globals={"_a_common_": mock.sentinel.dummy_a},
+            locals={"_b_common_": mock.sentinel.dummy_b},
+        )
+        self.rvalues["attributes"] = self.lvalues["attributes"].copy()
+        self.rvalues["attributes"].locals["_extra_"] = mock.sentinel.testvalue
+        lmetadata = self.cls(**self.lvalues)
+        rmetadata = self.cls(**self.rvalues)
+
+        if is_lenient:
+            # the extra attribute should appear in the result ..
+            expected = self.rvalues
+        else:
+            # .. it should not
+            expected = self.lvalues
+
+        with mock.patch(
+            "iris.common.metadata._LENIENT", return_value=is_lenient
+        ):
+            # Check both l+r and r+l
+            assert lmetadata.combine(rmetadata)._asdict() == expected
+            assert rmetadata.combine(lmetadata)._asdict() == expected
+
+    def test_op_different__attribute_same_global_local(self, op_leniency):
+        # One field has an extra attribute, both strict + lenient.
+        is_lenient = op_leniency == "lenient"
+
+        common_attrs = CubeAttrsDict(
+            globals={"_a_common_": mock.sentinel.dummy_a},
+            locals={"_b_common_": mock.sentinel.dummy_b},
+        )
+        self.lvalues["attributes"] = deepcopy(common_attrs)
+        self.rvalues["attributes"] = deepcopy(common_attrs)
+        basis_metadata = self.cls(**deepcopy(self.lvalues))
+        self.lvalues["attributes"].globals["_extra_"] = mock.sentinel.v1
+        self.rvalues["attributes"].locals["_extra_"] = mock.sentinel.v2
+        lmetadata = self.cls(**self.lvalues)
+        rmetadata = self.cls(**self.rvalues)
+
+        expected = basis_metadata._asdict()
+        if is_lenient:
+            # BOTH extra attributes should appear in the result ..
+            expected["attributes"].globals.update(
+                self.lvalues["attributes"].globals
+            )
+            expected["attributes"].locals.update(
+                self.rvalues["attributes"].locals
+            )
+
+        with mock.patch(
+            "iris.common.metadata._LENIENT", return_value=is_lenient
+        ):
+            # Check both l+r and r+l
+            assert lmetadata.combine(rmetadata)._asdict() == expected
+            assert rmetadata.combine(lmetadata)._asdict() == expected
+
+    @pytest.mark.parametrize("testcase", _ATTRS_TESTCASE_NAMES)
+    def test_op__attributes_cases(self, op_leniency, testcase):
+        attrs_check(
+            check_testcase=testcase,
+            check_lenient=op_leniency == "lenient",
+            cases={
+                "same": ("GaLb:GaLb", ["GaLb"]),
+                "extra_global": ("GaL-:G-L-", ["G-L-", "GaL-"]),
+                "extra_local": ("G-La:G-L-", ["G-L-", "G-La"]),
+                "same_global_local": ("GaL-:G-La", ["G-L-", "GaLa"]),
+                "diff_global_local": ("GaL-:G-Lb", ["G-L-", "GaLb"]),
+                "diffglobal_nolocal": ("GaL-:Gb/L-", ["G-L-"]),
+                "diffglobal_samelocal": ("GaLc:GbLc", ["G-Lc"]),
+                "difflocal_noglobal": ("G-La:G-/Lb", ["G-L-"]),
+                "difflocal_sameglobal": ("GaLc:GaLd", ["GaL-"]),
+                "diff_local_and_global": ("GaLc:GbLd", ["G-L-"]),
+            },
+        )
 
 
 class Test_difference:
