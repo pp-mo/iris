@@ -308,8 +308,8 @@ class LoadPolicy(threading.local):
             options = self.SETTINGS[options]
         elif not isinstance(options, Mapping):
             msg = (
-                f"Invalid arg options='{options!r}' : "
-                f"must be a dict, or one of {self.SETTINGS.keys()}"
+                f"Invalid arg options={options!r} : "
+                f"must be a dict, or one of {tuple(self.SETTINGS.keys())}"
             )
             raise ValueError(msg)
 
