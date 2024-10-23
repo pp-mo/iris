@@ -35,8 +35,8 @@ class Test(tests.IrisTest):
     def test_callable_function(self):
         import iris
 
-        result = _qualname(iris.load)
-        self.assertEqual(result, "iris.load")
+        result = _qualname(iris.sample_data_path)
+        self.assertEqual(result, "iris.sample_data_path")
 
     def test_callable_method_local(self):
         class MyClass:
