@@ -4,8 +4,9 @@
 # See LICENSE in the root of the repository for full licensing details.
 """Unit tests for the :mod:`iris.io.loading.LoadPolicy` package."""
 
-import re
 from unittest import mock
+
+import pytest
 
 from iris.io.loading import LoadPolicy
 
@@ -67,33 +68,21 @@ class Test_set:
 
     def test_arg_bad_dict(self):
         options = LoadPolicy()
-        msg = ""
-        try:
-            options.set({"junk": "invalid"})
-        except ValueError as err:
-            msg = str(err)
         expected = "Unknown options.*'junk'.* : valid options are"
-        assert re.search(expected, msg)
+        with pytest.raises(ValueError, match=expected):
+            options.set({"junk": "invalid"})
 
     def test_arg_bad_string(self):
         options = LoadPolicy()
-        msg = ""
-        try:
-            options.set("unknown")
-        except ValueError as err:
-            msg = str(err)
         expected = "Invalid arg options='unknown' : must be a dict, or one of"
-        assert re.search(expected, msg)
+        with pytest.raises(TypeError, match=expected):
+            options.set("unknown")
 
     def test_arg_bad_type(self):
         options = LoadPolicy()
-        msg = ""
-        try:
-            options.set((1, 2, 3))
-        except ValueError as err:
-            msg = str(err)
         expected = "must be a dict, or one of"
-        assert re.search(expected, msg)
+        with pytest.raises(TypeError, match=expected):
+            options.set((1, 2, 3))
 
     def test_kwargs(self):
         options = LoadPolicy()
@@ -119,14 +108,9 @@ class Test_set:
 
     def test_bad_kwarg(self):
         options = LoadPolicy()
-        msg = ""
-        try:
-            options.set({"junk": "invalid"})
-        except ValueError as err:
-            msg = str(err)
-
         expected = "Unknown options.*'junk'.* : valid options are"
-        assert re.search(expected, msg)
+        with pytest.raises(ValueError, match=expected):
+            options.set({"junk": "invalid"})
 
 
 class Test_AttributeAccess:
@@ -138,13 +122,9 @@ class Test_AttributeAccess:
 
     def test_getattr_badname(self):
         options = LoadPolicy()
-        msg = ""
-        try:
-            options.unknown
-        except AttributeError as err:
-            msg = str(err)
         expected = "'LoadPolicy' object has no attribute 'unknown'"
-        assert re.search(expected, msg)
+        with pytest.raises(AttributeError, match=expected):
+            options.unknown
 
     def test_setattr(self):
         options = LoadPolicy(merge_concat_sequence="m")
@@ -153,20 +133,12 @@ class Test_AttributeAccess:
 
     def test_setattr_badname(self):
         options = LoadPolicy()
-        msg = ""
-        try:
+        expected = "LoadPolicy object has no property 'anyold_property'"
+        with pytest.raises(KeyError, match=expected):
             options.anyold_property = "x"
-        except KeyError as err:
-            msg = str(err)
-        expected = "LoadPolicy object has no property.*'anyold_property'"
-        assert re.search(expected, msg)
 
     def test_setattr_badvalue(self):
         options = LoadPolicy()
-        msg = ""
-        try:
-            options.merge_concat_sequence = "mcm"
-        except ValueError as err:
-            msg = str(err)
         expected = "'mcm' is not a valid.*merge_concat_sequence : must be one of"
-        assert re.search(expected, msg)
+        with pytest.raises(ValueError, match=expected):
+            options.merge_concat_sequence = "mcm"

@@ -311,7 +311,7 @@ class LoadPolicy(threading.local):
                 f"Invalid arg options={options!r} : "
                 f"must be a dict, or one of {tuple(self.SETTINGS.keys())}"
             )
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         # Override any options with keywords
         options.update(**kwargs)
@@ -405,16 +405,40 @@ def combine_cubes(cubes, options=None, merge_require_unique=False, **kwargs):
 
     Returns
     -------
-    list of :class:`~iris.cube.Cube`
+    :class:`~iris.cube.CubeList`
 
     .. Note::
         The ``support_multiple_references`` keyword/property has no effect on the
         :func:`combine_cubes` operation : it only takes effect during a load operation.
 
     """
-    if not options:
+    from iris.cube import CubeList
+
+    if isinstance(options, str):
+        # string arg names a standard "settings"
+        options = LoadPolicy.SETTINGS.get(options)
+        if options is None:
+            msg = (
+                f"options={options!r} is not a valid settings name : "
+                f"must be one of {tuple(LoadPolicy.SETTINGS)}."
+            )
+            raise ValueError(msg)
+    elif options is None:
+        # empty arg gets current defaults
         options = LOAD_POLICY.settings()
+    elif isinstance(options, dict):
+        # dict arg overrides the current defaults
+        settings = LOAD_POLICY.settings()
+        settings.update(options)
+        options = settings
+    else:
+        msg = f"Bad 'options' arg {options!r} : " "type must be None, dict or str."
+        raise TypeError(msg)
+
     options.update(kwargs)
+
+    if not isinstance(cubes, CubeList):
+        cubes = CubeList(cubes)
 
     while True:
         n_original_cubes = len(cubes)
