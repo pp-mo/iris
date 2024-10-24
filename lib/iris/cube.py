@@ -634,6 +634,67 @@ class CubeList(list):
             check_derived_coords=check_derived_coords,
         )
 
+    def combine(self, options=None, merge_require_unique=False, **kwargs):
+        """Combine cubes according to :class:`iris~.io.loading.LoadPolicy` options.
+
+        Applies a :meth:`combine`.
+
+        Parameters
+        ----------
+        options : dict or str
+            Settings, as described for :meth:`iris.LOAD_POLICY.set`.
+            Defaults to current :meth:`iris.LOAD_POLICY.settings`.
+        merge_require_unique : bool
+            Value for the 'unique' keyword in any merge operations.
+        kwargs : dict
+            Individual settings, as described for :meth:`iris.LOAD_POLICY.set`.
+
+        Returns
+        -------
+        CubeList of :class:`~iris.cube.Cube`
+
+        .. Note::
+            The ``support_multiple_references`` keyword/property has no effect on the
+            :func:`combine_cubes` operation : it only takes effect during a load operation.
+
+        """
+        from iris.io.loading import combine_cubes
+
+        return combine_cubes(
+            self, options=options, merge_require_unique=merge_require_unique, **kwargs
+        )
+
+    def combine_cube(self, options=None, merge_require_unique=False, **kwargs):
+        """Combine cubes as for :meth:`combine`, expecting a single cube result.
+
+        Parameters
+        ----------
+        options : dict or str
+            Settings, as for :meth:`combine`.
+        merge_require_unique : bool
+            Value for the 'unique' keyword in any merge operations.
+        kwargs : dict
+            Individual settings, as for :meth:`combine`.
+
+        Returns
+        -------
+        CubeList of :class:`~iris.cube.Cube`
+
+        """
+        from iris.io.loading import combine_cubes
+
+        result = combine_cubes(
+            self, options=options, merge_require_unique=merge_require_unique, **kwargs
+        )
+        n_cubes = len(result)
+        if n_cubes == 1:
+            (result,) = result
+        elif n_cubes == 0:
+            raise ValueError("'combine' returned no cubes.")
+        else:
+            raise ValueError(f"'combine' result is not a single cube : {result!r}.")
+        return result
+
     def realise_data(self):
         """Fetch 'real' data for all cubes, in a shared calculation.
 
