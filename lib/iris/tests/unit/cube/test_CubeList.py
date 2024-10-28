@@ -4,6 +4,8 @@
 # See LICENSE in the root of the repository for full licensing details.
 """Unit tests for the `iris.cube.CubeList` class."""
 
+import pytest
+
 # Import iris.tests first so that some things can be initialised before
 # importing anything else.
 import iris.tests as tests  # isort:skip
@@ -712,6 +714,61 @@ class TestHtmlRepr:
             # "CubeListRepresentation(cubelist).repr_html()" was called exactly once, with no args
             mock.call()
         ]
+
+
+class Test_combine__apis:
+    """Confirm that CubeList.combine/combine_cube just call combine_cubes."""
+
+    def mock_combine_cubes(self):
+        def mock_call(cubes, options=None, merge_require_unique=False, **kwargs):
+            self.call_params = [cubes, options, merge_require_unique, kwargs]
+            return cubes  # used to test effect of different cases
+
+        return mock_call
+
+    def test_combine(self):
+        cubelist = CubeList([])
+        args = [
+            mock.sentinel.options,
+            mock.sentinel.merge_unique,
+        ]
+        kwargs = dict(
+            key_test_1=1,
+            key_test_2=2,
+        )
+        with mock.patch("iris.io.loading.combine_cubes", self.mock_combine_cubes()):
+            result = cubelist.combine(*args, **kwargs)
+        assert self.call_params == [cubelist] + args + [kwargs]
+        assert result == cubelist
+
+    @pytest.mark.parametrize("ncubes", [0, 1, 2], ids=["nocubes", "onecube", "ncubes"])
+    def test_combine_cube(self, ncubes):
+        """In this case, also check behaviour for result of <1 =1 >1 cubes."""
+        cubelist = CubeList(
+            [Cube([0], long_name=f"cube_{i_cube})") for i_cube in range(ncubes)]
+        )
+        args = [
+            mock.sentinel.options,
+            mock.sentinel.merge_unique,
+        ]
+        kwargs = dict(
+            key_test_1=1,
+            key_test_2=2,
+        )
+        if ncubes == 1:
+            with mock.patch("iris.io.loading.combine_cubes", self.mock_combine_cubes()):
+                result = cubelist.combine_cube(*args, **kwargs)
+            assert self.call_params == [cubelist] + args + [kwargs]
+            assert result == cubelist[0]
+        else:
+            if ncubes == 0:
+                msg = "'combine' returned no cubes"
+            else:
+                msg = "'combine' result is not a single cube"
+
+            with mock.patch("iris.io.loading.combine_cubes", self.mock_combine_cubes()):
+                with pytest.raises(ValueError, match=msg):
+                    result = cubelist.combine_cube(*args, **kwargs)
 
 
 if __name__ == "__main__":
