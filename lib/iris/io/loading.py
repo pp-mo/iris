@@ -409,7 +409,7 @@ def combine_cubes(cubes, options=None, merge_require_unique=False, **kwargs):
         Defaults to current :meth:`iris.LOAD_POLICY.settings`.
     merge_require_unique : bool, default False
         Value applied as the 'unique' keyword in any merge operations.
-        See :method:`~iris.cube.CubeList.merge`.
+        See :meth:`~iris.cube.CubeList.merge`.
     kwargs : dict
         Individual option values.  These take precedence over the 'options' arg, as
         described for :meth:`iris.LOAD_POLICY.set`.
