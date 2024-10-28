@@ -391,8 +391,11 @@ class LoadPolicy(threading.local):
 LOAD_POLICY = LoadPolicy()
 
 
-def _combine_cubes(cubes, options, merge_require_unique):
+def combine_cubes(cubes, options=None, merge_require_unique=False, **kwargs):
     """Combine cubes as for load, according to "loading policy" options.
+
+    This provides a facility like merge/concatenate, but with more flexibiity.
+    See :class:`iris.LoadPolicy` for details.
 
     Applies :meth:`~iris.cube.CubeList.merge`/:meth:`~iris.cube.CubeList.concatenate`
     steps to the given cubes, as determined by the 'settings'.
@@ -401,32 +404,58 @@ def _combine_cubes(cubes, options, merge_require_unique):
     ----------
     cubes : list of :class:`~iris.cube.Cube`
         A list of cubes to combine.
-    options : dict
-        Settings, as described for :meth:`iris.LOAD_POLICY.set`.
+    options : dict or str, optional
+        Operation settings, as described for :meth:`iris.LOAD_POLICY.set`.
         Defaults to current :meth:`iris.LOAD_POLICY.settings`.
-    merge_require_unique : bool
-        Value for the 'unique' keyword in any merge operations.
+    merge_require_unique : bool, default False
+        Value applied as the 'unique' keyword in any merge operations.
+        See :method:`~iris.cube.CubeList.merge`.
+    kwargs : dict
+        Individual option values.  These take precedence over the 'options' arg, as
+        described for :meth:`iris.LOAD_POLICY.set`.
 
     Returns
     -------
     :class:`~iris.cube.CubeList`
 
     .. Note::
-        The ``support_multiple_references`` keyword/property has no effect on the
-        :func:`_combine_cubes` operation : it only takes effect during a load operation.
-
-    Notes
-    -----
-    TODO: make this public API in future.
-    At that point, change the API to support (options=None, **kwargs) + add testing of
-    those modes (notably arg type = None / str / dict).
-
+        A ``support_multiple_references`` keyword/property is a valid setting, but it
+        has no effect on a :func:`combine_cubes` call, because it only acts during a
+        load operation.
     """
     from iris.cube import CubeList
 
     if not isinstance(cubes, CubeList):
         cubes = CubeList(cubes)
 
+    err = None
+    if options is None:
+        options = LOAD_POLICY.settings()
+    elif isinstance(options, str):
+        if options in LoadPolicy.SETTINGS:
+            options = LoadPolicy.SETTINGS[options]
+        else:
+            err = (
+                "Unrecognised settings name : expected one of "
+                f"{tuple(LoadPolicy.SETTINGS)}."
+            )
+    elif not isinstance(options, Mapping):
+        err = (
+            f"Unexpected 'options' arg {options!r} : "
+            "expected a None, Mapping or string."
+        )
+
+    if err:
+        raise ValueError(err)
+
+    if kwargs:
+        options = options.copy()  # do not modify the baseline settings !
+        options.update(kwargs)
+
+    return _combine_cubes_inner(cubes, options, merge_require_unique)
+
+
+def _combine_cubes_inner(cubes, options, merge_require_unique):
     while True:
         n_original_cubes = len(cubes)
         sequence = options["merge_concat_sequence"]
@@ -449,7 +478,7 @@ def _combine_cubes(cubes, options, merge_require_unique):
 
 
 def _combine_load_cubes(cubes, merge_require_unique=False):
-    # A special version to call _combine_cubes while also implementing the
+    # A special version to call combine_cubes while also implementing the
     # _MULTIREF_DETECTION behaviour
     options = LOAD_POLICY.settings()
     if (
@@ -462,7 +491,7 @@ def _combine_load_cubes(cubes, merge_require_unique=False):
         if _MULTIREF_DETECTION.found_multiple_refs:
             options["merge_concat_sequence"] += "c"
 
-    return _combine_cubes(cubes, options, merge_require_unique=merge_require_unique)
+    return combine_cubes(cubes, options, merge_require_unique=merge_require_unique)
 
 
 def load(uris, constraints=None, callback=None):

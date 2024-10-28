@@ -10,10 +10,12 @@ TODO: when function is public API, extend testing to the extended API options,
 i.e. different types + defaulting of the 'options' arg, and **kwargs support.
 """
 
+from unittest import mock
+
 import pytest
 
-from iris import LoadPolicy
-from iris.io.loading import _combine_cubes
+from iris import LOAD_POLICY, LoadPolicy
+from iris.io.loading import combine_cubes
 from iris.tests.unit.io.loading.test_load_functions import cu
 
 
@@ -23,15 +25,7 @@ def options(request):
     return request.param  # Return the name of the attribute to test.
 
 
-# Interface to convert settings-name / kwargs into an options dict,
-# TODO: remove this wrapper when the API of "combine_cubes" is opened up.
-def combine_cubes(cubes, settings_name="default", **kwargs):
-    options = LoadPolicy.SETTINGS[settings_name]
-    options.update(kwargs)
-    return _combine_cubes(cubes, options, merge_require_unique=False)
-
-
-class Test:
+class Test_function:
     def test_mergeable(self, options):
         c1, c2 = cu(t=1), cu(t=2)
         c12 = cu(t=(1, 2))
@@ -88,3 +82,62 @@ class Test:
         input_cubes = [c1, c2]
         result = combine_cubes(input_cubes, options)
         assert result == input_cubes  # can't do this at present
+
+
+class Test_api:
+    """Check how combine options can be controlled, a variety of different ways."""
+
+    @pytest.fixture(params=["unique", "nonunique"], autouse=True)
+    def mergeunique(self, request):
+        # We repeat each test with merge=True and merge=False.
+        # The active option is stored on the test instance.
+        self.merge_unique = request.param == "unique"
+        yield
+
+    def check_call(self, *args, **kwargs):
+        def _capture_combine_inner(cubes, options, merge_require_unique):
+            # A routine which replaces "_combine_cubes_inner" for interface testing.
+            self.call_args = (options, merge_require_unique)
+
+        cubes = []  # a dummy arg : we don't care about the cubes in these tests
+        with mock.patch("iris.io.loading._combine_cubes_inner", _capture_combine_inner):
+            combine_cubes(
+                cubes, *args, merge_require_unique=self.merge_unique, **kwargs
+            )
+
+        return self.call_args
+
+    def test_default(self, mergeunique):
+        result = self.check_call()
+        assert result == (LOAD_POLICY.settings(), self.merge_unique)
+
+    def test_keys(self, mergeunique):
+        assert LOAD_POLICY.settings()["repeat_until_unchanged"] is False
+        result = self.check_call(repeat_until_unchanged=True)
+        assert result[0]["repeat_until_unchanged"] is True
+
+    def test_settings_name(self, mergeunique):
+        result = self.check_call("comprehensive")
+        expected = (LoadPolicy.SETTINGS["comprehensive"], self.merge_unique)
+        assert result == expected
+
+    def test_settings_name_withkeys(self, mergeunique):
+        result = self.check_call("legacy", merge_concat_sequence="c")
+        expected = LoadPolicy.SETTINGS["legacy"].copy()
+        expected["merge_concat_sequence"] = "c"
+        assert result == (expected, self.merge_unique)
+
+    def test_dict(self, mergeunique):
+        arg = LoadPolicy.SETTINGS["default"]
+        arg["repeat_until_unchanged"] = True
+        result = self.check_call(arg)
+        assert result == (arg, self.merge_unique)
+
+    def test_dict_withkeys(self, mergeunique):
+        arg = LoadPolicy.SETTINGS["default"]
+        assert arg["merge_concat_sequence"] == "m"
+        arg["repeat_until_unchanged"] = True
+        result = self.check_call(arg, merge_concat_sequence="c")
+        expected = arg.copy()
+        expected["merge_concat_sequence"] = "c"
+        assert result == (expected, self.merge_unique)
