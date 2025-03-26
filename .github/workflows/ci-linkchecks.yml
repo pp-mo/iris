@@ -19,6 +19,7 @@ jobs:
         with:
           fail: false
           args: "--verbose './docs/**/*.rst' './docs/**/*.inc'"
+          token: ${{ secrets.ACT_TOKEN }}
 
       - name: Create Issue From File
         if: steps.lychee.outputs.exit_code != 0
