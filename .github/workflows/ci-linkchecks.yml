@@ -18,7 +18,7 @@ jobs:
         uses: lycheeverse/lychee-action@v2
         with:
           fail: false
-          args: "./docs/**/*.rst"
+          args: './docs/**/*.rst' './docs/**/*.inc'
 
       - name: Create Issue From File
         if: steps.lychee.outputs.exit_code != 0
