@@ -26,10 +26,7 @@ jobs:
         with:
           title: Link Checker Report
           content-filepath: ./lychee/out.md
-          labels:
-            - "Bot"
-            - "Type: Documentation"
-            - "Type: Bug"
+          labels: "Bot, Type: Documentation, Type: Bug"
 
       - name: Fail Workflow On Link Errors
         if: steps.lychee.outputs.exit_code != 0
