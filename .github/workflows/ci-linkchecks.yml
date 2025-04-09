@@ -8,6 +8,7 @@ on:
 jobs:
   linkChecker:
     runs-on: ubuntu-latest
+    if: github.repository == 'SciTools/iris'
     permissions:
       issues: write # required for peter-evans/create-issue-from-file
     steps:
