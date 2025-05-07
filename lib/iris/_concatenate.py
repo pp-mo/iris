@@ -459,7 +459,8 @@ def _array_id(
     bound: bool,
 ) -> str:
     """Get a unique key for looking up arrays associated with coordinates."""
-    return f"{id(coord)}{bound}"
+    bound = "bounds" if bound else "points"
+    return f"{coord.name()}_{id(coord)}_{bound}"
 
 
 def _compute_hashes(
@@ -586,18 +587,34 @@ def concatenate(
     # Compute hashes for parallel array comparison.
     arrays = {}
 
+    def prarrrep(arr):
+        if isinstance(arr, da.Array):
+            result = str(arr)
+        else:
+            result = f"ndarr{arr.shape}"
+        return result
+
     def add_coords(cube_signature: _CubeSignature, coord_type: str) -> None:
         for coord_and_dims in getattr(cube_signature, coord_type):
             coord = coord_and_dims.coord
             array_id = _array_id(coord, bound=False)
             if isinstance(coord, (DimCoord, AuxCoord)):
-                arrays[array_id] = coord.core_points()
+                pts = coord.core_points()
+                arrays[array_id] = pts
+                bds = None
                 if coord.has_bounds():
                     bound_array_id = _array_id(coord, bound=True)
-                    arrays[bound_array_id] = coord.core_bounds()
+                    bds = coord.core_bounds()
+                    arrays[bound_array_id] = bds
+                # if coord_type == "aux_coords_and_dims":
+                msg = f"Concat debug {coord_type}: {array_id} ==> pts={prarrrep(pts)}"
+                if bds is not None:
+                    msg += f"  bds={prarrrep(bds)}"
+                print(msg)
             else:
                 arrays[array_id] = coord.core_data()
 
+    print(f"\nDebug concat {len(cubes)}:\n{cubes}\n:")
     for cube_signature in cube_signatures:
         if check_aux_coords:
             add_coords(cube_signature, "aux_coords_and_dims")

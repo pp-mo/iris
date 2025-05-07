@@ -13,6 +13,8 @@ from iris._lazy_data import as_concrete_data, as_lazy_data, is_lazy_data
 import iris.exceptions
 import iris.warnings
 
+# Control iris "realisation" behaviour, default=True
+_TOUCH_REALISES = False
 
 class DataManager:
     """Provides a well defined API for management of real or lazy data."""
@@ -143,16 +145,17 @@ class DataManager:
     def _assert_axioms(self):
         """Definition of the manager state, that should never be violated."""
         # Ensure there is a valid data state.
-        is_lazy = self._lazy_array is not None
-        is_real = self._real_array is not None
+        if _TOUCH_REALISES:
+            is_lazy = self._lazy_array is not None
+            is_real = self._real_array is not None
 
-        if not (is_lazy ^ is_real):
-            if is_lazy and is_real:
-                msg = "Unexpected data state, got both lazy and real data."
-                raise ValueError(msg)
-            elif self._shape is None:
-                msg = "Unexpected data state, got no lazy or real data, and no shape."
-                raise ValueError(msg)
+            if not (is_lazy ^ is_real):
+                if is_lazy and is_real:
+                    msg = "Unexpected data state, got both lazy and real data."
+                    raise ValueError(msg)
+                elif self._shape is None:
+                    msg = "Unexpected data state, got no lazy or real data, and no shape."
+                    raise ValueError(msg)
 
     def _deepcopy(self, memo, data=None):
         """Perform a deepcopy of the :class:`~iris._data_manager.DataManager` instance.
@@ -205,14 +208,23 @@ class DataManager:
         :class:`~numpy.ndarray` or :class:`numpy.ma.core.MaskedArray` or ``None``.
 
         """
-        if self.has_lazy_data():
+        if (
+                (_TOUCH_REALISES and self._lazy_array is not None)
+                or
+                (
+                    not _TOUCH_REALISES
+                    and self._real_array is None
+                    and self._lazy_array is not None
+                )
+        ):
             try:
                 # Realise the lazy data.
                 result = as_concrete_data(self._lazy_array)
                 # Assign the realised result.
                 self._real_array = result
-                # Reset the lazy data and the realised dtype.
-                self._lazy_array = None
+                if _TOUCH_REALISES:
+                    # Reset the lazy data and the realised dtype.
+                    self._lazy_array = None
             except MemoryError:
                 emsg = (
                     "Failed to realise the lazy data as there was not "
