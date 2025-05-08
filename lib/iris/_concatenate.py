@@ -40,7 +40,6 @@ _CONSTANT = 0
 _DECREASING = -1
 _INCREASING = 1
 
-
 class _CoordAndDims(namedtuple("CoordAndDims", ["coord", "dims"])):
     """Container for a coordinate and the associated data dimension(s).
 
@@ -755,7 +754,10 @@ class _CubeSignature:
             return factory.name()
 
         for factory in sorted(cube.aux_factories, key=name_key_func):
+            import iris.aux_factory as iaf
+            iaf._CATCH_COORD_BUILD = True
             coord = factory.make_coord(cube.coord_dims)
+            iaf._CATCH_COORD_BUILD = False
             dims = factory.derived_dims(cube.coord_dims)
             self.derived_metadata.append(_CoordMetaData(coord, dims))
             self.derived_coords_and_dims.append(

@@ -16,6 +16,8 @@ from iris.common import CFVariableMixin, CoordMetadata, metadata_manager_factory
 import iris.coords
 from iris.warnings import IrisIgnoringBoundsWarning
 
+_CATCH_COORD_BUILD = False
+
 
 class AuxCoordFactory(CFVariableMixin, metaclass=ABCMeta):
     """Represents a "factory" which can manufacture additional auxiliary coordinate.
@@ -624,6 +626,9 @@ class HybridHeightFactory(AuxCoordFactory):
 
         """
         # Which dimensions are relevant?
+        if _CATCH_COORD_BUILD:
+            self._t_dbg = True
+
         derived_dims = self.derived_dims(coord_dims_func)
         dependency_dims = self._dependency_dims(coord_dims_func)
 
