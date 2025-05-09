@@ -605,15 +605,15 @@ def concatenate(
                     bound_array_id = _array_id(coord, bound=True)
                     bds = coord.core_bounds()
                     arrays[bound_array_id] = bds
-                # if coord_type == "aux_coords_and_dims":
-                msg = f"Concat debug {coord_type}: {array_id} ==> pts={prarrrep(pts)}"
-                if bds is not None:
-                    msg += f"  bds={prarrrep(bds)}"
-                print(msg)
+                # # if coord_type == "aux_coords_and_dims":
+                # msg = f"Concat debug {coord_type}: {array_id} ==> pts={prarrrep(pts)}"
+                # if bds is not None:
+                #     msg += f"  bds={prarrrep(bds)}"
+                # print(msg)
             else:
                 arrays[array_id] = coord.core_data()
 
-    print(f"\nDebug concat {len(cubes)}:\n{cubes}\n:")
+    # print(f"\nDebug concat {len(cubes)}:\n{cubes}\n:")
     for cube_signature in cube_signatures:
         if check_aux_coords:
             add_coords(cube_signature, "aux_coords_and_dims")
@@ -755,9 +755,9 @@ class _CubeSignature:
 
         for factory in sorted(cube.aux_factories, key=name_key_func):
             import iris.aux_factory as iaf
-            iaf._CATCH_COORD_BUILD = True
+            # iaf._CATCH_COORD_BUILD = True
             coord = factory.make_coord(cube.coord_dims)
-            iaf._CATCH_COORD_BUILD = False
+            # iaf._CATCH_COORD_BUILD = False
             dims = factory.derived_dims(cube.coord_dims)
             self.derived_metadata.append(_CoordMetaData(coord, dims))
             self.derived_coords_and_dims.append(
