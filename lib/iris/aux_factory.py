@@ -641,52 +641,55 @@ class HybridHeightFactory(AuxCoordFactory):
             "orography": self.orography,
         }
 
+    _RECHUNK_DERIVED = True
+
     def _inner_calc(self, delta, sigma, orography):
         return delta + sigma * orography
 
     def _derive(self, *dependency_arrays):
         result = self._inner_calc(*dependency_arrays)
 
-        # The dims of all the given components should be the same and, **presumably**,
-        #  the same as the result ??
-        for i_dep, (dep, name) in enumerate(zip(dependency_arrays, self.dependencies.keys())):
-            if dep.ndim != result.ndim:
-                msg = (
-                    f"Dependency #{i_dep}, '{name}' has ndims={dep.ndim}, "
-                    "not matching result {result.ndim!r}"
-                    " (shapes {dep.shape}/{result.shape})."
-                )
-                raise ValueError(msg)
+        if self._RECHUNK_DERIVED:
+            # The dims of all the given components should be the same and, **presumably**,
+            #  the same as the result ??
+            for i_dep, (dep, name) in enumerate(zip(dependency_arrays, self.dependencies.keys())):
+                if dep.ndim != result.ndim:
+                    msg = (
+                        f"Dependency #{i_dep}, '{name}' has ndims={dep.ndim}, "
+                        "not matching result {result.ndim!r}"
+                        " (shapes {dep.shape}/{result.shape})."
+                    )
+                    raise ValueError(msg)
 
-        # See if we need to improve on the chunking of the result
-        from iris._lazy_data import _optimum_chunksize
-        adjusted_chunks = _optimum_chunksize(
-            chunks=result.chunksize,
-            shape=result.shape,
-            dtype=result.dtype,
-            limit=60.e6,  # arbitrary for testing -- just for now
-        )
+            # See if we need to improve on the chunking of the result
+            from iris._lazy_data import _optimum_chunksize
+            adjusted_chunks = _optimum_chunksize(
+                chunks=result.chunksize,
+                shape=result.shape,
+                dtype=result.dtype,
+                limit=60.e6,  # arbitrary for testing -- just for now
+            )
 
-        if adjusted_chunks != result.chunksize:
-            # Re-do the result calculation, re-chunking the inputs along dimensions
-            #  which it is suggested to reduce.
-            # First make a (writable) copy of the inputs.....
-            new_deps = []
-            for i_dep, dep in enumerate(dependency_arrays):
-                # Reduce each dependency chunksize to the result chunksize if smaller.
-                dep_chunks = dep.chunksize
-                new_chunks = tuple([
-                    min(dep_chunk, adj_chunk)
-                    for dep_chunk, adj_chunk in zip(dep_chunks, adjusted_chunks)
-                ])
-                # If the dep chunksize was reduced, replace with a rechunked version.
-                if new_chunks != dep_chunks:
-                    dep = dep.rechunk(new_chunks)
-                new_deps.append(dep)
+            if adjusted_chunks != result.chunksize:
+                # Re-do the result calculation, re-chunking the inputs along dimensions
+                #  which it is suggested to reduce.
+                # First make a (writable) copy of the inputs.....
+                new_deps = []
+                for i_dep, dep in enumerate(dependency_arrays):
+                    # Reduce each dependency chunksize to the result chunksize if smaller.
+                    dep_chunks = dep.chunksize
+                    new_chunks = tuple([
+                        min(dep_chunk, adj_chunk)
+                        for dep_chunk, adj_chunk in zip(dep_chunks, adjusted_chunks)
+                    ])
+                    # If the dep chunksize was reduced, replace with a rechunked version.
+                    if new_chunks != dep_chunks:
+                        dep = dep.rechunk(new_chunks)
+                    new_deps.append(dep)
 
-            # Finally, re-do the calculation, which hopefully results in a better
-            #  overall chunking for the result
-            result = self._inner_calc(*new_deps)
+                # Finally, re-do the calculation, which hopefully results in a better
+                #  overall chunking for the result
+                result = self._inner_calc(*new_deps)
 
         return result
 
