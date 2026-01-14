@@ -25,6 +25,7 @@ class RulesTestMixin(MockerMixin):
         self.engine = mocker.Mock(
             cube=mocker.Mock(),
             cf_var=mocker.Mock(dimensions=("foo", "bar")),
+            dtype=np.int32,
             filename="DUMMY",
             cube_parts=dict(coordinates=[]),
         )

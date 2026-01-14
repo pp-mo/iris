@@ -41,7 +41,11 @@ class TestBoundsVertexDim(MockerMixin):
 
         self.engine = mocker.Mock(
             cube=mocker.Mock(),
-            cf_var=mocker.Mock(dimensions=("foo", "bar"), cf_data=cf_data),
+            cf_var=mocker.Mock(
+                dimensions=("foo", "bar"),
+                cf_data=cf_data,
+                dtype=np.int32,
+            ),
             filename="DUMMY",
             cube_parts=dict(coordinates=[]),
         )
@@ -172,7 +176,7 @@ class TestDtype(MockerMixin):
 
         self.engine = mocker.Mock(
             cube=mocker.Mock(),
-            cf_var=mocker.Mock(dimensions=("foo", "bar")),
+            cf_var=mocker.Mock(dimensions=("foo", "bar"), dtype=np.int32),
             filename="DUMMY",
             cube_parts=dict(coordinates=[]),
         )
@@ -243,6 +247,7 @@ class TestCoordConstruction:
         self.engine = mocker.Mock(
             cube=mocker.Mock(),
             cf_var=mocker.Mock(dimensions=("foo", "bar")),
+            dtype=np.float32,
             filename="DUMMY",
             cube_parts=dict(coordinates=[]),
         )
