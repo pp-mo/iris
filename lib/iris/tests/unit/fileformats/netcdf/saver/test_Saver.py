@@ -257,9 +257,6 @@ class Test_write:
         )
         cube.add_ancillary_variable(anc_coord, data_dims=data_dims)
 
-        patch = mocker.patch(
-            "iris.fileformats.netcdf.saver._thread_safe_nc.DatasetWrapper.createVariable"
-        )
         compression_kwargs = {
             "complevel": 9,
             "fletcher32": True,
@@ -267,9 +264,15 @@ class Test_write:
             "zlib": True,
         }
 
-        nc_path = tmp_path / "temp.nc"
-        with Saver(nc_path, "NETCDF4", compute=False) as saver:
-            saver.write(cube, **compression_kwargs)
+        with self.temp_filename(suffix=".nc") as nc_path:
+            with Saver(nc_path, "NETCDF4", compute=False) as saver:
+                patch = mocker.patch(
+                    "iris.fileformats.netcdf.saver._thread_safe_nc.DatasetWrapper.createVariable",
+                    # Use 'wraps' to allow the patched methods to function as normal
+                    #  - the patch object just acts as a 'spy' on its calls.
+                    wraps=saver._dataset.createVariable,
+                )
+                saver.write(cube, **compression_kwargs)
 
         assert 5 == patch.call_count
         result = self._filter_compression_calls(patch, compression_kwargs)
@@ -290,9 +293,6 @@ class Test_write:
         )
         cube.add_ancillary_variable(anc_coord, data_dims=data_dims[1])
 
-        patch = mocker.patch(
-            "iris.fileformats.netcdf.saver._thread_safe_nc.DatasetWrapper.createVariable"
-        )
         compression_kwargs = {
             "complevel": 9,
             "fletcher32": True,
@@ -300,13 +300,19 @@ class Test_write:
             "zlib": True,
         }
 
-        nc_path = tmp_path / "temp.nc"
-        with Saver(nc_path, "NETCDF4", compute=False) as saver:
-            saver.write(cube, **compression_kwargs)
+        with self.temp_filename(suffix=".nc") as nc_path:
+            with Saver(nc_path, "NETCDF4", compute=False) as saver:
+                patch = mocker.patch(
+                    "iris.fileformats.netcdf.saver._thread_safe_nc.DatasetWrapper.createVariable",
+                    # Use 'wraps' to allow the patched methods to function as normal
+                    #  - the patch object just acts as a 'spy' on its calls.
+                    wraps=saver._dataset.createVariable,
+                )
+                saver.write(cube, **compression_kwargs)
 
         assert 5 == patch.call_count
         result = self._filter_compression_calls(
-            patch, compression_kwargs, mismatch=True
+            createvar_spy, compression_kwargs, mismatch=True
         )
         assert 4 == len(result)
         # the aux coord and ancil variable are not compressed due to shape, and
@@ -323,10 +329,6 @@ class Test_write:
         aux_coord = AuxCoord(data, var_name="non_compress_aux", units="1")
         cube.add_aux_coord(aux_coord, data_dims=data_dims)
 
-        patch = mocker.patch(
-            "iris.fileformats.netcdf.saver._thread_safe_nc.DatasetWrapper.createVariable"
-        )
-        patch.return_value = mocker.MagicMock(dtype=np.dtype("S1"))
         compression_kwargs = {
             "complevel": 9,
             "fletcher32": True,
@@ -334,13 +336,19 @@ class Test_write:
             "zlib": True,
         }
 
-        nc_path = tmp_path / "temp.nc"
-        with Saver(nc_path, "NETCDF4", compute=False) as saver:
-            saver.write(cube, **compression_kwargs)
+        with self.temp_filename(suffix=".nc") as nc_path:
+            with Saver(nc_path, "NETCDF4", compute=False) as saver:
+                patch = self.patch(
+                    "iris.fileformats.netcdf.saver._thread_safe_nc.DatasetWrapper.createVariable",
+                    # Use 'wraps' to allow the patched methods to function as normal
+                    #  - the patch object just acts as a 'spy' on its calls.
+                    wraps=saver._dataset.createVariable,
+                )
+                saver.write(cube, **compression_kwargs)
 
         assert 4 == patch.call_count
         result = self._filter_compression_calls(
-            patch, compression_kwargs, mismatch=True
+            createvar_spy, compression_kwargs, mismatch=True
         )
         assert 3 == len(result)
         # the aux coord is not compressed due to its string dtype, and
