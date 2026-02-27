@@ -171,7 +171,7 @@ class TestDtype(MockerMixin):
     def _setup(self, mocker):
         # Create coordinate cf variables and pyke engine.
         points = np.arange(6).reshape(2, 3)
-        cf_data = mocker.MagicMock(_FillValue=None)
+        cf_data = mocker.MagicMock(_FillValue=None, shape=points.shape)
         cf_data.chunking = mocker.MagicMock(return_value=points.shape)
 
         self.engine = mocker.Mock(
