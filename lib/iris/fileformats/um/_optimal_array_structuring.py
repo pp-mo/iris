@@ -50,7 +50,7 @@ def _optimal_dimensioning_structure(structure, element_priorities):
 
 
 def optimal_array_structure(ordering_elements, actual_values_elements=None):
-    """Calculate an optimal array replication structure for a set of vectors.
+    r"""Calculate an optimal array replication structure for a set of vectors.
 
     Parameters
     ----------
@@ -84,7 +84,10 @@ def optimal_array_structure(ordering_elements, actual_values_elements=None):
 
     Examples
     --------
-    ::
+    .. testsetup::
+        >>> import numpy as np
+
+    .. doctest::
 
         >>> import iris.fileformats.um._optimal_array_structuring as optdims
         >>> elements_structure = [('a', np.array([1, 1, 1, 2, 2, 2])),
@@ -98,11 +101,12 @@ def optimal_array_structure(ordering_elements, actual_values_elements=None):
         ...                                      elements_values)
         >>> print(dims_shape)
         (2, 3)
-        >>> print(dim_names)
-        set(['a', 'b'])
+        >>> print(sorted(dim_names))
+        ['a', 'b']
         >>> print(arrays_and_dims)
-        {'a': (array([10, 12]), (0,)), 'c': (array([[9, 3, 5],
-               [2, 7, 1]]), (0, 1)), 'b': (array([15, 16, 17]), (1,))}
+        {'a': (array([10, 12]), (0,)),
+         'b': (array([15, 16, 17]), (1,)),
+         'c': (array([[9, 3, 5], [2, 7, 1]]), (0, 1))}
 
     """
     # Convert the inputs to dicts.

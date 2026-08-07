@@ -92,7 +92,8 @@ disable_error_code = ["call-arg"]
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 exclude = [
     'noxfile\.py',
-    'docs/src/conf\.py'
+    'docs/src/conf\.py',
+    'tools/run_doctests\.py'
 ]
 ignore_missing_imports = true
 strict = false

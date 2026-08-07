@@ -11,13 +11,12 @@ Navigating a Cube
 
 .. testsetup::
 
-        import iris
-
-        filename = iris.sample_data_path("rotated_pole.nc")
-        # pot_temp = iris.load_cube(filename, 'air_potential_temperature')
-        cube = iris.load_cube(filename)
-        coord_names = [coord.name() for coord in cube.coords()]
-        coord = cube.coord("grid_latitude")
+        >>> import iris
+        >>> filename = iris.sample_data_path("rotated_pole.nc")
+        >>> # pot_temp = iris.load_cube(filename, 'air_potential_temperature')
+        >>> cube = iris.load_cube(filename)
+        >>> coord_names = [coord.name() for coord in cube.coords()]
+        >>> coord = cube.coord("grid_latitude")
 
 
 After loading any cube, you will want to investigate precisely what it contains. This section is all about accessing

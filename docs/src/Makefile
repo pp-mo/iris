@@ -16,7 +16,7 @@ PAPEROPT_a4     = -D latex_paper_size=a4
 PAPEROPT_letter = -D latex_paper_size=letter
 ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
-.PHONY: help clean html html-noplot dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes doctest show
+.PHONY: help clean html html-noplot dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes show
 
 help:
 	@echo "Please use \`make <target>' where <target> is one of"
@@ -26,7 +26,6 @@ help:
 	@echo "  html-noapi   to make standalone HTML files, skip the API"
 	@echo "  html-quick   to make standalone HTML files, skip the gallery and API"
 	@echo "  clean        to remove all built files"
-	@echo "  doctest      to run all doctests embedded in the documentation (if enabled)"
 	@echo "  show         to open the built documentation in the default browser"
 	@echo "  livehtml     to auto build the docs when any file changes are detected."
 	@echo "               You need to install sphinx-autobuild first:"
@@ -56,11 +55,6 @@ clean:
 	-rm -rf $(BUILDDIR)
 	-rm -rf $(SRCDIR)/generated
 	-rm -rf $(SRCDIR)/gallery_carousel.txt
-
-doctest:
-	$(SPHINXBUILD) -b doctest $(ALLSPHINXOPTS) $(BUILDDIR)/doctest
-	@echo "Testing of doctests in the sources finished, look at the "
-	@echo "results in $(BUILDDIR)/doctest/output.txt."
 
 show:
 	@python -c "import webbrowser; webbrowser.open_new_tab('file://$(shell pwd)/$(BUILDDIR)/html/index.html')"

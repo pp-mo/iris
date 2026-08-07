@@ -201,7 +201,8 @@ def tests(session: nox.sessions.Session):
 
 
 @nox.session(python=_PY_VERSION_DOCSBUILD, venv_backend="conda")
-def doctest(session: nox.sessions.Session):
+@nox.parametrize("area", ["docs", "api"])
+def doctest(session: nox.sessions.Session, area):
     """Perform iris doctests and gallery.
 
     Parameters
@@ -213,18 +214,33 @@ def doctest(session: nox.sessions.Session):
     prepare_venv(session)
     session.install("--no-deps", "--editable", ".")
     session.env.update(ENV)
-    session.cd("docs")
-    session.run(
-        "make",
-        "clean",
-        "html",
-        external=True,
-    )
-    session.run(
-        "make",
-        "doctest",
-        external=True,
-    )
+    if area == "docs":
+        session.run(
+            "./tools/run_doctests.py",
+            "-v",
+            "./docs/**/*.rst",
+            "-e",
+            "docs/src/whatsnew",
+            "-o",
+            "optionflags=12",  # NORMALISE_WHITESPACE | ELLIPSIS
+            external=True,
+        )
+    elif area == "api":
+        session.run(
+            "./tools/run_doctests.py",
+            "-v",
+            "-mr",
+            "iris",
+            "-o",
+            "optionflags=12",  # NORMALISE_WHITESPACE | ELLIPSIS
+            "-e",
+            "geovista",
+            "-e",
+            "iris.tests",
+            external=True,
+        )
+    else:
+        raise ValueError(f"Unknown doctest 'area': {area!r}")
 
 
 @nox.session(python=_PY_VERSION_DOCSBUILD, venv_backend="conda")

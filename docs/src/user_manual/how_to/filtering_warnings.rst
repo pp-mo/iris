@@ -19,39 +19,39 @@ Find out more about *why* we chose this approach: :ref:`filtering-warnings-expla
 
 .. testsetup:: filtering_warnings
 
-    from pathlib import Path
-    import sys
-    import warnings
+    >>> from pathlib import Path
+    >>> import sys
+    >>> import warnings
 
-    import iris
-    import iris.coord_systems
-    import iris.warnings
+    >>> import iris
+    >>> import iris.coord_systems
+    >>> import iris.warnings
 
     # Hack to ensure doctests actually see Warnings that are raised, and that
     #  they have a relative path (so a test pass is not machine-dependent).
-    warnings.filterwarnings("default")
-    IRIS_FILE = Path(iris.__file__)
+    >>> warnings.filterwarnings("default")
+    >>> IRIS_FILE = Path(iris.__file__)
 
 
-    def custom_warn(message, category, filename, lineno, file=None, line=None):
-        filepath = Path(filename)
-        filename = str(filepath.relative_to(IRIS_FILE.parents[1]))
-        sys.stdout.write(warnings.formatwarning(message, category, filename, lineno))
+    >>> def custom_warn(message, category, filename, lineno, file=None, line=None):
+    ...    filepath = Path(filename)
+    ...    filename = str(filepath.relative_to(IRIS_FILE.parents[1]))
+    ...    sys.stdout.write(warnings.formatwarning(message, category, filename, lineno))
 
 
-    warnings.showwarning = custom_warn
+    >>> warnings.showwarning = custom_warn
 
-    geog_cs_globe = iris.coord_systems.GeogCS(6400000)
-    orthographic_coord_system = iris.coord_systems.Orthographic(
-        longitude_of_projection_origin=0,
-        latitude_of_projection_origin=0,
-        ellipsoid=geog_cs_globe,
-    )
+    >>> geog_cs_globe = iris.coord_systems.GeogCS(6400000)
+    >>> orthographic_coord_system = iris.coord_systems.Orthographic(
+    ...     longitude_of_projection_origin=0,
+    ...     latitude_of_projection_origin=0,
+    ...     ellipsoid=geog_cs_globe,
+    ... )
 
 
-    def my_operation():
-        geog_cs_globe.inverse_flattening = 0.1
-        _ = orthographic_coord_system.as_cartopy_crs()
+    >>> def my_operation():
+    ...     geog_cs_globe.inverse_flattening = 0.1
+    ...     _ = orthographic_coord_system.as_cartopy_crs()
 
 Here is a hypothetical operation - ``my_operation()`` - which raises two
 Warnings:

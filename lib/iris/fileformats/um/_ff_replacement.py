@@ -34,10 +34,21 @@ def um_to_pp(filename, read_data=False, word_depth=None):
 
     Examples
     --------
-    ::
-
-        >>> for field in um.um_to_pp(filename):
-        ...     print(field)
+    .. doctest::
+        >>> from iris.tests._shared_utils import get_data_path
+        >>> testpath = get_data_path(["FF", "structured", "small"])
+        >>> field_iter = um_to_pp(testpath)
+        >>> field_iter
+        OO<generator object _interpret_fields ...
+        >>> fields = list(field_iter)
+        >>> print(len(fields))
+        66
+        >>> print(fields[0])
+        PP Field
+           lbyr: 1992
+           lbmon: 10
+           lbdat: 1
+        ...
 
     """
     if word_depth is None:
