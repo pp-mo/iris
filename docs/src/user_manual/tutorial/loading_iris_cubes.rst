@@ -263,17 +263,20 @@ A single cube is loaded in the following example::
               latitude                           x              -
               longitude                          -              x
     ...
-         Cell methods:
-              0                           time: mean
 
 However, when attempting to load data which would result in anything other than
 one cube, an exception is raised::
 
     >>> filename = iris.sample_data_path('uk_hires.pp')
-    >>> cube = iris.load_cube(filename)
-    Traceback (most recent call last):
-    ...
-    iris.exceptions.ConstraintMismatchError: Expected exactly one cube, found 2.
+    >>> try:
+    ...     cube = iris.load_cube(filename)
+    ... except iris.exceptions.ConstraintMismatchError as e:
+    ...     print(e)
+    failed to merge into a single cube.
+      cube.standard_name differs: 'air_potential_temperature' != 'surface_altitude'
+      cube.units differs: Unit('K') != Unit('m')
+      cube.attributes values differ for keys: 'STASH'
+      cube.shape differs: (3, 7, 204, 187) != (204, 187)
 
 .. note::
 
@@ -362,49 +365,45 @@ example shows typical :data:`~iris.loading.LOAD_PROBLEMS` content, and a
 deeper inspection of one redirected object. **Much more detail is in the
 API documentation for:** :class:`iris.loading.LoadProblems`.
 
-.. testsetup:: load-problems
+.. testsetup::
 
-    from pathlib import Path
-    from pprint import pprint
-    import sys
-    import warnings
+    >>> from pathlib import Path
+    >>> from pprint import pprint
+    >>> import sys
+    >>> import warnings
 
-    import iris
-    import iris.common
-    from iris.fileformats._nc_load_rules import helpers
-    import iris.loading
-    from iris import std_names
+    >>> import iris
+    >>> import iris.common
+    >>> from iris.fileformats._nc_load_rules import helpers
+    >>> import iris.loading
+    >>> from iris import std_names
 
     # Ensure doctests actually see Warnings that are raised, and that
     #  they have a relative path (so a test pass is not machine-dependent).
-    showwarning_original = warnings.showwarning
-    warnings.filterwarnings("default")
-    IRIS_FILE = Path(iris.__file__)
+    >>> showwarning_original = warnings.showwarning
+    >>> warnings.filterwarnings("default")
+    >>> IRIS_FILE = Path(iris.__file__)
+
+    >>> def custom_warn(message, category, filename, lineno, file=None, line=None):
+    ...     filepath = Path(filename)
+    ...     filename = str(filepath.relative_to(IRIS_FILE.parents[1]))
+    ...     sys.stdout.write(warnings.formatwarning(message, category, filename, lineno))
 
 
-    def custom_warn(message, category, filename, lineno, file=None, line=None):
-        filepath = Path(filename)
-        filename = str(filepath.relative_to(IRIS_FILE.parents[1]))
-        sys.stdout.write(warnings.formatwarning(message, category, filename, lineno))
+    >>> warnings.showwarning = custom_warn
+    >>> get_names_original = helpers.get_names
 
+    >>> def raise_example_error_names(cf_coord_var, coord_name, attributes):
+    ...     if cf_coord_var.cf_name == "time":
+    ...         raise ValueError("Example coordinate error")
+    ...     else:
+    ...         return get_names_original(cf_coord_var, coord_name, attributes)
 
-    warnings.showwarning = custom_warn
+    >>> helpers.get_names = raise_example_error_names
+    >>> air_temperature = std_names.STD_NAMES.pop("air_temperature")
+    >>> iris.FUTURE.date_microseconds = True
 
-    get_names_original = helpers.get_names
-
-
-    def raise_example_error_names(cf_coord_var, coord_name, attributes):
-        if cf_coord_var.cf_name == "time":
-            raise ValueError("Example coordinate error")
-        else:
-            return get_names_original(cf_coord_var, coord_name, attributes)
-
-
-    helpers.get_names = raise_example_error_names
-    air_temperature = std_names.STD_NAMES.pop("air_temperature")
-    iris.FUTURE.date_microseconds = True
-
-.. doctest:: load-problems
+.. doctest::
 
     >>> cube_a1b = iris.load_cube(iris.sample_data_path("A1B_north_america.nc"))
     iris/...IrisLoadWarning: Not all file objects were parsed correctly. See iris.loading.LOAD_PROBLEMS for details.
@@ -427,13 +426,13 @@ API documentation for:** :class:`iris.loading.LoadProblems`.
      'units': 'hours since 1970-01-01 00:00:00',
      'var_name': 'time'}
 
-.. testcleanup:: load-problems
+.. testcleanup::
 
-    warnings.showwarning = showwarning_original
-    warnings.filterwarnings("ignore")
-    helpers.get_names = get_names_original
-    std_names.STD_NAMES["air_temperature"] = air_temperature
-    iris.FUTURE.date_microseconds = False
+    >>> warnings.showwarning = showwarning_original
+    >>> warnings.filterwarnings("ignore")
+    >>> helpers.get_names = get_names_original
+    >>> std_names.STD_NAMES["air_temperature"] = air_temperature
+    >>> iris.FUTURE.date_microseconds = False
 
 
 .. _known-hdf5-warnings: https://github.com/SciTools/iris/pull/7113#discussion_r3653044732

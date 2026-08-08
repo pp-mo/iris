@@ -237,21 +237,20 @@ It is common that a cube will need to be constrained between two given dates.
 In the following example we construct a time sequence representing the first
 day of every week for many years:
 
-.. testsetup:: timeseries_range
+.. testsetup::
 
-    import datetime
-    import numpy as np
-    from iris.time import PartialDateTime
+    >>> import datetime
+    >>> import numpy as np
+    >>> from iris.time import PartialDateTime
 
-    long_ts = iris.cube.Cube(np.arange(150), long_name="data", units="1")
-    _mondays = iris.coords.DimCoord(
-        7 * np.arange(150), standard_name="time", units="days since 2007-04-09"
-    )
-    long_ts.add_dim_coord(_mondays, 0)
+    >>> long_ts = iris.cube.Cube(np.arange(150), long_name="data", units="1")
+    >>> _mondays = iris.coords.DimCoord(
+    ...     7 * np.arange(150), standard_name="time", units="days since 2007-04-09"
+    ... )
+    >>> long_ts.add_dim_coord(_mondays, 0)
 
 
-.. doctest:: timeseries_range
-    :options: +NORMALIZE_WHITESPACE, +ELLIPSIS
+.. doctest::
 
     >>> print(long_ts.coord("time"))
     DimCoord :  time / (days since 2007-04-09, standard calendar)
@@ -266,8 +265,7 @@ Given two dates in datetime format, we can select all points between them.
 Instead of constraining at loaded time, we already have the time coord so
 we constrain that coord using :class:`iris.cube.Cube.extract`
 
-.. doctest:: timeseries_range
-    :options: +NORMALIZE_WHITESPACE, +ELLIPSIS
+.. doctest::
 
     >>> d1 = datetime.datetime.strptime("20070715T0000Z", "%Y%m%dT%H%MZ")
     >>> d2 = datetime.datetime.strptime("20070825T0000Z", "%Y%m%dT%H%MZ")
@@ -285,8 +283,7 @@ we constrain that coord using :class:`iris.cube.Cube.extract`
 Alternatively, we may rewrite this using :class:`iris.time.PartialDateTime`
 objects.
 
-.. doctest:: timeseries_range
-    :options: +NORMALIZE_WHITESPACE, +ELLIPSIS
+.. doctest::
 
     >>> pdt1 = PartialDateTime(year=2007, month=7, day=15)
     >>> pdt2 = PartialDateTime(year=2007, month=8, day=25)
@@ -306,7 +303,7 @@ date range. We can select points within a certain part of the year, in this case
 between the 15th of July through to the 25th of August. By making use of
 PartialDateTime this becomes simple:
 
-.. doctest:: timeseries_range
+.. doctest::
 
     >>> st_swithuns_daterange = iris.Constraint(
     ...     time=lambda cell: PartialDateTime(month=7, day=15)

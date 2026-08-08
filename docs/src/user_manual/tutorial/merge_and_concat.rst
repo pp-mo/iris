@@ -85,23 +85,22 @@ The :meth:`CubeList.merge <iris.cube.CubeList.merge>` method operates on a list
 of cubes and returns a new :class:`~iris.cube.CubeList` containing the cubes
 that have been merged.
 
-.. testsetup:: merge
+.. testsetup::
 
-    import numpy as np
-    import iris
+    >>> import numpy as np
+    >>> import iris
+    >>> import iris.cube
 
+    >>> def _xy_cube(z):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(20).reshape(4, 5), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 0)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 1)
+    ...     cube.add_aux_coord(iris.coords.DimCoord(z, long_name="z", units="meters"))
+    ...     return cube
 
-    def _xy_cube(z):
-        cube = iris.cube.Cube(
-            np.arange(20).reshape(4, 5), "air_temperature", units="kelvin"
-        )
-        cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 0)
-        cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 1)
-        cube.add_aux_coord(iris.coords.DimCoord(z, long_name="z", units="meters"))
-        return cube
-
-
-    cubes = iris.cube.CubeList([_xy_cube(1), _xy_cube(2), _xy_cube(3)])
+    >>> cubes = iris.cube.CubeList([_xy_cube(1), _xy_cube(2), _xy_cube(3)])
 
 
 Let's have a look at the :meth:`~iris.cube.CubeList.merge` method in operation.
@@ -110,8 +109,7 @@ variable called ``cubes``, each with a scalar ``z`` coordinate of
 differing value. We can merge these cubes by stacking the scalar ``z`` coordinates to
 make a new ``z`` dimension coordinate:
 
-.. doctest:: merge
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> print(cubes)
     0: air_temperature / (kelvin)          (y: 4; x: 5)
@@ -169,27 +167,22 @@ cube's :data:`~iris.cube.Cube.attributes` dictionary.
 Remember that the attributes *must* be consistent across all cubes in order to merge
 into a single cube:
 
-.. testsetup:: merge_vs_merge_cube
+.. testsetup::
 
-    import numpy as np
-    import iris
+    >>> def _xy_cube(z):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(20).reshape(4, 5), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 0)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 1)
+    ...     cube.add_aux_coord(iris.coords.DimCoord(z, long_name="z", units="meters"))
+    ...     return cube
 
+    >>> cubes = iris.cube.CubeList([_xy_cube(1), _xy_cube(2), _xy_cube(3)])
+    >>> cubes[0].attributes["Conventions"] = "CF-1.5"
+    >>> merge_vs_mergecube_cubes = cubes
 
-    def _xy_cube(z):
-        cube = iris.cube.Cube(
-            np.arange(20).reshape(4, 5), "air_temperature", units="kelvin"
-        )
-        cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 0)
-        cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 1)
-        cube.add_aux_coord(iris.coords.DimCoord(z, long_name="z", units="meters"))
-        return cube
-
-
-    cubes = iris.cube.CubeList([_xy_cube(1), _xy_cube(2), _xy_cube(3)])
-    cubes[0].attributes["Conventions"] = "CF-1.5"
-
-.. doctest:: merge_vs_merge_cube
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> print(cubes)
     0: air_temperature / (kelvin)          (y: 4; x: 5)
@@ -287,32 +280,26 @@ have sequentially increasing ranges.
 These cubes can be concatenated by combining the ``t`` coordinates of the input
 cubes to form a new cube with an extended ``t`` coordinate:
 
-.. testsetup:: concatenate
+.. testsetup::
 
-    import numpy as np
-    import iris
+    >>> def _xyt_cube(t):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(12 * len(t)).reshape(-1, 3, 4), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(3), long_name="y"), 1)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="x"), 2)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(t, long_name="t"), 0)
+    ...     return cube
 
+    >>> cubes = iris.cube.CubeList(
+    ...     [
+    ...         _xyt_cube(np.arange(31)),
+    ...         _xyt_cube(np.arange(28) + 31),
+    ...         _xyt_cube(np.arange(31) + 59),
+    ...     ]
+    ... )
 
-    def _xyt_cube(t):
-        cube = iris.cube.Cube(
-            np.arange(12 * len(t)).reshape(-1, 3, 4), "air_temperature", units="kelvin"
-        )
-        cube.add_dim_coord(iris.coords.DimCoord(range(3), long_name="y"), 1)
-        cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="x"), 2)
-        cube.add_dim_coord(iris.coords.DimCoord(t, long_name="t"), 0)
-        return cube
-
-
-    cubes = iris.cube.CubeList(
-        [
-            _xyt_cube(np.arange(31)),
-            _xyt_cube(np.arange(28) + 31),
-            _xyt_cube(np.arange(31) + 59),
-        ]
-    )
-
-.. doctest:: concatenate
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> print(cubes)
     0: air_temperature / (kelvin)          (t: 31; y: 3; x: 4)
@@ -354,33 +341,28 @@ cube's :data:`~iris.cube.Cube.attributes` dictionary.
 Remember that the attributes *must* be consistent across all cubes in order to
 concatenate into a single cube:
 
-.. testsetup:: concatenate_vs_concatenate_cube
+.. testsetup::
 
-    import numpy as np
-    import iris
+    >>> def _xyt_cube(t):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(12 * len(t)).reshape(-1, 3, 4), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(3), long_name="y"), 1)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="x"), 2)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(t, long_name="t"), 0)
+    ...     return cube
+
+    >>> cubes = iris.cube.CubeList(
+    ...     [
+    ...         _xyt_cube(np.arange(31)),
+    ...         _xyt_cube(np.arange(28) + 31),
+    ...         _xyt_cube(np.arange(31) + 59),
+    ...     ]
+    ... )
+    >>> cubes[0].attributes["History"] = "Created 2010-06-30"
 
 
-    def _xyt_cube(t):
-        cube = iris.cube.Cube(
-            np.arange(12 * len(t)).reshape(-1, 3, 4), "air_temperature", units="kelvin"
-        )
-        cube.add_dim_coord(iris.coords.DimCoord(range(3), long_name="y"), 1)
-        cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="x"), 2)
-        cube.add_dim_coord(iris.coords.DimCoord(t, long_name="t"), 0)
-        return cube
-
-
-    cubes = iris.cube.CubeList(
-        [
-            _xyt_cube(np.arange(31)),
-            _xyt_cube(np.arange(28) + 31),
-            _xyt_cube(np.arange(31) + 59),
-        ]
-    )
-    cubes[0].attributes["History"] = "Created 2010-06-30"
-
-.. doctest:: concatenate_vs_concatenate_cube
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> print(cubes)
     0: air_temperature / (kelvin)          (t: 31; y: 3; x: 4)
@@ -463,8 +445,11 @@ from earlier.
 We'll call :func:`~iris.util.equalise_attributes` on the
 input cubes before merging the input cubes using :meth:`~iris.cube.CubeList.merge_cube`:
 
-.. doctest:: merge_vs_merge_cube
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. testsetup::
+
+    >>> cubes = merge_vs_mergecube_cubes
+
+.. doctest::
 
     >>> from iris.util import equalise_attributes
     >>> print(cubes)
@@ -501,12 +486,26 @@ input cubes before merging the input cubes using :meth:`~iris.cube.CubeList.merg
 
 **Incomplete Data**
 
-Merging input cubes with inconsistent dimension lengths can cause misleading results.
-This is a common problem when merging cubes generated by different ensemble members in a model run.
+Merging input data with inconsistent dimension lengths can cause misleading results.
+This is a common problem when merging different ensemble members in a model run.
 
 The misleading results cause the merged cube to gain an anonymous leading dimension.
 All the merged coordinates appear as auxiliary coordinates on the anonymous leading dimension.
 This is shown in the example below::
+
+.. testsetup::
+
+    >>> # Create a fake cube with an illustrative structure.
+    >>> cube = iris.cube.Cube(np.zeros((5494, 325, 432)), "surface_temperature", units="K")
+    >>> cube.add_dim_coord(iris.coords.DimCoord(range(325), long_name="latitude"), 1)
+    >>> cube.add_dim_coord(iris.coords.DimCoord(range(432), long_name="longitude"), 2)
+    >>> cube.add_aux_coord(iris.coords.DimCoord(range(5494), long_name="forecast_month"), 0)
+    >>> cube.add_aux_coord(iris.coords.DimCoord(range(5494), long_name="forecast_period"), 0)
+    >>> cube.add_aux_coord(iris.coords.DimCoord(range(5494), long_name="forecast_reference_time"), 0)
+    >>> cube.add_aux_coord(iris.coords.DimCoord(range(5494), long_name="realization"), 0)
+    >>> cube.add_aux_coord(iris.coords.DimCoord(range(5494), long_name="time"), 0)
+
+.. doctest::
 
     >>> print(cube)
     surface_temperature / (K)           (-- : 5494; latitude: 325; longitude: 432)
@@ -539,26 +538,20 @@ We will demonstrate the effect of merging the input cubes with ``unique=False``
 (duplicate cubes allowed) and ``unique=True`` (duplicate cubes not allowed, which
 is the default behaviour):
 
-.. testsetup:: merge_duplicate
+.. testsetup::
 
-    import numpy as np
-    import iris
+    >>> def _xy_cube(z):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(20).reshape(4, 5), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 0)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 1)
+    ...     cube.add_aux_coord(iris.coords.DimCoord(z, long_name="z", units="meters"))
+    ...     return cube
 
+    >>> cubes = iris.cube.CubeList([_xy_cube(1), _xy_cube(2), _xy_cube(1)])
 
-    def _xy_cube(z):
-        cube = iris.cube.Cube(
-            np.arange(20).reshape(4, 5), "air_temperature", units="kelvin"
-        )
-        cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 0)
-        cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 1)
-        cube.add_aux_coord(iris.coords.DimCoord(z, long_name="z", units="meters"))
-        return cube
-
-
-    cubes = iris.cube.CubeList([_xy_cube(1), _xy_cube(2), _xy_cube(1)])
-
-.. doctest:: merge_duplicate
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> print(cubes)
     0: air_temperature / (kelvin)          (y: 4; x: 5)
@@ -569,12 +562,14 @@ is the default behaviour):
     0: air_temperature / (kelvin)          (z: 2; y: 4; x: 5)
     1: air_temperature / (kelvin)          (z: 2; y: 4; x: 5)
 
-    >>> print(cubes.merge())  # unique=True is the default.
-    Traceback (most recent call last):
-      ...
-    iris.exceptions.DuplicateDataError: failed to merge into a single cube.
-      Duplicate 'air_temperature' cube, with scalar coordinates z=Cell(point=1, bound=None)
-
+    >>> try:
+    ...     cubes.merge()  # unique=True is the default.
+    ... except Exception as e:
+    ...     print(type(e))
+    ...     print(str(e))
+    <class 'iris.exceptions.DuplicateDataError'>
+    failed to merge into a single cube.
+      Duplicate 'air_temperature' cube, with scalar coordinates z=Cell(point=np.int64(1), bound=None)
 
 Notice how merging the input cubes with duplicate cubes allowed produces a result
 with **four** `z` coordinate values.
@@ -627,10 +622,28 @@ If your cubes are similar to those below (the single value ``z`` coordinate is
 associated with a dimension) then use :meth:`~iris.cube.CubeList.concatenate` to
 combine your cubes::
 
+.. testsetup::
+
+    >>> # create some 'fake' illustrative cubes
+    >>> def _xyt_cube(z):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(20).reshape(1, 4, 5), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="y"), 1)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(5), long_name="x"), 2)
+    ...     cube.add_dim_coord(iris.coords.DimCoord([z], long_name="z"), 0)
+    ...     return cube
+
+    >>> cubes = iris.cube.CubeList([_xyt_cube(1), _xyt_cube(2)])
+
+.. doctest::
+
     >>> print(cubes)
     0: air_temperature / (kelvin)          (z: 1; y: 4; x: 5)
     1: air_temperature / (kelvin)          (z: 1; y: 4; x: 5)
 
+    >>> print(cubes.concatenate())
+    0: air_temperature / (kelvin)          (z: 2; y: 4; x: 5)
 
 Concatenate
 ===========
@@ -648,35 +661,29 @@ We'll give the input cubes unequal time coordinate units and call
 :func:`~iris.util.unify_time_units` on the input cubes before concatenating
 the input cubes using :meth:`~iris.cube.CubeList.concatenate_cube`:
 
-.. testsetup:: concatenate_time_units
+.. testsetup::
 
-    import numpy as np
-    import iris
+    >>> def _xyt_cube(t):
+    ...     cube = iris.cube.Cube(
+    ...         np.arange(12 * len(t)).reshape(-1, 3, 4), "air_temperature", units="kelvin"
+    ...     )
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(3), long_name="y"), 1)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="x"), 2)
+    ...     cube.add_dim_coord(iris.coords.DimCoord(t, long_name="t"), 0)
+    ...     return cube
 
+    >>> cubes = iris.cube.CubeList(
+    ...     [
+    ...         _xyt_cube(np.arange(31).astype(np.float64)),
+    ...         _xyt_cube(np.arange(28).astype(np.float64) + 31),
+    ...         _xyt_cube(np.arange(31).astype(np.float64) + 59),
+    ...     ]
+    ... )
+    >>> cubes[0].coord("t").units = "days since 1990-02-15"
+    >>> cubes[1].coord("t").units = "days since 1970-01-01"
+    >>> cubes[2].coord("t").units = "days since 1970-01-01"
 
-    def _xyt_cube(t):
-        cube = iris.cube.Cube(
-            np.arange(12 * len(t)).reshape(-1, 3, 4), "air_temperature", units="kelvin"
-        )
-        cube.add_dim_coord(iris.coords.DimCoord(range(3), long_name="y"), 1)
-        cube.add_dim_coord(iris.coords.DimCoord(range(4), long_name="x"), 2)
-        cube.add_dim_coord(iris.coords.DimCoord(t, long_name="t"), 0)
-        return cube
-
-
-    cubes = iris.cube.CubeList(
-        [
-            _xyt_cube(np.arange(31).astype(np.float64)),
-            _xyt_cube(np.arange(28).astype(np.float64) + 31),
-            _xyt_cube(np.arange(31).astype(np.float64) + 59),
-        ]
-    )
-    cubes[0].coord("t").units = "days since 1990-02-15"
-    cubes[1].coord("t").units = "days since 1970-01-01"
-    cubes[2].coord("t").units = "days since 1970-01-01"
-
-.. doctest:: concatenate_time_units
-    :options: +ELLIPSIS, +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> from iris.util import unify_time_units
     >>> print(cubes)
@@ -689,10 +696,13 @@ the input cubes using :meth:`~iris.cube.CubeList.concatenate_cube`:
     >>> print(cubes[1].coord("t").units)
     days since 1970-01-01
 
-    >>> print(cubes.concatenate_cube())
-    Traceback (most recent call last):
-     ...
-    ConcatenateError: failed to concatenate into a single cube.
+    >>> try:
+    ...     cubes.concatenate_cube()
+    ... except Exception as e:
+    ...     print(type(e))
+    ...     print(str(e))
+    <class 'iris.exceptions.ConcatenateError'>
+    failed to concatenate into a single cube.
       Dimension coordinates metadata differ: t != t
 
     >>> unify_time_units(cubes)

@@ -17,7 +17,14 @@ Preliminaries
 The following code would have been necessary with loading behaviour prior to version 3.11.0 . For the sake of
 demonstration, we will revert back to this legacy loading behaviour as follows:
 
+.. testsetup::
+
+    >>> import iris
+
+.. doctest::
+
     >>> iris.LOAD_POLICY.set("legacy")
+
 
 .. note::
     Since Iris v3.11, the default settings for :data:`iris.LOAD_POLICY` effectively
@@ -34,6 +41,10 @@ Consider the following set of cubes:
 
     >>> file_1 = iris.sample_data_path("time_varying_hybrid_height", "*_2160-12.pp")
     >>> file_2 = iris.sample_data_path("time_varying_hybrid_height", "*_2161-01.pp")
+
+    >>> # In the "old world"
+    >>>
+
     >>> cubes = iris.load([file_1, file_2], "x_wind")
     >>> print(cubes[0])
     x_wind / (m s-1)                    (model_level_number: 5; latitude: 144; longitude: 192)

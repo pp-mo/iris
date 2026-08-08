@@ -148,10 +148,10 @@ Within Python code
 You can now access objects at the remote S3 URL via the mount point on your local file
 system you just created with `s3fs`, e.g.
 
-.. code-block:: text
+.. code-block::
 
-    >>> path = "/home/self.me/s3_root/testbucket_mountpoint/sub_dir/a_file.nc"
-    >>> cubes = iris.load(path)
+    path = "/home/self.me/s3_root/testbucket_mountpoint/sub_dir/a_file.nc"
+    cubes = iris.load(path)
 
 
 After use (after Python exit)

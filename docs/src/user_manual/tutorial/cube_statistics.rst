@@ -21,18 +21,16 @@ Cube Statistics
 Collapsing Entire Data Dimensions
 ---------------------------------
 
-.. testsetup:: collapsing
+.. testsetup::
 
-    import iris
+    >>> import iris
+    >>> import iris.analysis.cartography
 
-    filename = iris.sample_data_path("uk_hires.pp")
-    cube = iris.load_cube(filename, "air_potential_temperature")
-
-    import iris.analysis.cartography
-
-    cube.coord("grid_latitude").guess_bounds()
-    cube.coord("grid_longitude").guess_bounds()
-    grid_areas = iris.analysis.cartography.area_weights(cube)
+    >>> filename = iris.sample_data_path("uk_hires.pp")
+    >>> cube = iris.load_cube(filename, "air_potential_temperature")
+    >>> cube.coord("grid_latitude").guess_bounds()
+    >>> cube.coord("grid_longitude").guess_bounds()
+    >>> grid_areas = iris.analysis.cartography.area_weights(cube)
 
 
 In the :doc:`subsetting_a_cube` section we saw how to extract a subset of a
@@ -134,7 +132,7 @@ in order to calculate the area of the grid boxes::
 
 These areas can now be passed to the ``collapsed`` method as weights:
 
-.. doctest:: collapsing
+.. doctest::
 
     >>> new_cube = cube.collapsed(
     ...     ["grid_longitude", "grid_latitude"], iris.analysis.MEAN, weights=grid_areas
@@ -152,8 +150,8 @@ These areas can now be passed to the ``collapsed`` method as weights:
             altitude                         -                      x
         Scalar coordinates:
             forecast_reference_time     2009-11-19 04:00:00
-            grid_latitude               1.5145501 degrees, bound=(0.13755022, 2.89155) degrees
-            grid_longitude              358.74948 degrees, bound=(357.48724, 360.01172) degrees
+            grid_latitude               1.5145501 degrees, bound=(0.14430022, 2.8848) degrees
+            grid_longitude              358.74948 degrees, bound=(357.494, 360.00497) degrees
             surface_altitude            399.625 m, bound=(-14.0, 813.25) m
         Cell methods:
             0                           grid_longitude: grid_latitude: mean
@@ -172,7 +170,7 @@ In addition to plain arrays, weights can also be given as cubes or (names of)
 This has the advantage of correct unit handling, e.g., for area-weighted sums
 the units of the resulting cube are multiplied by an area unit:
 
-.. doctest:: collapsing
+.. doctest::
 
     >>> from iris.coords import CellMeasure
     >>> cell_areas = CellMeasure(
@@ -198,8 +196,8 @@ the units of the resulting cube are multiplied by an area unit:
             altitude                         -                      x
         Scalar coordinates:
             forecast_reference_time     2009-11-19 04:00:00
-            grid_latitude               1.5145501 degrees, bound=(0.13755022, 2.89155) degrees
-            grid_longitude              358.74948 degrees, bound=(357.48724, 360.01172) degrees
+            grid_latitude               1.5145501 degrees, bound=(0.14430022, 2.8848) degrees
+            grid_longitude              358.74948 degrees, bound=(357.494, 360.00497) degrees
             surface_altitude            399.625 m, bound=(-14.0, 813.25) m
         Cell methods:
             0                           grid_longitude: grid_latitude: sum
@@ -233,14 +231,14 @@ such as by calendar month or day of the week.
 For example, let's create two new coordinates on the cube
 to represent the climatological seasons and the season year respectively::
 
-    import iris
-    import iris.coord_categorisation
+    >>> import iris
+    >>> import iris.coord_categorisation
 
-    filename = iris.sample_data_path('ostia_monthly.nc')
-    cube = iris.load_cube(filename, 'surface_temperature')
+    >>> filename = iris.sample_data_path('ostia_monthly.nc')
+    >>> cube = iris.load_cube(filename, 'surface_temperature')
 
-    iris.coord_categorisation.add_season(cube, 'time', name='clim_season')
-    iris.coord_categorisation.add_season_year(cube, 'time', name='season_year')
+    >>> iris.coord_categorisation.add_season(cube, 'time', name='clim_season')
+    >>> iris.coord_categorisation.add_season_year(cube, 'time', name='season_year')
 
 
 
@@ -251,27 +249,22 @@ to represent the climatological seasons and the season year respectively::
     See :meth:`iris.coord_categorisation.add_season_year`.
 
 
-.. testsetup:: aggregation
+.. testsetup::
 
-    import datetime
-    import iris
+    >>> import datetime
 
-    filename = iris.sample_data_path("ostia_monthly.nc")
-    cube = iris.load_cube(filename, "surface_temperature")
-
-    import iris.coord_categorisation
-
-    iris.coord_categorisation.add_season(cube, "time", name="clim_season")
-    iris.coord_categorisation.add_season_year(cube, "time", name="season_year")
-
-    annual_seasonal_mean = cube.aggregated_by(
-        ["clim_season", "season_year"], iris.analysis.MEAN
-    )
+    >>> filename = iris.sample_data_path("ostia_monthly.nc")
+    >>> cube = iris.load_cube(filename, "surface_temperature")
+    >>> iris.coord_categorisation.add_season(cube, "time", name="clim_season")
+    >>> iris.coord_categorisation.add_season_year(cube, "time", name="season_year")
+    >>> annual_seasonal_mean = cube.aggregated_by(
+    ...     ["clim_season", "season_year"], iris.analysis.MEAN
+    ... )
 
 
 Printing this cube now shows that two extra coordinates exist on the cube:
 
-.. doctest:: aggregation
+.. doctest::
 
     >>> print(cube)
     surface_temperature / (K)           (time: 54; latitude: 18; longitude: 432)
@@ -294,7 +287,7 @@ Printing this cube now shows that two extra coordinates exist on the cube:
 
 These two coordinates can now be used to aggregate by season and climate-year:
 
-.. doctest:: aggregation
+.. doctest::
 
     >>> annual_seasonal_mean = cube.aggregated_by(
     ...     ["clim_season", "season_year"], iris.analysis.MEAN
@@ -313,8 +306,7 @@ We can see this by printing the first 10 values of season+year
 from the original cube:  These points are individual months,
 so adjacent ones are often in the same season:
 
-.. doctest:: aggregation
-    :options: +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> for season, year in zip(
     ...     cube.coord("clim_season")[:10].points, cube.coord("season_year")[:10].points
@@ -335,8 +327,7 @@ so adjacent ones are often in the same season:
 Compare this with the first 10 values of the new cube's coordinates:
 All the points now have distinct season+year values:
 
-.. doctest:: aggregation
-    :options: +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> for season, year in zip(
     ...     annual_seasonal_mean.coord("clim_season")[:10].points,
@@ -360,7 +351,7 @@ Because the original data started in April 2006 we have some incomplete seasons
 In this case we can fix this by removing all of the resultant 'times' which
 do not cover a three month period (note: judged here as > 3*28 days):
 
-.. doctest:: aggregation
+.. doctest::
 
     >>> tdelta_3mth = datetime.timedelta(hours=3 * 28 * 24.0)
     >>> spans_three_months = lambda t: (t.bound[1] - t.bound[0]) > tdelta_3mth
@@ -372,8 +363,7 @@ do not cover a three month period (note: judged here as > 3*28 days):
 The final result now represents the seasonal mean temperature for 17 seasons
 from jja-2006 to jja-2010:
 
-.. doctest:: aggregation
-    :options: +NORMALIZE_WHITESPACE
+.. doctest::
 
     >>> for season, year in zip(
     ...     full_season_means.coord("clim_season").points,
@@ -412,7 +402,7 @@ sums, i.e., the original unit of the cube is multiplied by the units of the
 weights.
 The following example shows a weighted sum (notice the change of the units):
 
-.. doctest:: aggregation
+.. doctest::
 
     >>> from iris.coords import AncillaryVariable
     >>> time_weights = AncillaryVariable(

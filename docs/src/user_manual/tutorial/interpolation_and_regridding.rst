@@ -5,13 +5,12 @@
 
 .. _interpolation_and_regridding:
 
-.. testsetup:: *
+.. testsetup::
 
-  import numpy as np
-  import iris
-  import warnings
-
-  warnings.simplefilter("ignore")
+    >>> import numpy as np
+    >>> import iris
+    >>> import warnings
+    >>> warnings.simplefilter("ignore")
 
 =================================
 Cube Interpolation and Regridding
@@ -377,6 +376,13 @@ For example:
 When this cached regridder is called you must pass it a cube on the same grid
 as the source grid cube (in this case ``global_air_temp``) that is to be
 regridded to the target grid. For example::
+
+.. testsetup::
+
+    >>> # just enough to make the example code not fail
+    >>> list_of_cubes_on_source_grid = [global_air_temp]
+
+.. doctest::
 
     >>> for cube in list_of_cubes_on_source_grid:
     ...     result = regridder(cube)

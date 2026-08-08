@@ -26,6 +26,8 @@ The :py:func:`iris.save` function saves one or more cubes to a file.
 If the filename includes a supported suffix then Iris will use the correct saver
 and the keyword argument `saver` is not required.
 
+.. doctest::
+
     >>> import iris
     >>> filename = iris.sample_data_path('uk_hires.pp')
     >>> cubes = iris.load(filename)

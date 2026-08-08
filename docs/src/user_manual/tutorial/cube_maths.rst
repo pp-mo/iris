@@ -51,14 +51,17 @@ We can now get the first and last time slices using indexing
 
 .. testsetup::
 
-    filename = iris.sample_data_path("E1_north_america.nc")
-    air_temp = iris.load_cube(filename, "air_temperature")
-    t_first = air_temp[0, :, :]
-    t_last = air_temp[-1, :, :]
+    >>> import iris
+    >>> filename = iris.sample_data_path("E1_north_america.nc")
+    >>> air_temp = iris.load_cube(filename, "air_temperature")
+    >>> t_first = air_temp[0, :, :]
+    >>> t_last = air_temp[-1, :, :]
 
 And finally we can subtract the two.
 The result is a cube of the same size as the original two time slices,
 but with the data representing their difference:
+
+.. doctest::
 
     >>> print(t_last - t_first)
     unknown / (K)                       (latitude: 37; longitude: 49)
