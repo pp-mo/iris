@@ -5,7 +5,7 @@
 # See LICENSE in the root of the repository for full licensing details.
 """CLI runner interface for Python doctests.
 
-TODO template this?
+TODO this utility should be templated for easy code sharing across repos.
 """
 
 import argparse
@@ -15,6 +15,7 @@ from pathlib import Path
 import pkgutil
 import sys
 import traceback
+from typing import Any, Callable
 import warnings
 
 
@@ -39,7 +40,7 @@ def list_modules_recursive(
     if error is None:
         # Add sub-modules to the list
         # Get the filepath of the module base directory
-        module_filepath = Path(module.__file__)
+        module_filepath = Path(str(module.__file__))
         if module_filepath.name == "__init__.py":
             search_filepath = str(module_filepath.parent)
             for _, name, ispkg in pkgutil.iter_modules([search_filepath]):
@@ -71,27 +72,27 @@ def list_modules_recursive(
 
 
 def list_filepaths_recursive(
-    file_path: str, exclude_matches: list[str] = []
+    file_spec: str, exclude_matches: list[str] = []
 ) -> list[Path]:
     """Expand a filepath string, possibly containing globs, to a list of filepaths.
 
     Also filter with exclude controls.
     """
     actual_paths: list[Path] = []
-    segments = file_path.split("/")
+    segments = file_spec.split("/")
     i_wilds = [
         index
         for index, segment in enumerate(segments)
         if any(char in segment for char in "*?[")
     ]
     if len(i_wilds) == 0:
-        actual_paths.append(Path(file_path))
+        actual_paths.append(Path(file_spec))
     else:
         i_first_wild = i_wilds[0]
         base_path = Path("/".join(segments[:i_first_wild]))
-        file_spec = "/".join(segments[i_first_wild:])
+        glob_spec = "/".join(segments[i_first_wild:])
         # This is the magic bit! expand with globs, '**' enabling recursive
-        actual_paths += list(base_path.glob(file_spec))
+        actual_paths += list(base_path.glob(glob_spec))
 
     # Also apply excludes to results
     # NB there is NO "private" filtering for sourcefiles
@@ -103,29 +104,32 @@ def list_filepaths_recursive(
     return result
 
 
-def process_options(opt_str: str, paths_are_modules: bool = True) -> dict[str, str]:
+def process_options(
+    opt_str: str, paths_are_modules: bool = True
+) -> dict[str, str | int | bool]:
     """Convert the "-o/--options" arg into a **kwargs for the doctest function call."""
     # Remove all spaces (think they are never needed).
     opt_str = opt_str.replace(" ", "")
     # Split on commas, and split each one on "=" expecting a simple name=val form
-    opts_dict = {}
+    opts_dict: dict[str, str | int | bool] = {}
     if opt_str:  # N.B. to avoid unexpected behaviour: "".split() --> [""]
         for setting_str in opt_str.split(","):
             try:
                 name, val = setting_str.split("=")
 
                 # Detect + translate numeric and boolean values.
+                value: str | int | bool = val
                 bool_vals = {"true": True, "false": False}
                 if val.isdigit():
-                    val = int(val)
+                    value = int(val)
                 elif val.lower() in bool_vals:
-                    val = bool_vals[val.lower()]
+                    value = bool_vals[val.lower()]
 
             except ValueError:
                 msg = f"Invalid option setting {setting_str!r}, expected 'name=value' only."
                 raise ValueError(msg)
 
-            opts_dict[name] = val
+            opts_dict[name] = value
 
     # Post-process to "fix" options, especially to correct defaults
     # TODO this is not very clever, think of something better??
@@ -142,7 +146,7 @@ def process_options(opt_str: str, paths_are_modules: bool = True) -> dict[str, s
 
 
 def run_doctest_paths(
-    paths: list[str],
+    paths: list[str] | list[Path],
     paths_are_modules: bool = False,
     recurse_modules: bool = False,
     include_private_modules: bool = False,
@@ -175,13 +179,14 @@ def run_doctest_paths(
     # For now at least, simply discard ALL warnings.
     warnings.simplefilter("ignore")
 
+    doctest_function: Callable
     if paths_are_modules:
         doctest_function = doctest.testmod
         if recurse_modules:
             module_paths = []
             for path in paths:
                 module_paths += list_modules_recursive(
-                    path,
+                    str(path),  # for modules, 'paths' are always strings anyway
                     include_private=include_private_modules,
                     exclude_matches=exclude_matches,
                 )
@@ -191,7 +196,9 @@ def run_doctest_paths(
         doctest_function = doctest.testfile
         filepaths = []
         for path in paths:
-            filepaths += list_filepaths_recursive(path, exclude_matches=exclude_matches)
+            filepaths += list_filepaths_recursive(
+                str(path), exclude_matches=exclude_matches
+            )
         paths = filepaths
 
     for path in paths:
@@ -201,9 +208,11 @@ def run_doctest_paths(
             continue
 
         op_fail = None
+        arg: Any  # can be a string or a 'Module' object
         if paths_are_modules:
+            path_str = str(path)
             try:
-                arg = importlib.import_module(path)
+                arg = importlib.import_module(path_str)
             except Exception as exc:
                 op_fail = exc
         else:

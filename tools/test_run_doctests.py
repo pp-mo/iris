@@ -1,9 +1,7 @@
 from pathlib import Path
 
 import pytest
-from run_doctests import list_modules_recursive  # , list_filepaths_recursive
-
-from tools.run_doctests import list_filepaths_recursive
+from run_doctests import list_filepaths_recursive, list_modules_recursive
 
 
 def make_dirs_and_files(pattern, basepath, create_module_inits=False):
