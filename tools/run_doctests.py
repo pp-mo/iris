@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
+# Copyright Iris contributors
+#
+# This file is part of Iris and is released under the BSD license.
+# See LICENSE in the root of the repository for full licensing details.
+"""CLI runner interface for Python doctests.
+
+TODO template this?
+"""
+
 import argparse
 import doctest
 import importlib
-import os
 from pathlib import Path
 import pkgutil
 import sys
@@ -14,7 +22,7 @@ def list_modules_recursive(
     module_importname: str,
     include_private: bool = True,
     exclude_matches: list[str] = [],
-):
+) -> list[str]:
     """Find all the submodules of a given module.
 
     Also filter with private and exclude controls.
@@ -65,7 +73,7 @@ def list_modules_recursive(
 def list_filepaths_recursive(
     file_path: str, exclude_matches: list[str] = []
 ) -> list[Path]:
-    """Expand globs to a list of filepaths.
+    """Expand a filepath string, possibly containing globs, to a list of filepaths.
 
     Also filter with exclude controls.
     """
@@ -85,12 +93,12 @@ def list_filepaths_recursive(
         # This is the magic bit! expand with globs, '**' enabling recursive
         actual_paths += list(base_path.glob(file_spec))
 
-    # Also apply exclude and private filters to results
+    # Also apply excludes to results
+    # NB there is NO "private" filtering for sourcefiles
     result = [
         path
         for path in actual_paths
         if not any(match in str(path) for match in exclude_matches)
-        and not path.name.startswith("_")
     ]
     return result
 
