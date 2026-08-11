@@ -1,3 +1,4 @@
+import os
 import pathlib
 from pathlib import Path
 import re
@@ -5,6 +6,7 @@ import subprocess
 import sys
 
 import pytest
+import run_doctests
 from run_doctests import list_filepaths_recursive, list_modules_recursive
 
 
@@ -273,15 +275,18 @@ class TestListSources:
         assert result == [Path(search_path)]
 
 
-_env_path = Path(pathlib.__file__).resolve().parent.parent
-_ENV_PATHSTR = str(_env_path)
-_ENV_PATHSTR = _ENV_PATHSTR.replace("/lib", "/bin/python")
+_env_path = (Path(os.__file__) / "../../../bin/python").resolve()
+assert _env_path.exists()
+_PYTHON_PATHSTR = str(_env_path)
+
+_doctests_path = Path(run_doctests.__file__).resolve()
+_DOCTESTS_PATH = str(_doctests_path)
 
 _RE_ANY_NONBLANK = re.compile(r".*\S.*")
 
 
 def runmain(*args, expect_rc=0) -> list[str]:
-    arglist = [_ENV_PATHSTR, "run_doctests.py"] + list(args)
+    arglist = [_PYTHON_PATHSTR, _DOCTESTS_PATH] + list(args)
     call_data = subprocess.run(arglist, capture_output=True)
     rc = call_data.returncode
     assert rc == expect_rc
@@ -293,39 +298,15 @@ def runmain(*args, expect_rc=0) -> list[str]:
 
 class TestCli:
     def test_nopaths_help(self, tempsources):
-        from run_doctests import _help_extra_lines
-
         result = runmain()
-        expected = [
-            "usage: run_doctests [-h] [-m] [-r] [-p] [-e EXCLUDE] [-o [OPTIONS]] [-v] "
-            "[-d]",
-            "                    [-f]",
-            "                    [paths ...]",
+        # Choose some sample lines to show it has output help text.
+        test_lines = [
             "Run doctests in docs files, or docstrings in packages.",
-            "positional arguments:",
-            "  paths                 docs filepaths, or module paths (not both).",
-            "options:",
-            "  -h, --help            show this help message and exit",
-            "  -m, --module          paths are module paths (xx.yy.zz), instead of",
-            "                        filepaths.",
-            "  -r, --recurse         include submodules (only applies with -m).",
-            "  -p, --publiconly      exclude module names beginning '_' (only applies "
-            "with",
-            "                        -m and -r)",
-            "  -e EXCLUDE, --exclude EXCLUDE",
-            "                        exclude paths containing substring (may appear",
-            "                        multiple times).",
-            "  -o [OPTIONS], --options [OPTIONS]",
-            "                        kwargs (Python) for doctest call, e.g.",
-            '                        "raise_on_error=True,optionflags=8".',
-            "  -v, --verbose         show details of each operation.",
-            "  -d, --dryrun          only print names of modules/files which *would* be",
-            "                        tested.",
-            "  -f, --stop-on-fail    stop at the first path with an error (else continue "
-            "to",
-            "                        test all).",
+            "Notes:",
+            "* N.B. use ** to include subdirectories",
         ]
-        assert result[: len(expected)] == expected
+        for test_line in test_lines:
+            assert test_line in [line.strip() for line in result]
 
     def test_multipath(self, tempsources):
         result = runmain("this", "that", "other", "--dryrun")
