@@ -1,5 +1,4 @@
 import os
-import pathlib
 from pathlib import Path
 import re
 import subprocess
@@ -35,8 +34,6 @@ def tempmodules(tmp_path):
     }
     make_dirs_and_files(patt, tmp_path)
     try:
-        import sys
-
         sys.path.append(str(tmp_path))
         yield "tmp_test_module"
     finally:
@@ -54,11 +51,7 @@ def tempsources(tmp_path):
         "maindir/subdir2": ["s6.rst"],
     }
     make_dirs_and_files(patt, tmp_path)
-    try:
-        sys.path.append(str(tmp_path))
-        yield str(tmp_path / "maindir")  # targets must be str, not Path
-    finally:
-        sys.path.remove(str(tmp_path))
+    return str(tmp_path / "maindir")  # targets must be str, not Path
 
 
 @pytest.fixture
@@ -277,18 +270,19 @@ _DOCTESTS_PATH = str(_doctests_path)
 _RE_ANY_NONBLANK = re.compile(r".*\S.*")
 
 
-def runmain(*args, expect_rc=0) -> list[str]:
+def runmain(*args, expect_rc: int | None = 0) -> list[str]:
     arglist = [_PYTHON_PATHSTR, _DOCTESTS_PATH] + list(args)
     call_data = subprocess.run(arglist, capture_output=True)
     rc = call_data.returncode
-    assert rc == expect_rc
+    if expect_rc is not None:
+        assert rc == expect_rc
     lines = call_data.stdout.decode("ascii").split("\n")
     # for simplicity, remove blank lines.
     lines = [line for line in lines if _RE_ANY_NONBLANK.match(line)]
     return lines
 
 
-class TestCli:
+class TestCliSources:
     def test_nopaths_help(self, tempsources):
         result = runmain()
         # Choose some sample lines to show it has output help text.
@@ -320,7 +314,6 @@ class TestCli:
 
     def test_basic_error(self, badsources):
         result = runmain(badsources + "/*.rst", "-v", expect_rc=1)
-        result = "\n".join(result)
         test_lines = f"""
             paths_are_modules=False, recurse_modules=False, include_private_modules=True, exclude_fragments=[], doctest_kwargs={{'module_relative': False, 'optionflags': 12}}, verbose=True, dry_run=False, stop_on_failure=False
             0/1 OK, 1/1 FAILED in path: {badsources}/s0.rst
@@ -332,22 +325,23 @@ class TestCli:
 
             FAILED.
         """
-        test_lines = [line.strip() for line in test_lines.split("\n")]
-        for line in test_lines:
-            assert line in result
+        result = "\n".join(result)
+        for line in test_lines.split("\n"):
+            assert line.strip() in result
 
     def test_stop_on_fail(self, badsources):
         result = runmain(badsources + "/*.*t", "-vf", expect_rc=1)
-        result = "\n".join(result)
-        assert not "s1.rst" in result
-        assert f"0/1 OK, 1/1 FAILED in path: {badsources}/s0.rst" in result
-        test_lines = f"""
-(FAIL FAST: stopped at first path with errors)
-    paths tested    = 1
-    tests completed = 1
-    errors          = 1
-FAILED."""
-        assert result.endswith(test_lines)
+        result_fullstr = "\n".join(result)
+        assert not "s1.rst" in result_fullstr
+        assert f"0/1 OK, 1/1 FAILED in path: {badsources}/s0.rst" in result_fullstr
+        test_lines = [
+            "(FAIL FAST: stopped at first path with errors)",
+            "    paths tested    = 1",
+            "    tests completed = 1",
+            "    errors          = 1",
+            "FAILED.",
+        ]
+        assert result[-5:] == test_lines
 
     def test_options_passing(self):
         result = runmain(
@@ -379,13 +373,71 @@ FAILED."""
             "module_relative=false, junk= 3, unknown=this",
             expect_rc=1,
         )
-        result = "\n".join(result)
         test_lines = [
             f"ERROR occurred at PosixPath('{tempsources}/s0.rst'):"
             " testfile() got an unexpected keyword argument 'junk'",
-            "paths tested    = 0",
-            "tests completed = 0",
-            "errors          = 2",
+            "    paths tested    = 0",
+            "    tests completed = 0",
+            "    errors          = 2",
         ]
         for line in test_lines:
             assert line in result
+
+    def test_multi_exclude(self, tempsources):
+        result = runmain(
+            tempsources + "/**/*.rst",
+            "-d",
+            "-e",
+            "s1",
+            "-e",
+            "subdir2",
+        )
+        find_str = "doctest.testfile"
+        hits = [line for line in result if find_str in line]
+        name_prefix = find_str + f": {tempsources}/"
+        assert hits == [
+            name_prefix + name
+            for name in [
+                "s0.rst",
+                # "s1.rst",
+                # "subdir1/s1.rst",
+                "subdir1/s2.rst",
+                "subdir1/_px1.rst",
+                # "subdir2/s6.rst",
+                "subdir1/subsubdir1/s3.rst",
+                "subdir1/subsubdir1/s4.rst",
+                # "subdir1/subsubdir2/s4.rst",
+                # "subdir1/subsubdir2/s5.rst",
+                # "subdir1/subsubdir2/_px2.rst",
+            ]
+        ]
+
+
+class TestCliModules:
+    @pytest.mark.parametrize("publiconly", [False, True])
+    def test_modules_publiconly(self, publiconly):
+        """Check that the '-p' option is passed down."""
+        args = ["argparse", "-mdv"]  # NB list module: don't recurse or run actual tests
+        if publiconly:
+            args += ["-p"]
+        result = runmain(*args)
+        print("\n".join(result))
+        expect = f"include_private_modules={not publiconly}"
+        assert expect in result[0]
+
+    @pytest.mark.parametrize("recurse", [False, True])
+    def test_modules_recurse(self, recurse):
+        """Check that the '-r' option is passed down."""
+        # Test this with a stdlib module which has (just a few) submodules
+        args = ["json", "-mdv"]  # NB list modules, don't actually run tests
+        if recurse:
+            args += ["-r"]
+        result = runmain(*args)
+        print("\n".join(result))
+        expect = f"recurse_modules={recurse}"
+        assert expect in result[0]
+        n_mods = sum("doctest.testmod:" in line for line in result)
+        if recurse:
+            assert n_mods > 1
+        else:
+            assert n_mods == 1
