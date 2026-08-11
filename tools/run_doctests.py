@@ -6,7 +6,6 @@
 """CLI runner interface for Python doctests.
 
 TODO this utility should be templated for easy code sharing across repos.
-Originally in ncdata --> now Iris!
 """
 
 import argparse
@@ -30,7 +29,7 @@ def list_modules_recursive(
     Also filter with private and exclude controls.
     """
     module_names = [module_importname]
-    # Identify module from its import path (no import -> fail back to caller)
+    # Identify module from its import path : N.B. fail --> return [module-path]
     try:
         error = None
         module = importlib.import_module(module_importname)
@@ -39,19 +38,16 @@ def list_modules_recursive(
         error = exc
 
     if error is None:
-        # Add sub-modules to the list
+        # Add all sub-modules to the list
         # Get the filepath of the module base directory
         module_filepath = Path(str(module.__file__))
         if module_filepath.name == "__init__.py":
-            search_filepath = str(module_filepath.parent)
-            for _, name, ispkg in pkgutil.iter_modules([search_filepath]):
-                if name.startswith("_") and not include_private:
+            for _, name, ispkg in pkgutil.iter_modules([module_filepath.parent]):
+                if name[:1] == "_" and not include_private:
                     continue
-
                 submodule_name = module_importname + "." + name
                 if any(match in submodule_name for match in exclude_matches):
                     continue
-
                 module_names.append(submodule_name)
                 if ispkg:
                     module_names.extend(
@@ -62,14 +58,8 @@ def list_modules_recursive(
                         )
                     )
 
-    # I don't know why there are duplicates, but there can be.
-    result = []
-    for name in module_names:
-        if name not in result:
-            # For some reason, some things get listed twice.
-            result.append(name)
-
-    return result
+    # Remove duplicates, which may occur.
+    return sorted(set(module_names))
 
 
 def list_filepaths_recursive(
@@ -79,7 +69,6 @@ def list_filepaths_recursive(
 
     Also filter with exclude controls.
     """
-    actual_paths: list[Path] = []
     segments = file_spec.split("/")
     i_wilds = [
         index
@@ -87,61 +76,55 @@ def list_filepaths_recursive(
         if any(char in segment for char in "*?[")
     ]
     if len(i_wilds) == 0:
-        actual_paths.append(Path(file_spec))
+        found_paths = [Path(file_spec)]
     else:
         i_first_wild = i_wilds[0]
+        # Split into a regular path prefix + the part including globs
         base_path = Path("/".join(segments[:i_first_wild]))
         glob_spec = "/".join(segments[i_first_wild:])
-        # This is the magic bit! expand with globs, '**' enabling recursive
-        actual_paths += list(base_path.glob(glob_spec))
+        # expand with globs
+        found_paths = list(base_path.glob(glob_spec))
 
     # Also apply excludes to results
     # NB there is NO "private" filtering for sourcefiles
-    result = [
+    found_paths = [
         path
-        for path in actual_paths
+        for path in found_paths
         if not any(match in str(path) for match in exclude_matches)
     ]
-    return result
+    return found_paths
 
 
 def process_options(
     opt_str: str, paths_are_modules: bool = True
 ) -> dict[str, str | int | bool]:
     """Convert the "-o/--options" arg into a **kwargs for the doctest function call."""
-    # Remove all spaces (think they are never needed).
-    opt_str = opt_str.replace(" ", "")
+    opt_str = opt_str.replace(" ", "")  # Remove spaces -- never meaningful
     # Split on commas, and split each one on "=" expecting a simple name=val form
     opts_dict: dict[str, str | int | bool] = {}
     if opt_str:  # N.B. to avoid unexpected behaviour: "".split() --> [""]
         for setting_str in opt_str.split(","):
             try:
                 name, val = setting_str.split("=")
-
-                # Detect + translate numeric and boolean values.
+                # Detect + translate integers and booleans (only, else leave as 'str').
                 value: str | int | bool = val
                 bool_vals = {"true": True, "false": False}
                 if val.isdigit():
                     value = int(val)
                 elif val.lower() in bool_vals:
                     value = bool_vals[val.lower()]
-
             except ValueError:
                 msg = f"Invalid option setting {setting_str!r}, expected 'name=value' only."
                 raise ValueError(msg)
-
             opts_dict[name] = value
 
-    # Post-process to "fix" options, especially to correct defaults
-    # TODO this is not very clever, think of something better??
+    # Implement some handy defaults
     if not paths_are_modules:
         if not "module_relative" in opts_dict:
-            opts_dict["module_relative"] = False
-    if not "verbose" in opts_dict:
-        opts_dict["verbose"] = False
+            opts_dict["module_relative"] = False  # we want this OFF, by default anyway
     if not "optionflags" in opts_dict:
         default_flags = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
-        opts_dict["optionflags"] = default_flags
+        opts_dict["optionflags"] = default_flags  # a generally useful default?
 
     return opts_dict
 
