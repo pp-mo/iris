@@ -10,7 +10,7 @@ import run_doctests
 from run_doctests import list_filepaths_recursive, list_modules_recursive
 
 
-def make_dirs_and_files(pattern, basepath, create_module_inits=False):
+def make_dirs_and_files(pattern, basepath):
     for dirname, pyfiles in pattern.items():
         dirpath = basepath / dirname.replace(".", "/")
         if not dirpath.exists():
