@@ -1,4 +1,8 @@
+import pathlib
 from pathlib import Path
+import re
+import subprocess
+import sys
 
 import pytest
 from run_doctests import list_filepaths_recursive, list_modules_recursive
@@ -18,20 +22,21 @@ def make_dirs_and_files(pattern, basepath, create_module_inits=False):
 @pytest.fixture
 def tempmodules(tmp_path):
     """Create  temporary discoverable modules."""
+    basename = "tmp_test_module"
     patt = {
-        "tmp_test_module": ["__init__.py", "s0.py", "s1.py"],
-        "tmp_test_module.sm1": ["__init__.py", "s1.py", "s2.py", "_ps1.py"],
-        "tmp_test_module.sm1.ssm1": ["__init__.py", "s3.py", "s4.py"],
-        "tmp_test_module.sm1.ssm2": ["__init__.py", "s4.py", "s5.py", "_ps2.py"],
-        "tmp_test_module.notamodule": ["xx1.py", "xx2.py"],
-        "tmp_test_module.sm2": ["__init__.py", "s6.py"],
+        basename: ["__init__.py", "s0.py", "s1.py"],
+        basename + ".sm1": ["__init__.py", "s1.py", "s2.py", "_ps1.py"],
+        basename + ".sm1.ssm1": ["__init__.py", "s3.py", "s4.py"],
+        basename + ".sm1.ssm2": ["__init__.py", "s4.py", "s5.py", "_ps2.py"],
+        basename + ".notamodule": ["xx1.py", "xx2.py"],
+        basename + ".sm2": ["__init__.py", "s6.py"],
     }
     make_dirs_and_files(patt, tmp_path)
     try:
         import sys
 
         sys.path.append(str(tmp_path))
-        yield
+        yield "tmp_test_module"
     finally:
         sys.path.remove(str(tmp_path))
 
@@ -48,12 +53,19 @@ def tempsources(tmp_path):
     }
     make_dirs_and_files(patt, tmp_path)
     try:
-        import sys
-
         sys.path.append(str(tmp_path))
-        yield
+        yield str(tmp_path / "maindir")  # targets must be str, not Path
     finally:
         sys.path.remove(str(tmp_path))
+
+
+@pytest.fixture
+def badsources(tempsources):
+    # Same as tempsources, but put a failing doctest in the first source file
+    filepath = Path(tempsources) / "s0.rst"
+    with open(filepath, "wt") as f_out:
+        f_out.write(">>> 1\n0\n")
+    return tempsources
 
 
 class TestListModules:
@@ -68,7 +80,7 @@ class TestListModules:
         assert result == ["not.exists"]
 
     def test_recurse(self, tempmodules):
-        result = list_modules_recursive("tmp_test_module")
+        result = list_modules_recursive(tempmodules)
         assert result == [
             "tmp_test_module",
             "tmp_test_module.s0",
@@ -89,7 +101,7 @@ class TestListModules:
         ]
 
     def test_recurse_noprivate(self, tempmodules):
-        result = list_modules_recursive("tmp_test_module", include_private=False)
+        result = list_modules_recursive(tempmodules, include_private=False)
         assert result == [
             "tmp_test_module",
             "tmp_test_module.s0",
@@ -110,7 +122,7 @@ class TestListModules:
         ]
 
     def test_exclude_submod(self, tempmodules):
-        result = list_modules_recursive("tmp_test_module", exclude_matches=["sm1"])
+        result = list_modules_recursive(tempmodules, exclude_matches=["sm1"])
         assert result == [
             "tmp_test_module",
             "tmp_test_module.s0",
@@ -120,7 +132,7 @@ class TestListModules:
         ]
 
     def test_exclude_namematch(self, tempmodules):
-        result = list_modules_recursive("tmp_test_module", exclude_matches=["s1"])
+        result = list_modules_recursive(tempmodules, exclude_matches=["s1"])
         assert result == [
             "tmp_test_module",
             "tmp_test_module.s0",
@@ -147,14 +159,11 @@ class TestListSources:
         assert result == [Path("none")]
 
     def test_toponly(self, tempsources, tmp_path):
-        top_path = tmp_path / "maindir"
-        top_pathstr = str(top_path)
-        result = list_filepaths_recursive(top_pathstr)
-        assert result == [top_path]
+        result = list_filepaths_recursive(tempsources)
+        assert result == [Path(tempsources)]
 
     def test_recurse_all(self, tempsources, tmp_path):
-        top_pathstr = str(tmp_path / "maindir")
-        result = list_filepaths_recursive(top_pathstr + "/**/*")
+        result = list_filepaths_recursive(tempsources + "/**/*")
         assert result == [
             tmp_path / pathstr
             for pathstr in [
@@ -178,8 +187,7 @@ class TestListSources:
         ]
 
     def test_recurse_rsts(self, tempsources, tmp_path):
-        top_pathstr = str(tmp_path / "maindir")
-        result = list_filepaths_recursive(top_pathstr + "/**/*.rst")
+        result = list_filepaths_recursive(tempsources + "/**/*.rst")
         assert result == [
             tmp_path / pathstr
             for pathstr in [
@@ -203,9 +211,8 @@ class TestListSources:
         ]
 
     def test_recurse_exclude_subpath(self, tempsources, tmp_path):
-        top_pathstr = str(tmp_path / "maindir")
         result = list_filepaths_recursive(
-            top_pathstr + "/**/*.rst", exclude_matches=["/subsubdir2/"]
+            tempsources + "/**/*.rst", exclude_matches=["/subsubdir2/"]
         )
         assert result == [
             tmp_path / pathstr
@@ -223,9 +230,8 @@ class TestListSources:
 
     def test_recurse_namematch_1(self, tempsources, tmp_path):
         """Search for '*s*.rst'."""
-        top_pathstr = str(tmp_path / "maindir")
         result = list_filepaths_recursive(
-            top_pathstr + "/**/*s*.rst",
+            tempsources + "/**/*s*.rst",
         )
         assert result == [
             tmp_path / pathstr
@@ -244,9 +250,8 @@ class TestListSources:
 
     def test_recurse_namematch_2(self, tempsources, tmp_path):
         """Search for '*1.rst'."""
-        top_pathstr = str(tmp_path / "maindir")
         result = list_filepaths_recursive(
-            top_pathstr + "/**/*1.rst",
+            tempsources + "/**/*1.rst",
         )
         assert result == [
             tmp_path / pathstr
@@ -258,14 +263,156 @@ class TestListSources:
         ]
 
     def test_recurse_match_nonexist_glob(self, tempsources, tmp_path):
-        top_pathstr = str(tmp_path / "maindir")
-        search_path = top_pathstr + "*pqr*"
-        result = list_filepaths_recursive(search_path)
+        result = list_filepaths_recursive(tempsources + "/*pqr*")
         assert result == []
 
     def test_recurse_match_nonexist_noglob(self, tempsources, tmp_path):
-        top_pathstr = str(tmp_path / "maindir")
-        search_path = top_pathstr + "subdir1/non.exist"
+        search_path = tempsources + "subdir1/non.exist"
         # As not actually a search, returns the given path.
         result = list_filepaths_recursive(search_path)
         assert result == [Path(search_path)]
+
+
+_env_path = Path(pathlib.__file__).resolve().parent.parent
+_ENV_PATHSTR = str(_env_path)
+_ENV_PATHSTR = _ENV_PATHSTR.replace("/lib", "/bin/python")
+
+_RE_ANY_NONBLANK = re.compile(r".*\S.*")
+
+
+def runmain(*args, expect_rc=0) -> list[str]:
+    arglist = [_ENV_PATHSTR, "run_doctests.py"] + list(args)
+    call_data = subprocess.run(arglist, capture_output=True)
+    rc = call_data.returncode
+    assert rc == expect_rc
+    lines = call_data.stdout.decode("ascii").split("\n")
+    # for simplicity, remove blank lines.
+    lines = [line for line in lines if _RE_ANY_NONBLANK.match(line)]
+    return lines
+
+
+class TestCli:
+    def test_nopaths_help(self, tempsources):
+        from run_doctests import _help_extra_lines
+
+        result = runmain()
+        expected = [
+            "usage: run_doctests [-h] [-m] [-r] [-p] [-e EXCLUDE] [-o [OPTIONS]] [-v] "
+            "[-d]",
+            "                    [-f]",
+            "                    [paths ...]",
+            "Run doctests in docs files, or docstrings in packages.",
+            "positional arguments:",
+            "  paths                 docs filepaths, or module paths (not both).",
+            "options:",
+            "  -h, --help            show this help message and exit",
+            "  -m, --module          paths are module paths (xx.yy.zz), instead of",
+            "                        filepaths.",
+            "  -r, --recurse         include submodules (only applies with -m).",
+            "  -p, --publiconly      exclude module names beginning '_' (only applies "
+            "with",
+            "                        -m and -r)",
+            "  -e EXCLUDE, --exclude EXCLUDE",
+            "                        exclude paths containing substring (may appear",
+            "                        multiple times).",
+            "  -o [OPTIONS], --options [OPTIONS]",
+            "                        kwargs (Python) for doctest call, e.g.",
+            '                        "raise_on_error=True,optionflags=8".',
+            "  -v, --verbose         show details of each operation.",
+            "  -d, --dryrun          only print names of modules/files which *would* be",
+            "                        tested.",
+            "  -f, --stop-on-fail    stop at the first path with an error (else continue "
+            "to",
+            "                        test all).",
+        ]
+        assert result[: len(expected)] == expected
+
+    def test_multipath(self, tempsources):
+        result = runmain("this", "that", "other", "--dryrun")
+        assert result == [
+            "-----",
+            "doctest.testfile: this",
+            "-----",
+            "doctest.testfile: that",
+            "-----",
+            "doctest.testfile: other",
+            "=====",
+            "run_doctest: FINAL REPORT",
+            "(DRY RUN: no actual tests)",
+            "    paths tested    = 0",
+            "    tests completed = 0",
+            "    errors          = 0",
+            "OK.",
+        ]
+
+    def test_basic_error(self, badsources):
+        result = runmain(badsources + "/*.rst", "-v", expect_rc=1)
+        result = "\n".join(result)
+        test_lines = f"""
+            paths_are_modules=False, recurse_modules=False, include_private_modules=True, exclude_matches=[], doctest_kwargs={{'module_relative': False, 'optionflags': 12}}, verbose=True, dry_run=False, stop_on_failure=False
+            0/1 OK, 1/1 FAILED in path: {badsources}/s0.rst
+            0/0 OK in path: {badsources}/s1.rst
+            run_doctest: FINAL REPORT
+                paths tested    = 2
+                tests completed = 1
+                errors          = 1
+
+            FAILED.
+        """
+        test_lines = [line.strip() for line in test_lines.split("\n")]
+        for line in test_lines:
+            assert line in result
+
+    def test_stop_on_fail(self, badsources):
+        result = runmain(badsources + "/*.*t", "-vf", expect_rc=1)
+        result = "\n".join(result)
+        assert not "s1.rst" in result
+        assert f"0/1 OK, 1/1 FAILED in path: {badsources}/s0.rst" in result
+        test_lines = f"""
+(FAIL FAST: stopped at first path with errors)
+    paths tested    = 1
+    tests completed = 1
+    errors          = 1
+FAILED."""
+        assert result.endswith(test_lines)
+
+    def test_options_passing(self):
+        result = runmain(
+            "any/*.rst",
+            "--dryrun",
+            "--verbose",
+            "-o",
+            "module_relative=false, junk= 3, unknown=this",
+        )
+        expected = [
+            "RUNNING run_doctest(paths=['any/*.rst'], paths_are_modules=False, "
+            "recurse_modules=False, include_private_modules=True, exclude_matches=[], "
+            "doctest_kwargs={'module_relative': False, 'junk': 3, 'unknown': 'this', "
+            "'optionflags': 12}, verbose=True, dry_run=True, stop_on_failure=False)",
+            "=====",
+            "run_doctest: FINAL REPORT",
+            "(DRY RUN: no actual tests)",
+            "    paths tested    = 0",
+            "    tests completed = 0",
+            "    errors          = 0",
+            "OK.",
+        ]
+        assert result == expected
+
+    def test_options_bad(self, tempsources):
+        result = runmain(
+            tempsources + "/*.rst",
+            "-o",
+            "module_relative=false, junk= 3, unknown=this",
+            expect_rc=1,
+        )
+        result = "\n".join(result)
+        test_lines = [
+            f"ERROR occurred at PosixPath('{tempsources}/s0.rst'):"
+            " testfile() got an unexpected keyword argument 'junk'",
+            "paths tested    = 0",
+            "tests completed = 0",
+            "errors          = 2",
+        ]
+        for line in test_lines:
+            assert line in result
