@@ -6,6 +6,7 @@
 """CLI runner interface for Python doctests.
 
 TODO this utility should be templated for easy code sharing across repos.
+Originally in ncdata --> now Iris!
 """
 
 import argparse

@@ -419,6 +419,25 @@ max-complexity = 22
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
 
+
+[tool.run-doctests]
+# Handy default options for the run_doctests tool, specific to Iris usage.
+default-args = {"verbose" = 1, "optionflags" = 12}  # NORMALISE_WHITESPACE | ELLIPSIS
+
+[tool.run-doctests.modules]
+default-args = {"publiconly" = 1, "recurse" = 1}
+add-excludes = [
+    "geovista",
+    "iris.tests",
+    "iris._version",
+]
+
+[tool.run-doctests.docs]
+add-excludes = [
+    "docs/src/generated",
+    "docs/src/whatsnew",
+]
+
 [tool.setuptools]
 zip-safe = false
 
