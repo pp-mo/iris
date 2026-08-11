@@ -162,7 +162,7 @@ class TestListSources:
 
     def test_toponly(self, tempsources, tmp_path):
         result = list_filepaths_recursive(tempsources)
-        assert result == [Path(tempsources)]
+        assert result == []
 
     def test_recurse_all(self, tempsources, tmp_path):
         result = list_filepaths_recursive(tempsources + "/**/*")
@@ -172,13 +172,9 @@ class TestListSources:
                 "maindir/s0.rst",
                 "maindir/s1.rst",
                 "maindir/ignore.this",
-                "maindir/subdir1",
-                "maindir/subdir2",
                 "maindir/subdir1/s1.rst",
                 "maindir/subdir1/s2.rst",
                 "maindir/subdir1/_px1.rst",
-                "maindir/subdir1/subsubdir1",
-                "maindir/subdir1/subsubdir2",
                 "maindir/subdir2/s6.rst",
                 "maindir/subdir1/subsubdir1/s3.rst",
                 "maindir/subdir1/subsubdir1/s4.rst",
@@ -196,13 +192,9 @@ class TestListSources:
                 "maindir/s0.rst",
                 "maindir/s1.rst",
                 # 'maindir/ignore.this',
-                # 'maindir/subdir1',
-                # 'maindir/subdir2',
                 "maindir/subdir1/s1.rst",
                 "maindir/subdir1/s2.rst",
                 "maindir/subdir1/_px1.rst",
-                # 'maindir/subdir1/subsubdir1',
-                # 'maindir/subdir1/subsubdir2',
                 "maindir/subdir2/s6.rst",
                 "maindir/subdir1/subsubdir1/s3.rst",
                 "maindir/subdir1/subsubdir1/s4.rst",

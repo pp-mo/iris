@@ -90,7 +90,8 @@ def list_filepaths_recursive(
     found_paths = [
         path
         for path in found_paths
-        if not any(match in str(path) for match in exclude_matches)
+        if not path.is_dir()
+        and not any(match in str(path) for match in exclude_matches)
     ]
     return found_paths
 
