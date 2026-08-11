@@ -124,7 +124,7 @@ class TestListModules:
         ]
 
     def test_exclude_submod(self, tempmodules):
-        result = list_modules_recursive(tempmodules, exclude_matches=["sm1"])
+        result = list_modules_recursive(tempmodules, exclude_fragments=["sm1"])
         assert result == [
             "tmp_test_module",
             "tmp_test_module.s0",
@@ -134,7 +134,7 @@ class TestListModules:
         ]
 
     def test_exclude_namematch(self, tempmodules):
-        result = list_modules_recursive(tempmodules, exclude_matches=["s1"])
+        result = list_modules_recursive(tempmodules, exclude_fragments=["s1"])
         assert result == [
             "tmp_test_module",
             "tmp_test_module.s0",
@@ -206,7 +206,7 @@ class TestListSources:
 
     def test_recurse_exclude_subpath(self, tempsources, tmp_path):
         result = list_filepaths_recursive(
-            tempsources + "/**/*.rst", exclude_matches=["/subsubdir2/"]
+            tempsources + "/**/*.rst", exclude_fragments=["/subsubdir2/"]
         )
         assert result == [
             tmp_path / pathstr
@@ -322,7 +322,7 @@ class TestCli:
         result = runmain(badsources + "/*.rst", "-v", expect_rc=1)
         result = "\n".join(result)
         test_lines = f"""
-            paths_are_modules=False, recurse_modules=False, include_private_modules=True, exclude_matches=[], doctest_kwargs={{'module_relative': False, 'optionflags': 12}}, verbose=True, dry_run=False, stop_on_failure=False
+            paths_are_modules=False, recurse_modules=False, include_private_modules=True, exclude_fragments=[], doctest_kwargs={{'module_relative': False, 'optionflags': 12}}, verbose=True, dry_run=False, stop_on_failure=False
             0/1 OK, 1/1 FAILED in path: {badsources}/s0.rst
             0/0 OK in path: {badsources}/s1.rst
             run_doctest: FINAL REPORT
@@ -359,7 +359,7 @@ FAILED."""
         )
         expected = [
             "RUNNING run_doctest(paths=['any/*.rst'], paths_are_modules=False, "
-            "recurse_modules=False, include_private_modules=True, exclude_matches=[], "
+            "recurse_modules=False, include_private_modules=True, exclude_fragments=[], "
             "doctest_kwargs={'module_relative': False, 'junk': 3, 'unknown': 'this', "
             "'optionflags': 12}, verbose=True, dry_run=True, stop_on_failure=False)",
             "=====",

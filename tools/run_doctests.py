@@ -22,7 +22,7 @@ import warnings
 def list_modules_recursive(
     module_importname: str,
     include_private: bool = True,
-    exclude_matches: list[str] = [],
+    exclude_fragments: list[str] = [],
 ) -> list[str]:
     """Find all the submodules of a given module.
 
@@ -46,7 +46,7 @@ def list_modules_recursive(
                 if name[:1] == "_" and not include_private:
                     continue
                 submodule_name = module_importname + "." + name
-                if any(match in submodule_name for match in exclude_matches):
+                if any(match in submodule_name for match in exclude_fragments):
                     continue
                 module_names.append(submodule_name)
                 if ispkg:
@@ -54,7 +54,7 @@ def list_modules_recursive(
                         list_modules_recursive(
                             submodule_name,
                             include_private=include_private,
-                            exclude_matches=exclude_matches,
+                            exclude_fragments=exclude_fragments,
                         )
                     )
 
@@ -63,7 +63,7 @@ def list_modules_recursive(
 
 
 def list_filepaths_recursive(
-    file_spec: str, exclude_matches: list[str] = []
+    file_spec: str, exclude_fragments: list[str] = []
 ) -> list[Path]:
     """Expand a filepath string, possibly containing globs, to a list of filepaths.
 
@@ -91,7 +91,7 @@ def list_filepaths_recursive(
         path
         for path in found_paths
         if not path.is_dir()
-        and not any(match in str(path) for match in exclude_matches)
+        and not any(match in str(path) for match in exclude_fragments)
     ]
     return found_paths
 
@@ -135,7 +135,7 @@ def run_doctest_paths(
     paths_are_modules: bool = False,
     recurse_modules: bool = False,
     include_private_modules: bool = False,
-    exclude_matches: list[str] = [],
+    exclude_fragments: list[str] = [],
     doctest_kwargs: dict = {},
     verbose: bool = False,
     dry_run: bool = False,
@@ -150,7 +150,7 @@ def run_doctest_paths(
             f", paths_are_modules={paths_are_modules!r}"
             f", recurse_modules={recurse_modules!r}"
             f", include_private_modules={include_private_modules!r}"
-            f", exclude_matches={exclude_matches!r}"
+            f", exclude_fragments={exclude_fragments!r}"
             f", doctest_kwargs={doctest_kwargs!r}"
             f", verbose={verbose!r}"
             f", dry_run={dry_run!r}"
@@ -173,7 +173,7 @@ def run_doctest_paths(
                 module_paths += list_modules_recursive(
                     str(path),  # for modules, 'paths' are always strings anyway
                     include_private=include_private_modules,
-                    exclude_matches=exclude_matches,
+                    exclude_fragments=exclude_fragments,
                 )
             paths = module_paths
     else:
@@ -182,7 +182,7 @@ def run_doctest_paths(
         filepaths = []
         for path in paths:
             filepaths += list_filepaths_recursive(
-                str(path), exclude_matches=exclude_matches
+                str(path), exclude_fragments=exclude_fragments
             )
         paths = filepaths
 
@@ -345,7 +345,7 @@ def parserargs_as_kwargs(args):
         paths_are_modules=args.module,
         recurse_modules=args.recurse,
         include_private_modules=not args.publiconly,
-        exclude_matches=args.exclude or [],
+        exclude_fragments=args.exclude or [],
         doctest_kwargs=process_options(args.options, args.module),
         verbose=args.verbose,
         dry_run=args.dryrun,
