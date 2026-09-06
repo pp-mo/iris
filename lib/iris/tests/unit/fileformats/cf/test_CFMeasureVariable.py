@@ -67,7 +67,7 @@ class TestIdentify:
 
     def test_two_refs(self):
         """Two source variables each referencing a different measure variable."""
-        subject_names = ("ref_area", "ref_volume")
+        subject_names = ("ref_subject_1", "ref_subject_2")
         ref_subject_vars = {name: _NetCDFVar(name) for name in subject_names}
 
         ref_source_vars = {
@@ -100,7 +100,7 @@ class TestIdentify:
         assert result == {}
 
     def test_ignore(self):
-        subject_names = ("ref_area", "ref_volume")
+        subject_names = ("ref_subject_1", "ref_subject_2")
         ref_subject_vars = {name: _NetCDFVar(name) for name in subject_names}
 
         ref_source_vars = {
@@ -124,7 +124,7 @@ class TestIdentify:
         assert result == expected
 
     def test_target(self):
-        subject_names = ("ref_area", "ref_volume")
+        subject_names = ("ref_subject_1", "ref_subject_2")
         ref_subject_vars = {name: _NetCDFVar(name) for name in subject_names}
 
         source_names = ("ref_source_1", "ref_source_2")
