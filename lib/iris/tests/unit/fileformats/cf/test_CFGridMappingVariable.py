@@ -93,7 +93,10 @@ class TestIdentify:
                 vars_all, coord_system_mappings=cs_mappings, warn=warn
             )
 
-        warn_regex = r"Missing CF-netCDF grid mapping variable 'crs_var'.*"
+        warn_regex = (
+            r"Missing CF-netCDF grid mapping variable 'crs_var', "
+            f"referenced by netCDF variable 'ref_source'."
+        )
         assert_warning_gated(
             operation, iris.warnings.IrisCfMissingVarWarning, warn_regex
         )
@@ -112,7 +115,11 @@ class TestIdentify:
 
         cs_mappings = {"ref_source": {"lat": "crs_var"}}
 
-        warn_regex = r"Missing CF-netCDF coordinate variable 'lat'.*"
+        warn_regex = (
+            r"Missing CF-netCDF coordinate variable 'lat' "
+            rf"\(associated with grid mapping variable 'crs_var'\), "
+            f"referenced by netCDF variable 'ref_source'."
+        )
         with pytest.warns(iris.warnings.IrisCfMissingVarWarning, match=warn_regex):
             CFGridMappingVariable.identify(vars_all, coord_system_mappings=cs_mappings)
 

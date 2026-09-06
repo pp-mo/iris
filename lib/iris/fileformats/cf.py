@@ -714,9 +714,12 @@ class CFGridMappingVariable(CFVariable):
                     if name not in ignore:
                         if name not in variables:
                             if warn:
-                                message = "Missing CF-netCDF grid mapping variable %r, referenced by netCDF variable %r"
+                                message = (
+                                    f"Missing CF-netCDF grid mapping variable {name!r}, "
+                                    f"referenced by netCDF variable {nc_var_name!r}."
+                                )
                                 warnings.warn(
-                                    message % (name, nc_var_name),
+                                    message,
                                     category=iris.warnings.IrisCfMissingVarWarning,
                                 )
                         else:
@@ -730,9 +733,13 @@ class CFGridMappingVariable(CFVariable):
                                     ):
                                         has_a_valid_coord = True
                                     else:
-                                        message = "Missing CF-netCDF coordinate variable %r (associated with grid mapping variable %r), referenced by netCDF variable %r"
+                                        message = (
+                                            f"Missing CF-netCDF coordinate variable {coord_name!r} "
+                                            f"(associated with grid mapping variable {name!r}), "
+                                            f"referenced by netCDF variable {nc_var_name!r}."
+                                        )
                                         warnings.warn(
-                                            message % (coord_name, name, nc_var_name),
+                                            message,
                                             category=iris.warnings.IrisCfMissingVarWarning,
                                         )
                             #  Only add as a CFGridMappingVariable if at least one of its referenced coords exists:
