@@ -156,7 +156,10 @@ class TestIdentify:
             )
             _CFFormulaTermsVariable.identify(vars_all, warn=warn)
 
-        warn_regex = rf"Missing CF-netCDF formula term variable {subject_name!r}.*"
+        warn_regex = (
+            f"Missing CF-netCDF formula term variable {subject_name!r}, "
+            "referenced by netCDF variable 'ref_source'."
+        )
         assert_warning_gated(
             operation, iris.warnings.IrisCfMissingVarWarning, warn_regex
         )

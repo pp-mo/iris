@@ -618,9 +618,12 @@ class _CFFormulaTermsVariable(CFVariable):
                     if variable_name not in ignore:
                         if variable_name not in variables:
                             if warn:
-                                message = "Missing CF-netCDF formula term variable %r, referenced by netCDF variable %r"
+                                message = (
+                                    f"Missing CF-netCDF formula term variable {variable_name!r}, "
+                                    f"referenced by netCDF variable {nc_var_name!r}."
+                                )
                                 warnings.warn(
-                                    message % (variable_name, nc_var_name),
+                                    message,
                                     category=iris.warnings.IrisCfMissingVarWarning,
                                 )
                         else:
