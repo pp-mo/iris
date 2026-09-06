@@ -156,11 +156,20 @@ class TestIdentifyMonotonic:
         result = CFCoordinateVariable.identify(vars_all, monotonic=True)
         assert "lat" in result
 
-    def test_masked_array_rejected_when_masked(self):
-        """Masked arrays are rejected under monotonic mode if any elements are masked."""
-        data = ma.masked_array([1.0, 2.0, 3.0], mask=[False, True, False])
+    @pytest.mark.parametrize("fill_val", [99.0, 2.2])
+    def test_masked_array_rejected_when_masked(self, fill_val):
+        """Masked arrays can be rejected due to filling, in monotonic mode.
+
+        ..if the fill-value makes the result non-monotonic.
+        """
+        data = ma.masked_array(
+            [1.0, 2.0, 3.0],
+            mask=[False, True, False],
+            fill_value=fill_val,
+        )
         nc_var = _make_coord_var("lat", data)
         vars_all = {"lat": nc_var}
 
         result = CFCoordinateVariable.identify(vars_all, monotonic=True)
-        assert result == {}
+        expected_keys = ["lat"] if (2.0 <= fill_val <= 3.0) else []
+        assert list(result.keys()) == expected_keys

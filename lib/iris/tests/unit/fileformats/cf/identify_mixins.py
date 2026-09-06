@@ -82,13 +82,19 @@ class SpansMixin(ABC):
     def test_source_trailing_subset_spans(self):
         """source[:-1] is a subset of target dimensions => spans."""
         cf_source = self._make_cf_var("source_var", ("x", "y", "extra"))
-        cf_target = self._make_cf_var("target_var", ("x", "y"))
+        cf_target = self._make_cf_var("target_var", ("x", "y", "other"))
         assert cf_source.spans(cf_target)
 
     def test_source_leading_subset_spans(self):
         """source[1:] is a subset of target dimensions => spans."""
         cf_source = self._make_cf_var("source_var", ("extra", "x", "y"))
-        cf_target = self._make_cf_var("target_var", ("x", "y"))
+        cf_target = self._make_cf_var("target_var", ("x", "y", "other"))
+        assert cf_source.spans(cf_target)
+
+    def test_tranpose_spans(self):
+        """Source is a subset of target dimensions, with other order => spans."""
+        cf_source = self._make_cf_var("source_var", ("y", "x"))
+        cf_target = self._make_cf_var("target_var", ("extra", "x", "y"))
         assert cf_source.spans(cf_target)
 
     def test_non_spanning(self):
@@ -140,7 +146,7 @@ class IdentifyByAttributeMixin(ABC):
         assert result == expected
 
     def test_two_refs(self):
-        # Check that a single "source" var may refer to multiple "subject" vars.
+        """Check that a single "source" var may refer to multiple "subject" vars."""
         subject_names = ("ref_subject_1", "ref_subject_2")
         ref_subject_vars = {name: self._make_subject(name) for name in subject_names}
 
@@ -170,6 +176,7 @@ class IdentifyByAttributeMixin(ABC):
         assert result == expected
 
     def test_duplicate_refs(self):
+        """Show that a subject may have multiple refs, occurs once in results."""
         subject_name = "ref_subject"
         ref_subject = self._make_subject(subject_name)
         ref_source_vars = {
@@ -188,6 +195,7 @@ class IdentifyByAttributeMixin(ABC):
         assert result == expected
 
     def test_ignore(self):
+        """Show that identify with ignore excludes subject variables on that list."""
         subject_names = ("ref_subject_1", "ref_subject_2")
         ref_subject_vars = {name: self._make_subject(name) for name in subject_names}
 
@@ -210,6 +218,7 @@ class IdentifyByAttributeMixin(ABC):
         assert result == expected
 
     def test_target(self):
+        """Show that identify with target ignores references from other source vars."""
         subject_names = ("ref_subject_1", "ref_subject_2")
         ref_subject_vars = {name: self._make_subject(name) for name in subject_names}
 
@@ -231,6 +240,7 @@ class IdentifyByAttributeMixin(ABC):
         assert result == expected
 
     def test_target_unknown_raises(self):
+        """Show that identify with an unknown target raises an error."""
         vars_all = {"ref_source": _NetCDFVar("ref_source")}
 
         message = "Cannot identify unknown target CF-netCDF variable 'unknown'"
@@ -238,6 +248,7 @@ class IdentifyByAttributeMixin(ABC):
             self.CF_CLASS.identify(vars_all, target="unknown")
 
     def test_target_wrong_type_raises(self):
+        """Show that identify with a non-string target raises an error."""
         vars_all = {"ref_source": _NetCDFVar("ref_source")}
 
         message = "Expect a target CF-netCDF variable name"
@@ -245,6 +256,7 @@ class IdentifyByAttributeMixin(ABC):
             self.CF_CLASS.identify(vars_all, target=object())
 
     def test_warn(self):
+        """Show that identify with a missing subject emits the given warning."""
         subject_name = "ref_subject"
         ref_source = _NetCDFVar("ref_source")
         setattr(ref_source, self.CF_IDENTITIES[0], subject_name)
@@ -267,6 +279,45 @@ class IdentifyByAttributeMixin(ABC):
             iris.warnings.IrisCfMissingVarWarning,
             self.MISSING_WARN_REGEX.format(subject=subject_name),
         )
+
+    def test_whitespace_padded_ref(self):
+        """Check that references accept surrounding whitespace."""
+        subject_name = "ref_subject"
+        ref_subject = self._make_subject(subject_name)
+        ref_source = _NetCDFVar("ref_source")
+        setattr(ref_source, self.CF_IDENTITIES[0], f"  {subject_name}  ")
+        vars_all = {
+            subject_name: ref_subject,
+            "ref_not_subject": _NetCDFVar("ref_not_subject"),
+            "ref_source": ref_source,
+        }
+
+        expected = {subject_name: self.CF_CLASS(subject_name, ref_subject)}
+        result = self.CF_CLASS.identify(vars_all)
+        assert result == expected
+
+    def test_two_part_ref(self):
+        """Test handling of space-separated refs in a single attribute."""
+        subject_names = ("ref_subject_1", "ref_subject_2")
+        ref_subject_vars = {name: self._make_subject(name) for name in subject_names}
+
+        ref_source = _NetCDFVar("ref_source")
+        setattr(ref_source, self.CF_IDENTITIES[0], " ".join(subject_names))
+        vars_all = {
+            "ref_not_subject": _NetCDFVar("ref_not_subject"),
+            "ref_source": ref_source,
+            **ref_subject_vars,
+        }
+
+        result = self.CF_CLASS.identify(vars_all)
+
+        if self.IDENTITY_SUPPORTS_MULTIPLE_REFS:
+            expected_names = ["ref_subject_1", "ref_subject_2"]
+        else:
+            # multiples not allowed for this class
+            expected_names = []
+        result = [key for key in result.keys()]
+        assert result == expected_names
 
 
 class IdentifyByAttributeListMixin(IdentifyByAttributeMixin):
@@ -321,7 +372,13 @@ class IdentifyByAttributeListMixin(IdentifyByAttributeMixin):
         assert result == expected
 
     def test_string_type_ignored(self):
-        """Test that string-typed referenced variables are ignored."""
+        """Test that string-typed subject variables are ignored.
+
+        NOTE: this doesn't apply to all variable categories, but it does apply to the
+        CFUGridAuxiliaryCoordinateVariable and CFUGridConnectivityVariable which are
+        tested with this mixin.
+        E.G. a CFAncillaryDataVariable *can* contain strings.
+        """
         subject_name = "ref_subject"
         ref_source = _NetCDFVar("ref_source")
         setattr(ref_source, self.CF_IDENTITIES[0], subject_name)
@@ -335,7 +392,7 @@ class IdentifyByAttributeListMixin(IdentifyByAttributeMixin):
         assert result == {}
 
     def test_warn_string_type(self):
-        """Test warning when string-typed var referenced by identity attribute."""
+        """Test that a given warning is emitted when ignoring a string-typed subject."""
         subject_name = "ref_subject"
         ref_source = _NetCDFVar("ref_source")
         setattr(ref_source, self.CF_IDENTITIES[0], subject_name)
